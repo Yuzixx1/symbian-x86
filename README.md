@@ -1,3 +1,11 @@
+# actually human text first:
+Hello! Im yuzixx, a guy who has NO IDEA how to program nor how OS'es work.
+I have been simply vibecoding this whole thing. I know its contreversial,
+but im bored and why not use that sweet free ai? Anyway, heres what the ai
+wrote for it and what it knows about it:
+the text below this is all AI.
+
+
 # Symbian on x86 — genuine EKA2 nanokernel + Kern, ported to QEMU PCs
 
 This project boots the real Symbian EKA2 kernel (nanokernel + full Kern,
