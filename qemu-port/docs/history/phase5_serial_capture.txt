@@ -1,0 +1,42 @@
+EKA2-QEMU bridge: 32-bit protected mode, paging off, COM1 ok
+EKA2-QEMU bridge: multiboot magic 2BADB002 OK
+EKA2-QEMU bridge: jumping to ported ResetEntry...
+EKA2-QEMU ResetEntry: multiboot handoff OK (128M RAM, ROM-in-RAM deferred)
+EKA2-QEMU ResetEntry: calling ported InitCpu (GDT/IDT)...
+EKA2-QEMU ResetEntry: InitCpu done, cpu_features=0x0781ABFD
+
+EKA2-QEMU kernel side: entered QemuKernelMain (bootstrap handoff)
+EKA2-QEMU kernel side: multiboot magic=0x2BADB002 info=0x00009500
+EKA2-QEMU Asic::Init1: remapping i8259 PIC master=0x20 slave=0x28...
+EKA2-QEMU Asic::Init1: PIC remapped (IRQ0->0x20, no CPU-trap clash)
+EKA2-QEMU Asic::Init1: programming i8254 PIT 1000Hz...
+EKA2-QEMU Asic::Init1: PIT ch0 latched count=0x00000493 (ticking)
+EKA2-QEMU Asic::Init1: MsTickPeriod=1ms NanoWaitCal=1000
+EKA2-QEMU ROM synth: TRomHeader+SuperPage built (rombuild stand-in)
+EKA2-QEMU ROM synth: ROM check OK SuperPage check OK
+EKA2-QEMU ROM: base=0x00100000 kernData=0x00200000 kernLimit=0x00400000
+EKA2-QEMU SuperPage: ram=0x08000000 pageDir=0x0010A000 cpuId=0x0781ABFD
+EKA2-QEMU MMU: building 32x4M identity map (0-128M)...
+EKA2-QEMU MMU: enabling paging (CR3 load, CR0.PG|WP, CR4.PGE)...
+EKA2-QEMU MMU: paging on, CR0=0x80010011 (PG=1)
+EKA2-QEMU MMU: touch test through paging OK
+EKA2-QEMU: transitioning QemuKernelMain -> KernelMain...
+EKA2-QEMU KernelMain: entered (genuine entry point name)
+EKA2-QEMU KernelMain: ROM validation OK (magic+checksum+layout)
+EKA2-QEMU KernelMain: SuperPage validation OK (signature+RAM+pageDir+cpuId)
+EKA2-QEMU KernelMain: paging live CR0=0x80010011 (PG=1) CR3=0x0010A000
+EKA2-QEMU KernelMain: unmasking IRQ0, enabling interrupts...
+EKA2-QEMU KernelMain: IRQs unmasked, starting nanokernel scheduler...
+EKA2-QEMU NKern: scheduler init (64 pri, quantum 10ms)...
+EKA2-QEMU NKern: threads ready A(pri10) B(pri10), IRQs live, start...
+EKA2-QEMU NKern Thread A: iter=0x00000000 tick=0x00000001 yield->B
+EKA2-QEMU NKern Thread B: iter=0x00000000 tick=0x00000033 worked, yield->A
+EKA2-QEMU NKern Thread A: iter=0x00000001 tick=0x00000033 yield->B
+EKA2-QEMU NKern Thread B: iter=0x00000001 tick=0x00000065 worked, yield->A
+EKA2-QEMU NKern Thread A: iter=0x00000002 tick=0x00000065 yield->B
+EKA2-QEMU NKern Thread B: iter=0x00000002 tick=0x00000097 worked, yield->A
+EKA2-QEMU NKern Thread A: done, switch->main
+EKA2-QEMU NKern: back in main thread, iters=0x00000003 A_switches=0x00000004 B_switches=0x00000003
+EKA2-QEMU MILESTONE: thread switch A->B->A OK under paging
+EKA2-QEMU KernelMain: scheduler returned
+qemu-system-i386: terminating on signal 15 from pid 102762 (timeout)

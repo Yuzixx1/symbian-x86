@@ -1,0 +1,15 @@
+KEKA2-QEMU bridge: 32-bit protected mode, paging off, COM1 ok
+EKA2-QEMU bridge: multiboot magic 2BADB002 OK
+EKA2-QEMU bridge: jumping to ported ResetEntry...
+EKA2-QEMU ResetEntry: multiboot handoff OK (128M RAM, ROM-in-RAM deferred)
+EKA2-QEMU ResetEntry: calling ported InitCpu (GDT/IDT)...
+EKA2-QEMU ResetEntry: InitCpu done, cpu_features=0x0781ABFD
+EKA2-QEMU Asic::Init3: late init (nothing QEMU-specific)
+RomHeaderAddress = 00116020SuperPageAddress = 00115020Calling global constructors...Calling KernelMain()...GENUINE starting scheduler...
+GENUINE worker beat 1 tick=2
+GENUINE worker beat 2 tick=152
+GENUINE worker beat 3 tick=302
+GENUINE worker beat 4 tick=452
+GENUINE worker beat 5 tick=602
+GENUINE back in null, sched OK tick=752
+qemu-system-i386: terminating on signal 15 from pid 204895 (timeout)

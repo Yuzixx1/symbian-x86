@@ -1,0 +1,20 @@
+EKA2-QEMU bridge: 32-bit protected mode, paging off, COM1 ok
+EKA2-QEMU bridge: multiboot magic 2BADB002 OK
+EKA2-QEMU bridge: jumping to ported ResetEntry...
+EKA2-QEMU ResetEntry: multiboot handoff OK (128M RAM, ROM-in-RAM deferred)
+EKA2-QEMU ResetEntry: calling ported InitCpu (GDT/IDT)...
+EKA2-QEMU ResetEntry: InitCpu done, cpu_features=0x0781ABFD
+
+EKA2-QEMU kernel side: entered QemuKernelMain (standing in for KernelMain)
+EKA2-QEMU kernel side: multiboot magic=0x2BADB002 info=0x00009500
+EKA2-QEMU Asic::Init1: remapping i8259 PIC master=0x20 slave=0x28...
+EKA2-QEMU Asic::Init1: PIC remapped (IRQ0->0x20, no CPU-trap clash)
+EKA2-QEMU Asic::Init1: programming i8254 PIT 1000Hz...
+EKA2-QEMU Asic::Init1: PIT ch0 latched count=0x00000485 (ticking)
+EKA2-QEMU Asic::Init1: MsTickPeriod=1ms NanoWaitCal=1000
+EKA2-QEMU kernel side: PIT 100ms poll test...
+EKA2-QEMU kernel side: PIT poll done spins=0x01312D01 (counter advanced, IRQs still masked)
+EKA2-QEMU Asic::Init3: late init (nothing QEMU-specific)
+EKA2-QEMU MILESTONE: ResetEntry->InitCpu->Asic::Init1 reached, COM1+PIC+PIT OK
+EKA2-QEMU next: ROM image + EnableMmu + genuine KernelMain (Phase 4)
+qemu-system-i386: terminating on signal 15 from pid 100357 (timeout)

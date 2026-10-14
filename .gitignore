@@ -1,0 +1,17 @@
+# Build outputs, test scratch, archives — never commit these.
+build/
+*.o
+*.elf
+*.E32
+*.e32
+*.iso
+*.img
+*.bin
+*.vdi
+*.log
+*.zip
+__pycache__/
+*.pyc
+# Upstream tree: shallow clone with its own history; consume it as a
+# submodule (see root README) rather than vendoring it here.
+/kernelhwsrv/

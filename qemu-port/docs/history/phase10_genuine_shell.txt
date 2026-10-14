@@ -1,0 +1,19 @@
+KEKA2-QEMU bridge: 32-bit protected mode, paging off, COM1 ok
+EKA2-QEMU bridge: multiboot magic 2BADB002 OK
+EKA2-QEMU bridge: jumping to ported ResetEntry...
+EKA2-QEMU ResetEntry: multiboot handoff OK (128M RAM, ROM-in-RAM deferred)
+EKA2-QEMU ResetEntry: calling ported InitCpu (GDT/IDT)...
+EKA2-QEMU ResetEntry: InitCpu done, cpu_features=0x0781ABFD
+EKA2-QEMU Asic::Init3: late init (nothing QEMU-specific)
+RomHeaderAddress = 00117020SuperPageAddress = 00116020Calling global constructors...Calling KernelMain()...GENUINE spawning shell(pri10) on TheScheduler...
+GENUINE starting scheduler...
+Symbian EKA2 x86 genuine nanokernel -- interactive console
+VGA 80x25 + COM1, PS/2 IRQ1 + serial input, sched by TheScheduler
+EKA2> help
+commands: help version uptime reboot
+EKA2> version
+Symbian EKA2 microkernel (genuine), x86 bare-metal on QEMU i386
+  feats=0x781abfd CR0=0x19 sched=TheScheduler tick=1ms
+EKA2> uptime
+uptime: 12720 ms (12 s)
+EKA2> qemu-system-i386: terminating on signal 15 from pid 213694 (timeout)

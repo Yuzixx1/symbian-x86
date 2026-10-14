@@ -1,0 +1,134 @@
+KEKA2-QEMU bridge: 32-bit protected mode, paging off, COM1 ok
+EKA2-QEMU bridge: multiboot magic 2BADB002 OK
+EKA2-QEMU bridge: jumping to ported ResetEntry...
+EKA2-QEMU ResetEntry: multiboot handoff OK (128M RAM, ROM-in-RAM deferred)
+EKA2-QEMU ResetEntry: calling ported InitCpu (GDT/IDT)...
+EKA2-QEMU ResetEntry: InitCpu done, cpu_features=0x0781ABFD
+QEMU-HwInit0: ROM synth ok
+RomHeaderAddress = 0019E780
+SuperPageAddress = 0019A780
+RomHeaderAddress = 0019e780
+SuperPageAddress = 0019a780
+Calling global constructors...
+Calling KernelMain()...
+Entrypoint returned 0
+InitVariant: entry point returns 00000000
+A::CreateVariant aFile=0019e98c aMode=00000000
+Calling Initialise 001017d0
+Initialise returned 001df8d8
+Variant installed
+Found ROM root dir index 0 addr 00000000
+K::InitialiseMicrokernel()
+M::Init1
+MM::UserDataSectionBase=02000000
+MM::UserRomDataSectionEnd=02000000
+MM::UserDataSectionEnd=08000000
+MM::Init1()
+RamDriveBase 01200000 RamDriveMaxSize 00e00000
+K::MaxMemCopyInOneGo=0x200
+CacheMaintenance::Init1
+A::Init1()
+>X86::Init1Interrupts()
+<X86::Init1Interrupts()
+NTimerQ::Init1 - period 1 us
+kern_heap_addr 01014000, kern_stack_addr 01010000
+HeapSizeMin 00040000
+Created kernel fixed heap at 01014000, size 00040000
+Get initial thread, 0
+Done NKern::Init
+Created initial thread, 0
+DProcess::Create
+Created initial process, 0
+M::Init2
+24576 blocks, 0 used
+1 banks, max bank blocks 00008000
+A::Init2()
+Created object containers, 0
+Added initial thread, 0
+Added initial process, 0
+kpinfo.iTotalDataSize = 00010000
+kpinfo.iStackSize     = 00004000
+kheap_offset          = 00014000
+init_kernel_size      = 00054000
+kpinfo.iHeapSizeMax   = 00100000
+total_kernel_size     = 00114000
+Created SvHeap, 0
+Created SvHeap chunk, addr 01000000, init size 00054000 max size 00114000
+NewChunk(MsgChunk) returned 0, address 02000000
+Created MsgChunk, base 02000000, size 0, max size 00200000
+PowerModelInit()
+Created supervisor thread, 0
+K::Init3
+CreateEventQueue
+InitNvRam
+Ram Drive size = 00000000
+TInternalRamDrive::Create()
+RAM drive mutex created at 0101cb60
+K::InitNvRam() completed
+NTimerQ::Init3 DFCQ at 0019f910
+Could not read initial system time - using ROM timestamp to set system time
+s2000=843436800
+A::Init3()
+KERN spawning shell(pri10)...
+
+Starting kernel extensions...
+Entry point array at 0019fc90, max size 1
+InitVarExt var=0, fn=0010ee60
+cpu=0, asic=0, variant=0
+File [00000000]
+Processing
+InitExt0 0019ea18 ep=00100c60
+Inserted at index 0, priority 0, last index 0
+InitExt1: calling entrypoint 00100c60
+Entrypoint returned 0
+Symbian EKA2 x86 full kernel -- interactive console
+
+sched by TheScheduler, IRQs via genuine vectors + variant Bind
+
+EKA2> 
+h
+e
+l
+p
+
+
+commands: help version uptime reboot
+
+EKA2> 
+v
+e
+r
+s
+i
+o
+n
+
+
+Symbian EKA2 full kernel (genuine), x86 bare-metal on QEMU i386
+
+  feats=0x781abfd CR0=0x19 tick=1ms
+
+EKA2> 
+u
+p
+t
+i
+m
+e
+
+
+uptime: 17843 ms (17 s)
+
+EKA2> 
+u
+p
+t
+i
+m
+e
+
+
+uptime: 20844 ms (20 s)
+
+EKA2> 
+qemu-system-i386: terminating on signal 15 from pid 249006 (timeout)
