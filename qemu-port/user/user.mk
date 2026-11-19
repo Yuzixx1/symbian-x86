@@ -4,6 +4,7 @@ USER_FLAGS := -m32 -march=i486 -Os -ffreestanding -fno-pic -fno-pie -fno-builtin
 .PHONY: userland
 userland: build/user/ECHO.E32 build/user/TYPE.E32 build/user/CP.E32 build/user/FILECHK.E32
 userland: build/user/IPCSRV.E32 build/user/IPCCLI.E32 build/user/CWD.E32 build/user/CRASH.E32 build/user/MALLOC.E32 build/user/INTERACT.E32 build/user/SLEEP.E32 build/user/CHUNK.E32 build/user/CHKOPEN.E32
+userland: build/user/PORTFILESRV.E32
 
 build/user/ipc.o: user/ipc.h
 build/user/ipcsrv.o build/user/ipccli.o: user/ipc.h
@@ -27,6 +28,10 @@ build/user:
 
 build/user/%.o: user/%.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
+
+# S-04: euser_shim.cpp and portfilesrv.cpp are C++ — they need $(CXX), not $(CC).
+build/user/%.o: user/%.cpp user/e32base.h | build/user
+	$(CXX) $(USER_FLAGS) -c $< -o $@
 
 build/user/runtime.o: user/runtime.c
 build/user/ipc.o: user/ipc.c user/ipc.h
@@ -110,3 +115,22 @@ build/user/malloc.elf: build/user/start.o build/user/runtime.o build/user/malloc
 build/user/MALLOC.E32: build/user/malloc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
+
+# S-04: PORTFILESRV.E32 — EUSER shim user host (E32 file server process).
+build/user/euser_shim.o: user/euser_shim.cpp user/e32base.h user/e32cmn.h user/f32ver.h
+build/user/portfilesrv.o: user/portfilesrv.cpp user/e32base.h user/e32cmn.h user/f32ver.h user/ipc.h user/runtime.h
+
+build/user/portfilesrv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/euser_shim.o build/user/portfilesrv.o build/user/malloc.o build/user/r1_fs_core.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/PORTFILESRV.E32: build/user/portfilesrv.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+# S-04: malloc.o for the EUSER shim
+build/user/malloc.o: user/malloc.c
+	$(CC) $(USER_FLAGS) -c $< -o $@
+
+# S-04: r1_fs_core.o from fs/ directory
+build/user/r1_fs_core.o: fs/r1_fs_core.cpp
+	$(CXX) $(USER_FLAGS) -Ifs -c $< -o $@
