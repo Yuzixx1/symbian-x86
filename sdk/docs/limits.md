@@ -10,8 +10,9 @@ regression behind it; each is slated for replacement per the port's
   single-loop. `malloc` is single-threaded.
 - **One console lease at a time.** `con_acquire` returns InUse while held.
   Always release; crashes are reclaimed by the shell, not instantly.
-- **One outstanding async request per thread.** Sleeps and IPC calls assume
-  the next wakeup is theirs. Do not overlap them.
+- **Overlapping sleeps and IPC waits don't mix.** `sleep_ms` assumes the next
+  wakeup is its timer; concurrent async IPC uses `ipc_wait_for` accounting
+  instead — use one pattern at a time per thread.
 - **Text console.** Every `print` call starts a new line; no cursor control,
   no binary-safe output, no stdin without the lease.
 - **Snapshot filesystem, not F32.** No file locking, no notifications, no

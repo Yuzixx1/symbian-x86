@@ -571,9 +571,9 @@ mirror and writes to the mapped framebuffer (headless host has no screen).
   exit 1 corrupt (CRC/uid/sig/entry/regions/export-tail all checked).
 - In-kernel twin `variant/e32load.cpp` (`E32Validate`, same genuine CRC
   tables, freestanding, no genuine-header dependency) + `FatRead`
-  (raw cluster-chain read into a 64K BSS buffer) + shell `exec <file>`.
-- Verified live (QEMU + seeded FAT32): `exec HELLO.E32` prints uids /
-  entry / bases / sizes; `exec HELLO.TXT` rejected; corrupt `BAD.E32`
+  (raw cluster-chain read into a 64K BSS buffer) + shell image execution.
+- Verified live (QEMU + seeded FAT32): `HELLO.E32` prints uids /
+  entry / bases / sizes; `HELLO.TXT` rejected; corrupt `BAD.E32`
   prints `corrupt` — host and kernel verdicts agree on all three.
 - STAGE 3a-RUN (this session): `exec` now RUNS import-free EXEs through
   the genuine path (`E32Run`: `Kern::ProcessCreate` → loader copy to the
@@ -699,7 +699,7 @@ still require 8.3 names for new entries; LFN files can be read by name. Run
   applied) and resolves EXE ordinals from its export table. Missing DLL
   falls back to the old trampolines. `python3 tools/test_dll.py` proves
   DLL-bound imports end to end in QEMU with no fault.
-- Program command lines (this session): `exec PROG args...` joins the tail
+- Program command lines: `PROG args...` joins the tail
   into a genuine `HBuf` stored as `DProcess::iCommandLine` (same mechanism
   F32/ESTART use); `args <id>` prints it kernel-side. EUSER ord 3 (CmdLen)
   exposes the genuine `EExecProcessCommandLineLength` exec to user code in
@@ -717,17 +717,21 @@ still require 8.3 names for new entries; LFN files can be read by name. Run
 
 ## 21. Userland maturity — files, directories, heap, IPC, console (RUNNING)
 
-- Programs (`make userland`, 11 E32): `ECHO` (verbatim command tail),
+- Programs (`make userland`, 13 E32): `ECHO` (verbatim command tail),
   `TYPE` (file print + EOF), `CP` (streaming copy), `FILECHK` (independent
   handles, deliberate no-close proving auto-cleanup), `IPCSRV`/`IPCCLI`
   (genuine IPC fixtures), `CWD` (inherited + mutable working directory),
   `CRASH` (deliberate UD2 fault), `MALLOC` (allocator self-test),
-  `INTERACT` (leased console conversation), `SLEEP` (repeat-sleep probe).
+  `INTERACT` (leased console conversation), `SLEEP` (repeat-sleep probe),
+  `CHUNK`/`CHKOPEN` (private + cross-process global chunks).
 - `PortFile` (`variant/userfiles.cpp`): per-channel 64 KiB snapshots over
   genuine channel executives; handles ID-tracked to creator thread+process;
   overlong paths rejected, never truncated. Per-process CWD is inherited at
   exec and mutable via validated `chdir`/`getcwd` that leave volume globals
   untouched (`CWD.E32`, `test_userland.py`).
+- Chunks (`user/runtime.c`): genuine `RChunk` executives — private
+  create/write/read/adjust and global named chunks shared across processes
+  (`CHUNK.E32`/`CHKOPEN.E32`, `test_chunk.py`).
 - User heap (`user/malloc.c`): first-fit over 16 KiB, alignment, hole reuse,
   OOM-NULL, coalescing (`MALLOC.E32`). Sleep/time/random from genuine
   executives: fresh-RTimer sleeps, `TimeNow`, `MathRandom` (`SLEEP.E32`;
@@ -747,14 +751,20 @@ still require 8.3 names for new entries; LFN files can be read by name. Run
   survival (`test_crash.py`); `kill` refuses the shell's own process.
 - Clock: `DATE [YYYY-MM-DD HH:MM:SS]` sets CMOS via the genuine Asic setter
   with calendar validation + readback (`test_cli.py`).
-- SDK (`../sdk/`): `newapp.py` scaffolder, space-safe `buildapp.py`, five
-  verified example apps, API/limits/IPC docs (`test_sdk.py`).
+- SDK (`../sdk/`): `newapp.py` scaffolder, space-safe `buildapp.py`, six
+  verified sample apps (`CALC`, `GUESS`, `WC`, `REV`, `FIB`, `MEM`),
+  API/limits/IPC docs (`test_sdk.py`, `test_samples.py`). Typed program names
+  run directly; the shell tries `.E32` when the name has no extension.
 
 ## 22. Verification & remaining work
 
-- `python3 tools/test_stable.py`: build + 12 suites (relocs, args, DLL,
-  data-relocs, userland, IPC, CLI, disk-full, crash, concurrency,
-  interactive, SDK). Manual order: `docs/manual_test_order.md`.
+- `python3 tools/test_stable.py`: build + 15 QEMU suites, including
+  userland, IPC, CLI, interactive input, SDK, six sample apps, blocking
+  wait, and chunks. Manual order: `docs/manual_test_order.md`.
 - Still out (see `docs/full_os_checklist.md`): per-process memory protection,
   full DLL loading, file/console system servers, active-scheduler dispatch,
-  blocking `wait`, networking of any kind, GUI (last).
+  networking of any kind, GUI (last).
+- Future milestones, hardware gates and ARM/S60 compatibility boundaries:
+  `docs/project_roadmap.md`. This is planning, not implemented status.
+- Parallel AI assignments, model-tier guidance, isolated-worktree rules and
+  copy-paste briefs: `docs/parallel_work.md`.

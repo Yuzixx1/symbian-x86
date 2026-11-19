@@ -24,7 +24,7 @@ genuine kernel IPC, and an app SDK. The GUI comes last.
 - `qemu-port/` — the port: BIOS/UEFI boot, x86 variant (PIC/PIT/UART/CMOS),
   ATA/AHCI/USB drivers, FAT32, E32 loader, shell, user runtime, tests.
   Start here: `qemu-port/README.md`.
-- `sdk/` — application development: scaffolder, space-safe builder, five
+- `sdk/` — application development: scaffolder, space-safe builder, six
   verified example apps, API/limits/IPC docs. Start here to write programs:
   `sdk/README.md`.
 
@@ -37,25 +37,29 @@ for UEFI boots. `sh qemu-port/tools/check_env.sh` verifies the toolchain.
 ```
 cd qemu-port
 make                    # kernels + all boot ISOs (test media never stale)
-python3 tools/test_stable.py   # 13 stages: build + 12 QEMU regressions
+python3 tools/test_stable.py   # 16 stages: build + 15 QEMU regressions
 ```
 
 Primary boot image: `qemu-port/build/symbian-grub.iso` (BIOS + UEFI).
 `sdk/` has the app walkthrough (`sdk/docs/getting-started.md`).
 
-## Status (2026-10-14, honest)
+## Status (2026-10-20, honest)
 
 Done and regressed in QEMU: interactive shell with FAT32 read/write/format
 and multi-drive support; ring-3 E32 programs with args, files, directories,
 heap, sleep, clock, random, and leased console input; genuine kernel
 client/server IPC (integers + 8/16-bit descriptors); exit history, crash
-attribution, kill recovery; app SDK with five example programs.
+attribution, kill recovery; app SDK with six example programs. Type a program
+name directly (for example `CALC 12 * 7`); `.E32` is tried automatically.
 
 Not done: per-process memory protection (paging off by design), full DLL
 loading, file/console system servers, active-scheduler dispatch, networking
 of any kind, GUI. The complete list lives in
 `qemu-port/docs/full_os_checklist.md`; the one-at-a-time test order in
-`qemu-port/docs/manual_test_order.md`.
+`qemu-port/docs/manual_test_order.md`. Future milestones and compatibility
+goals are in `qemu-port/docs/project_roadmap.md` (not implemented status).
+For multi-agent development, see `qemu-port/docs/parallel_work.md` before
+assigning overlapping work.
 
 ## Contributing
 

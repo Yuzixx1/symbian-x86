@@ -20,10 +20,15 @@
 
 namespace
     {
+#ifdef R1_STORAGE_HOST_TEST
+    static TUint32 Rd32(TUint32);
+    static void Wr32(TUint32,TUint32);
+#else
     static inline TUint32 Rd32(TUint32 aAddr)
         { return *(volatile TUint32*)aAddr; }
     static inline void Wr32(TUint32 aAddr, TUint32 aVal)
         { *(volatile TUint32*)aAddr = aVal; }
+#endif
 
     enum
         {
@@ -136,9 +141,15 @@ namespace
         prd[14] = (TUint8)(dbc >> 16); prd[15] = 0;
         // Clear port IS, issue slot, poll CI.
         Wr32(PReg(aPort, kPxIs), 0xFFFFFFFFu);
+        __asm__ __volatile__("" : : : "memory"); // publish command table before CI
         Wr32(PReg(aPort, kPxCi), kSlotBit);
         for (TInt i = 0; i < kSpinCmd; ++i)
             {
+            if ((aCmd == kCmdFlush || aCmd == kCmdFlushExt) &&
+                ((Rd32(PReg(aPort,kPxIs)) & 0x7d000000u) ||
+                 (!(Rd32(PReg(aPort,kPxTfd)) & 0x80u) &&
+                  (Rd32(PReg(aPort,kPxTfd)) & 0x21u))))
+                return KErrGeneral;
             if (!(Rd32(PReg(aPort, kPxCi)) & kSlotBit))
                 {
                 TUint32 tfd = Rd32(PReg(aPort, kPxTfd));
@@ -372,6 +383,25 @@ static TInt AhciIo(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf,
         if (r != KErrNone)
             return r;
         }
+    return KErrNone;
+    }
+
+TInt AhciFlush(int aDev)
+    {
+    if (aDev < 0 || aDev >= (int)kMaxPorts) return KErrArgument;
+    if (!AhciPresent(aDev)) return KErrNotReady;
+    Port& pt = gPorts[aDev];
+    // Do not overwrite any in-flight command list/table. A timed out command
+    // stays outstanding; callers must quarantine, not recycle its DMA memory.
+    if (Rd32(PReg(pt.port,kPxCi)) || Rd32(PReg(pt.port,kPxSact))) return KErrInUse;
+    TInt r = WaitClear(PReg(pt.port,kPxTfd),0x88u); // BSY|DRQ
+    if (r) return r;
+    r = RunCmd(pt.port,pt.lba48 ? kCmdFlushExt : kCmdFlush,0,0,0,0,0,EFalse);
+    if (r) return r;
+    TUint32 tfd = Rd32(PReg(pt.port,kPxTfd));
+    if (tfd & 0x21u) return KErrGeneral; // ERR or DF
+    if (tfd & 0x88u) return KErrTimedOut; // CI clear alone is not completion
+    if (Rd32(PReg(pt.port,kPxIs)) & 0x7d000000u) return KErrGeneral;
     return KErrNone;
     }
 

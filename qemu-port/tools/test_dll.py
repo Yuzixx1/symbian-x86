@@ -47,7 +47,7 @@ def main():
             vm.stdin.write(b"mount\n")
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b"C:/> ", pos)
-            pos = test_cli.run_command(vm, log, pos, "exec C:IMP.E32",
+            pos = test_cli.run_command(vm, log, pos, "C:IMP.E32",
                                        b"IMP.E32 started (user process)", b"C:/> ")
             # Check the actual PutC side effect, rather than just binding logs.
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as monitor:

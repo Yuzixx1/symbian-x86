@@ -42,12 +42,14 @@ qemu-system-i386 -M q35 -m 128 -display none -serial stdio \
 
 ```
 mount
-exec GREET.E32 world
+GREET.E32 world
 ```
 
 Expect `Hello from Greet!`. The trailing words become the program's command
 line (see `command_line` in `api.md`). The return value of `app_main`
 becomes the process exit reason — check it with the shell `exits` command.
+The shell also tries `.E32` automatically, so `GREET world` works. Built-in
+commands take precedence over program names.
 
 ## Read input
 

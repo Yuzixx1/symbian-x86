@@ -19,10 +19,18 @@ int change_dir(const char* path);
 int get_cwd(char* buffer, unsigned capacity);
 void* malloc(unsigned size);
 void free(void* ptr);
+/* Genuine kernel chunks (RChunk executives): private or global (named) memory
+   that processes can share. Handles are process-owned. */
+int chunk_create(const char* name, unsigned initial_size, unsigned max_size);
+int chunk_open(const char* name);
+void* chunk_base(int handle);
+int chunk_size(int handle);
+int chunk_adjust(int handle, unsigned new_size);
 /* Genuine kernel executives (no server): sleep, yield, time, random. */
 void sleep_us(int microseconds);
 void sleep_ms(int milliseconds);
 void thread_yield(void);
+void thread_park(void);    /* block until signalled (holds resources) */
 int time_now(void);       /* seconds since 2000-01-01, like the RTC */
 unsigned random32(void);  /* Math::Random */
 /* Transitional console input (PortCon lease); a real console server

@@ -41,6 +41,31 @@ static int descriptors(int session)
     return 0;
 }
 
+static int async_requests(int session)
+{
+    /* Two sessions, two outstanding async requests, waited in reverse order
+       so surplus wakeups exercise the re-signal path every iteration. */
+    int second = ipc_connect("PortIpcCheck");
+    if (second < 0) return 1;
+    static struct IpcArgs args_a, args_b;
+    for (int cycle = 0; cycle < 50; ++cycle)
+        {
+        volatile int status_a, status_b;
+        args_a.args[0] = 1000 + cycle;
+        args_a.args[1] = args_a.args[2] = args_a.args[3] = 0;
+        args_a.flags = 0;
+        args_b.args[0] = 2000 + cycle;
+        args_b.args[1] = args_b.args[2] = args_b.args[3] = 0;
+        args_b.flags = 0;
+        if (ipc_call_async(session, 0, &args_a, &status_a)) { ipc_close(second); return 2; }
+        if (ipc_call_async(second, 0, &args_b, &status_b)) { ipc_close(second); return 3; }
+        if (ipc_wait_for(&status_b) != 2000 + cycle) { ipc_close(second); return 4; }
+        if (ipc_wait_for(&status_a) != 1000 + cycle) { ipc_close(second); return 5; }
+        }
+    ipc_close(second);
+    return 0;
+}
+
 static int descriptors16(int session)
 {
     static unsigned short input[129], output[130];
@@ -122,6 +147,14 @@ int app_main(void)
         return 7;
         }
     print("IPCCLI: 16-bit descriptors verified");
+    check = async_requests(session);
+    if (check)
+        {
+        ipc_close(session);
+        print("IPCCLI: async check failed");
+        return 8;
+        }
+    print("IPCCLI: async requests verified");
     if (ipc_call(session, 99, 0) != -5)
         { ipc_close(session); print("IPCCLI: unsupported mismatch"); return 4; }
     ipc_close(session);

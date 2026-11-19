@@ -23,8 +23,9 @@ for F32 or another shipping Symbian service. Run `python3 tools/test_ipc.py`
 to exercise absent-server handling, connect, repeated integer requests,
 unsupported requests, disconnect, shutdown, restart, and server death with
 a pending client request. The server blocks in genuine request waiting while
-the shell and client execute. The bridge currently assumes one outstanding
-request per thread; it does not implement an active scheduler.
+the shell and client execute. The bridge supports concurrent outstanding
+requests with genuine `WaitForRequest` surplus accounting (`ipc_call_async` +
+`ipc_wait_for`); it does not implement an active scheduler.
 
 The bridge also implements 8-bit and 16-bit descriptor Read/Write through genuine
 MessageIpcCopy and GetDesLength. Tests check a 257-byte binary payload (including

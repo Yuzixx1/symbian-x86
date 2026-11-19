@@ -19,7 +19,7 @@ never returns.
 ## Command line
 
 - `int command_line(U16* buffer, unsigned capacity)` — UTF-16 tail from the
-  shell (`exec PROG arg1 "two words"`). Returns character count (NUL-terminated),
+  shell (`PROG arg1 "two words"`). Returns character count (NUL-terminated),
   or negative (`-9` overflow when it does not fit). Cast elements `< 128` to char.
 
 ## Files (read)
@@ -51,6 +51,20 @@ never returns.
 - `void* malloc(unsigned size)` / `void free(void* ptr)` — first-fit over a
   16 KiB static pool. `free(0)` is safe. Oversize returns NULL. Single-threaded
   programs only; no growth (chunk-backed heaps are future work).
+
+## Kernel chunks (genuine `RChunk` executives)
+
+- `int chunk_create(const char* name, unsigned initial_size, unsigned max_size)`
+  — private memory, or a **global** named chunk when `name` is non-NULL.
+  Global chunks are findable by other processes and live until every handle
+  closes, so the creator must stay alive while others use it.
+- `int chunk_open(const char* name)` — open a global chunk by name.
+- `void* chunk_base(int handle)` / `int chunk_size(int handle)` — map and size.
+- `int chunk_adjust(int handle, unsigned new_size)` — grow/shrink the committed
+  region (must stay ≤ `max_size`).
+- Close with `file_close(handle)`. Handles are process-owned and auto-close at
+  exit. Names may be LFN (up to 255 chars) — the shell resolves them — though
+  FAT creation is still 8.3-only.
 
 ## Sleep, time, random (genuine executives, no server)
 

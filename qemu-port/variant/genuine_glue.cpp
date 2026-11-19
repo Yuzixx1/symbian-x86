@@ -285,7 +285,12 @@ extern "C" void KernelMain()
     NKern::Init0(0);
     X86::DefaultCR0 = X86::GetCR0();   // mirrors vectors.cpp:123
     X86_IrqNestCount = -1;             // thread context (cf. vectors.cpp:122)
-    NTimerQ::Init1(1);                 // 1ms tick (cf. A::Init1, cinit.cpp:87)
+    // Genuine NTimerQ::Init1 takes the tick period in MICROSECONDS
+    // (nk_timer.cpp:277 prints "period %d us"). Passing 1 configured the
+    // nanokernel tick as 1us, which collapsed every timeout conversion
+    // (TTickQ delta_us/1 instead of /1000): sleep_ms(1000) fired in ~67ms,
+    // GUESS's 120s read_line timeout burned in a blink. Must be 1000.
+    NTimerQ::Init1(1000);              // 1ms tick = 1000us (A::Init1, cinit)
 
     SNThreadCreateInfo nullInfo;
     memclr(&nullInfo, sizeof(nullInfo));

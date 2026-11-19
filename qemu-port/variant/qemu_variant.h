@@ -7,6 +7,13 @@
 
 #include <e32rom.h>
 
+namespace R1Fs { class Core; }
+
+extern "C" {
+TInt R1FsSession();
+R1Fs::Core* R1FsCore();
+}
+
 // Contiguous ROM synth blob (variant/qemu_variant_rom.cpp). Lives at
 // qemu_rom_header_reserve so M::IsRomAddress() covers every image header.
 struct QRomBlob
@@ -65,6 +72,7 @@ TUint32 AtaSectors(int aDev);
 const char* AtaModel(int aDev);
 TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf);
 TInt AtaWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf);
+TInt AtaFlush(int aDev); // synchronous correct-device cache flush; errors propagate
 
 // AHCI SATA driver (variant/qemu_ahci.cpp). Ports present as Fat devices
 // 4..7 behind the Ata* dispatch below. DMA, polled.
@@ -75,6 +83,7 @@ TUint32 AhciSectors(int aDev);
 const char* AhciModel(int aDev);
 TInt AhciRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf);
 TInt AhciWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf);
+TInt AhciFlush(int aDev); // AHCI-local port index 0..3
 void AhciInfo();
 
 // xHCI USB3, polled command/event/transfer rings and one direct-root-port
@@ -168,8 +177,9 @@ struct TE32Info
     TUint32 iCodeRelocOff;       // file offset of code reloc section (0=none)
     TUint32 iDataRelocOff;       // file offset of data reloc section (0=none)
     TUint32 iImpOff;             // file offset of import section (0=none)
-    TInt iImpN;                  // import count (0, or 2..4 EUSER ordinals)
-    TUint32 iSlots[4];             // code offsets of the IAT slots (ord k+1)
+    TInt iImpN;                  // import count (0, or up to 16 PE2 ordinals)
+    TBool iPe2;                  // PE2 import format (ordinals stored in IAT)
+    TUint32 iSlots[16];            // code offsets of the IAT slots
     TUint32 iExpOff;             // file offset of export directory (0=none)
     TInt iExpCount;              // export count (DLLs only)
     };
@@ -179,7 +189,14 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
 TInt E32Kill(TUint aId);     // die by container id (never the kernel)
 TInt E32Reap();              // post-mortem code-seg cleanup, returns count
 void E32PrintExits();        // ring of recent exit records (name/id/type/reason)
+TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName);
+TBool E32ProcessAlive(TUint aId);  // still in the process container?
+TBool E32ProcessDead(TUint aId);   // reaper predicate: husks count as dead
 void VgaTeletype(char aC);
 void ShellSpawnFull();
+
+// Genuine G launch integration; separate from legacy E32Run/reaper ownership.
+void E32EnsureUserTss();
+TInt R1GCommand(const char* mode);
 
 #endif // __QEMU_VARIANT_H__

@@ -30,20 +30,21 @@ def main():
             def command(text, expected):
                 nonlocal pos
                 pos = test_cli.run_command(vm, log, pos, text, expected, b'C:/> ')
-            command('exec IPCCLI.E32', b'IPCCLI: connect failed')
+            command('IPCCLI.E32', b'IPCCLI: connect failed')
             for cycle in range(2):
-                command('exec IPCSRV.E32', b'IPCSRV: ready')
+                command('IPCSRV.E32', b'IPCSRV: ready')
                 for client in range(3):
-                    command('exec IPCCLI.E32', b'IPCCLI: 32 replies and unsupported request verified')
-                command('exec IPCCLI.E32 stop', b'IPCCLI: stop acknowledged')
-                command('exec IPCCLI.E32', b'IPCCLI: connect failed')
-            command('exec IPCSRV.E32', b'IPCSRV: ready')
-            command('exec IPCCLI.E32 die', b'IPCCLI: pending request received KErrServerTerminated')
-            command('exec IPCCLI.E32', b'IPCCLI: connect failed')
+                    command('IPCCLI.E32', b'IPCCLI: 32 replies and unsupported request verified')
+                command('IPCCLI.E32 stop', b'IPCCLI: stop acknowledged')
+                command('IPCCLI.E32', b'IPCCLI: connect failed')
+            command('IPCSRV.E32', b'IPCSRV: ready')
+            command('IPCCLI.E32 die', b'IPCCLI: pending request received KErrServerTerminated')
+            command('IPCCLI.E32', b'IPCCLI: connect failed')
             output = Path(test_cli.LOG).read_text(errors='replace')
             assert 'FAULT:' not in output and 'Exc ' not in output, output
             assert output.count('IPCCLI: binary descriptors, offsets, overflow and type checks verified') == 6, output
             assert output.count('IPCCLI: 16-bit descriptors verified') == 6, output
+            assert output.count('IPCCLI: async requests verified') == 6, output
             assert output.count('IPCSRV: receive cancellation verified') == 3, output
             print('PASS: connect, repeated request/reply, disconnect, shutdown, restart')
         finally:

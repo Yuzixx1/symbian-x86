@@ -7,6 +7,17 @@ extern int exec0(unsigned number);
 extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 extern int exec4(unsigned, unsigned, unsigned, unsigned, unsigned);
 extern void ipc_wait_any(void);
+
+static int timer_wait(volatile int* status)
+{
+    /* Self-contained twin of ipc.c's ipc_wait_for: genuine WaitForRequest
+       accounting keeps bare SDK apps (which link only runtime.c + malloc.c)
+       from needing ipc.c. */
+    int extra = -1;
+    do { ++extra; ipc_wait_any(); } while (*status == (int)0x80000001u);
+    if (extra) exec2(58, (unsigned)extra, 0);
+    return *status;
+}
 void file_close(int handle);
 void sleep_ms(int milliseconds);
 void print_n(const char* text, unsigned length);
@@ -16,15 +27,19 @@ void sleep_us(int microseconds)
     /* Fresh RTimer per call: the thread-embedded iTimer behind User::After
        does not complete twice in this port (first After OK, second hangs),
        while single-use request objects — like sessions — repeat reliably.
-       Single semaphore wait: with no other outstanding requests on this
-       thread, the next signal is this timer (same constraint as ipc_call). */
+       Genuine TimerAfter has no TInt return (execs.txt declares it void), so
+       EAX on return is scratch and must NOT gate the wait: gating on r==0 made
+       every sleep return instantly (DIAG probes showed r=0x1021DA8). Wait
+       unconditionally, reusing the genuine WaitForRequest accounting in
+       ipc_wait_for so a surplus signal on this thread is consumed and
+       reposted rather than swallowed. */
     if (microseconds < 0) microseconds = 0;
     if (microseconds > 60000000) microseconds = 60000000;
     volatile int status = (int)0x80000001u;
     int timer = exec0(133);
     if (timer < 0) return;
-    int r = exec4(53, (unsigned)timer, (unsigned)&status, (unsigned)microseconds, 0);
-    if (r == 0) ipc_wait_any();
+    exec4(53, (unsigned)timer, (unsigned)&status, (unsigned)microseconds, 0);
+    timer_wait(&status);
     exec2(106, (unsigned)timer, 0);
 }
 
@@ -37,6 +52,8 @@ void sleep_ms(int milliseconds)
 }
 
 void thread_yield(void) { sleep_us(0); }
+
+void thread_park(void) { ipc_wait_any(); }
 
 int time_now(void)
 {
@@ -52,6 +69,44 @@ int time_now(void)
 }
 
 unsigned random32(void) { return (unsigned)exec0(11); }
+
+/* Genuine TChunkCreate (u32std.h): att, force, bottom, top, max, clear. */
+struct ChunkCreate { unsigned att, force_fixed; int initial_bottom, initial_top, max_size; unsigned char clear_byte; };
+#define CHUNK_GLOBAL 0x10u   /* TChunkCreate::EGlobal */
+
+int chunk_create(const char* name, unsigned initial_size, unsigned max_size)
+{
+    struct ChunkCreate info;
+    info.att = name ? CHUNK_GLOBAL : 0;
+    info.force_fixed = 0;
+    info.initial_bottom = 0;
+    info.initial_top = (int)initial_size;
+    info.max_size = (int)max_size;
+    info.clear_byte = 0x03;  /* genuine default clear byte */
+    if (name)
+        {
+        unsigned n = 0;
+        while (name[n]) ++n;
+        struct PtrC8 nd = {0x10000000u | n, name};
+        return exec4(107, 0, (unsigned)&nd, (unsigned)&info, 0);
+        }
+    return exec4(107, 0, 0, (unsigned)&info, 0);
+}
+
+int chunk_open(const char* name)
+{
+    unsigned n = 0;
+    while (name[n]) ++n;
+    struct PtrC8 nd = {0x10000000u | n, name};
+    return exec4(109, 2, (unsigned)&nd, 0, 0);  /* EChunk = 2 */
+}
+
+void* chunk_base(int handle) { return (void*)exec2(1, (unsigned)handle, 0); }
+int chunk_size(int handle) { return exec2(2, (unsigned)handle, 0); }
+int chunk_adjust(int handle, unsigned new_size)
+{
+    return exec4(108, (unsigned)handle, 0, (unsigned)new_size, 0);
+}
 
 /* Transitional console input over the PortCon logical device. Contract:
    acquire returns KErrNone once; the shell stops consuming input while the

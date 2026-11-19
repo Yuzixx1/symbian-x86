@@ -55,8 +55,11 @@ Primary boot image: `build/symbian-grub.iso`. Test runner: `python3 tools/test_s
   runs with no protected AS; any user pointer reaches all RAM. Done = MMU on,
   page tables per process, user/kernel split enforced, existing E32/TYPE/CP/IPC
   tests still pass, bad user pointer faults the process not the kernel.
-- M-04 Chunks (private/shared, `ChunkCreate`) — PARTIAL (used by loader for code/data;
-  no general user `RChunk` API/aliasing/pinning tests).
+- M-04 Chunks (private/shared, `ChunkCreate`) — DONE. User API
+  (`chunk_create/open/base/size/adjust`, `runtime.h`): private create/read/
+  adjust plus global named chunks shared across processes (`CHUNK.E32` parks
+  holding a global chunk; `CHKOPEN.E32` opens and verifies the value,
+  `test_chunk.py`). Loader's own chunks unaffected.
 - M-05 User heap + `malloc/free` — PARTIAL. Freestanding first-fit allocator
   over a 16 KiB static pool (`user/malloc.c`: alignment, reuse, OOM-NULL,
   coalescing, `MALLOC.E32` fixture in `test_userland.py`). Single-threaded,
@@ -79,9 +82,11 @@ Primary boot image: `build/symbian-grub.iso`. Test runner: `python3 tools/test_s
   name the program (both paths), both tables gated before creation, `kill`
   refuses own process by pointer, `pzomb` locked. Done = failure-injection tests
   (bad image mid-load leaves no seg/proc residue in `segs`/`ps`).
-- P-06 Reliable wait/exit-status API — PARTIAL. 16-entry exit ring survives
-  reaping (name/id/type/reason, orphan path marked); shell `EXITS` verb with
-  `test_crash.py`/`test_conc.py` coverage. Blocking `wait <id>` still TODO.
+- P-06 Reliable wait/exit-status API — DONE. 16-entry exit ring survives
+  reaping (name/id/type/reason, orphan path marked); shell `EXITS` verb plus
+  blocking `wait id [seconds]` (reaper death predicate, so threadless husks
+  report immediately; bounded timeout so spinners can't hang the shell);
+  `test_wait.py` covers timeout, unknown id, kill record, and exit reason.
 - P-07 TLS, thread exceptions, `RThread::Exit` veneer, priorities API — TODO.
 - P-08 Concurrent-workload regression — DONE (`tools/test_conc.py`): IPC server
   blocked in receive while shell + clients run, diagnostics responsive under
@@ -111,10 +116,12 @@ Primary boot image: `build/symbian-grub.iso`. Test runner: `python3 tools/test_s
 - I-04 16-bit descriptors (129-char, embedded zero, offset, 8-on-16 reject) — DONE.
 - I-05 Pending-receive cancel + reuse; server-death wakes client with
   `KErrServerTerminated` — DONE. (`tools/test_ipc.py`.)
-- I-06 One-outstanding-request-per-thread only — PARTIAL. Surplus signals are
-  preserved as spurious wakeups, not counted like `User::WaitForRequest`.
-  Done = concurrent async test (2+ outstanding requests per thread, completions
-  in either order, no lost wakeup over 1000 iterations).
+- I-06 Concurrent async requests — DONE. `ipc_call_async` (SessionSend) plus
+  genuine-exact `User::WaitForRequest` accounting (surplus wakeups reposted
+  via RequestSignal, exactly one signal consumed per wait). `IPCCLI` issues
+  two overlapping requests on two sessions and waits in reverse order, 50
+  iterations × 6 clients in `test_ipc.py`. Single-threaded dispatch only;
+  the active scheduler itself (I-07) still TODO.
 - I-07 Active-object scheduler in userland — TODO. Needed before any real
   service loop.
 - I-08 Upstream `CServer2`/`CSession2` + genuine EUSER/CBase — TODO (see S-04).
@@ -136,8 +143,10 @@ Primary boot image: `build/symbian-grub.iso`. Test runner: `python3 tools/test_s
   be replaced by a real file server with a port backend. Done = RFs connect,
   open/read/write/rename/delete/mkdir/dir through server sessions, async ops,
   file notifications, sharing modes.
-- F-07 Long filenames on create, timestamps, attributes, read-only flags — TODO
-  (LFN read works; create is 8.3-only).
+- F-07 Long filenames on create, timestamps, attributes, read-only flags — TODO.
+  LFN **reads and exec work** for existing names up to 255 chars (`WalkPath`
+  passes long components through to the LFN matcher; `test_chunk.py` runs a
+  15-char program). Creation is still 8.3-only.
 - F-08 Cross-drive relative CWD (today: other-drive root), per-drive CWDs — TODO.
 - F-09 fsck/recovery, power-loss atomicity (FAT is non-journaled, shared-buffer) — TODO.
 - F-10 `TYPE` binary safety (today DebugPrint text transport) — TODO.
@@ -246,3 +255,49 @@ Primary boot image: `build/symbian-grub.iso`. Test runner: `python3 tools/test_s
 
 Rule: each step must extend `test_stable.py` + `manual_test_order.md` and keep
 `kernelhwsrv/` clean. If a step cannot be tested in QEMU, it is not done.
+
+---
+
+## R1 checkpoint status
+
+### R1 checkpoint 3 — EUSER + PE2 imports
+
+Details: `docs/r1_checkpoint3_euser_pe2.md`. Loader entry is `E32Run`
+(`variant/e32load.cpp`); log `/tmp/opencode/r1_qemu_smoke.log`.
+
+- [x] Genuine EUSER.DLL (412 104 B, 2503 exports) validates (`E32Validate r=0`)
+      and loads resident; export-description tail check matches
+      `tools/e32read.py` (expDescSize=45 type=2 sparse bitmap) — DONE.
+- [x] PE2 import resolution: IAT at `textSize+4k`, 1-based ordinals read from
+      the file, bound against `sDllExp[ord-1]` (slot 672 ord 1221
+      `UserSvr::FsRegisterThread`, slot 676 ord 1953 `memcpy`); ELF positional
+      + 2-ordinal trampoline fallbacks — DONE.
+- [x] Automated smoke `tools/r1_qemu_smoke.py`: MBR + FAT32@LBA2048 disk,
+      q35/AHCI QEMU, 10 markers, 10/10 PASS — DONE.
+- [ ] Exc 06 (`EIP=3`) right after `Resume()`: fixture bakes absolute
+      `.rdata`/IAT pointers, `codeRelocOff=0`, 684 B of code — known open
+      defect, fix in progress.
+- [ ] First genuine EUSER call verified end-to-end (ord 1221
+      `FsRegisterThread` reaching the F32/PortFile side) — OPEN.
+- [ ] Checkpoint 4 prep: DThread TLS + exit-reason path for
+      CActive/CActiveScheduler; hybrid-heap ceiling re-measured (EUSER code
+      currently relocated in place in a static RWX buffer) — OPEN.
+
+### R1 checkpoint 4 — Active Scheduler / CActive
+
+Details: `docs/r1_cp4_active_scheduler_plan.md` and `docs/r1_cp4_ca_design.md`.
+
+- [x] Ordinal audit: all CP4 `CActive`/`CActiveScheduler` ordinals (422-434,
+      1086-1095, plus 626/915/1953) present in `euseru.def` — no ordinal
+      blockers — DONE.
+- [x] Research/design docs written (plan + CA fixture design) — DONE.
+- [ ] Raise loader PE2 import cap (4 slots → ≥8) and enlarge `iSlots[]`
+      (`variant/e32load.cpp` / `qemu_variant.h`) — OPEN.
+- [ ] User-mode request-semaphore/wait primitive so
+      `CActiveScheduler::WaitForAnyRequest()` can block a user thread — OPEN.
+- [ ] `ca_test` fixture + `tools/mke32_ca_test.py` + `tools/r1_cp4_ca_test.py`:
+      flat relocs (no `Exc 06`), `RunL()` reached via vtable dispatch,
+      `Start()`/`Stop()` round-trip, all markers pass — OPEN.
+- [ ] Async completion source (2nd thread or CTimer) so `RunL` fires after
+      `Start()`, plus hybrid-heap ceiling re-measure — OPEN.
+

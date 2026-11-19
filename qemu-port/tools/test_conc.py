@@ -30,9 +30,9 @@ def main():
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b'C:/> ', pos)
             # Server blocks in genuine receive while shell + clients run.
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCSRV.E32',
+            pos = test_cli.run_command(vm, log, pos, 'IPCSRV.E32',
                                        b'IPCSRV: ready', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCCLI.E32',
+            pos = test_cli.run_command(vm, log, pos, 'IPCCLI.E32',
                                        b'unsupported request verified', b'C:/> ')
             # Shell diagnostics stay responsive under load.
             pos = test_cli.run_command(vm, log, pos, 'date', b'20', b'C:/> ')
@@ -47,16 +47,16 @@ def main():
             # Kill the session-owning server; clients must fail to connect.
             pos = test_cli.run_command(vm, log, pos, f'kill {server_id}',
                                        b'killed', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCCLI.E32',
+            pos = test_cli.run_command(vm, log, pos, 'IPCCLI.E32',
                                        b'IPCCLI: connect failed', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'exits',
                                        b'IPCSRV', b'C:/> ')
             # Restart and prove full recovery.
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCSRV.E32',
+            pos = test_cli.run_command(vm, log, pos, 'IPCSRV.E32',
                                        b'IPCSRV: ready', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCCLI.E32',
+            pos = test_cli.run_command(vm, log, pos, 'IPCCLI.E32',
                                        b'unsupported request verified', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec IPCCLI.E32 stop',
+            pos = test_cli.run_command(vm, log, pos, 'IPCCLI.E32 stop',
                                        b'stop acknowledged', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'ps',
                                        b'PortFile channels: 0', b'C:/> ')

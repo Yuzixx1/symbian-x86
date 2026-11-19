@@ -4,7 +4,7 @@
 // each with its own CWD; 8.3 writes, LFN reads, files + dirs (mkdir/del),
 // whole-disk `format`. No FAT cache: every FAT update writes all copies
 // through immediately (slow, obviously correct).
-// Single-threaded shell use only (one shared sector buffer).
+// One shared sector buffer: shell serialization or caller-held UserFilesLock.
 //
 // References: Microsoft FAT32 spec (BPB, FAT, directory entries). Variant
 // code; no genuine sources involved.
@@ -12,6 +12,28 @@
 #include <x86.h>
 #include <e32err.h>
 #include "qemu_variant.h"
+#include "r1_fat_offset.h"
+
+namespace
+    {
+    // Device-wide, boot-lifetime quarantine: all partitions/letters on the same
+    // dispatch device share it. Never indexed by reusable mount-table slot.
+    TBool sStorageFailed[8] = { EFalse };
+    TUint32 sWriteAttempts[8] = { 0 };
+    TBool StorageFailed(TInt dev)
+        { return dev < 0 || dev >= 8 || sStorageFailed[dev]; }
+    void StoragePoison(TInt dev)
+        { if (dev >= 0 && dev < 8) sStorageFailed[dev] = ETrue; }
+    TInt StorageWrite(int dev,TUint32 lba,TUint count,const TUint8* data)
+        {
+        if (StorageFailed(dev)) return KErrCorrupt;
+        ++sWriteAttempts[dev]; // attempted writes can complete despite error
+        return AtaWrite(dev,lba,count,data);
+        }
+    }
+// Every write from this TU, including legacy helpers/format, crosses the guard.
+// Driver callers elsewhere are outside the FAT ownership boundary.
+#define AtaWrite StorageWrite
 
 namespace QemuUart
     {
@@ -1083,6 +1105,7 @@ TInt FatRead(const char* aName, TUint8* aBuf, TUint aMax, TUint& aOutLen)
 
 TInt FatWrite(const char* aName, const TUint8* aData, TUint aLen)
     {
+    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
     if (!sMounted)
         return KErrNotReady;
     char name83[11];
@@ -1172,6 +1195,7 @@ TInt FatWrite(const char* aName, const TUint8* aData, TUint aLen)
 // clusters are copied and the old name remains if the sector write fails.
 TInt FatRename(const char* aOld, const char* aNew)
     {
+    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
     if (!sMounted) return KErrNotReady;
     char old83[11], new83[11];
     if (Prep83(aOld, old83) != KErrNone || Prep83(aNew, new83) != KErrNone)
@@ -1218,6 +1242,7 @@ TInt FatRename(const char* aOld, const char* aNew)
 
 TInt FatDel(const char* aName)
     {
+    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
     if (!sMounted)
         return KErrNotReady;
     Found f;
@@ -1263,6 +1288,7 @@ TInt FatDel(const char* aName)
 
 TInt FatMkdir(const char* aName)
     {
+    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
     if (!sMounted)
         return KErrNotReady;
     char name83[11];
@@ -1407,7 +1433,7 @@ namespace
             int n = 0;
             while (*p && *p != '/' && *p != '\\')
                 {
-                if (++n > 12) return KErrArgument;
+                if (++n > 255) return KErrArgument;  // LFN component limit
                 ++p;
                 }
             const char* next = p;
@@ -1418,7 +1444,7 @@ namespace
                 aLeaf = begin;
                 return KErrNone;
                 }
-            char part[13];
+            char part[256];
             for (int i = 0; i < n; ++i) part[i] = begin[i];
             part[n] = 0;
             TInt r = (n == 1 && part[0] == '.') ? KErrNone : FatCd(part);
@@ -1504,8 +1530,318 @@ TInt FatRenamePath(const char* aOld, const char* aNew)
     save.Restore(); return r;
     }
 
+// R1 offset backend intentionally does not reroute the legacy snapshot writer.
+namespace R1Fat
+    {
+    namespace
+        {
+        struct VolumeScope
+            {
+            TInt old;
+            TInt selected;
+            TUint32 writes;
+            TBool complete;
+            VolState original;
+            VolumeScope() : old(sCur), selected(-1), writes(0), complete(EFalse)
+                { GlobalsToVol(original); SaveCur(); }
+            ~VolumeScope()
+                {
+                if (selected >= 0 && !complete && writes != sWriteAttempts[selected])
+                    StoragePoison(selected);
+                sCur = old; VolToGlobals(original);
+                }
+            TInt Select(TInt v)
+                {
+                if (v < 0 || v >= 8 || !sVols[v].mounted) return KErrNotReady;
+                sCur = v; LoadCur();
+                if (StorageFailed(sDev)) return KErrCorrupt;
+                selected=sDev; writes=sWriteAttempts[sDev];
+                if (!sSecPerClus || sSecPerClus > 128 || !sTotalClus ||
+                    sTotalClus > 0x0fffffedu || sFatSz <= (sTotalClus + 1) / 128)
+                    return KErrCorrupt;
+                TUint32 sectors=AtaSectors(sDev);
+                if (!sNumFats || sNumFats>2 || sPartLba>sectors ||
+                    sDataLba>sectors-sPartLba ||
+                    sTotalClus>(sectors-sPartLba-sDataLba)/sSecPerClus ||
+                    sFatLba>sectors || sFatSz>(sectors-sFatLba)/sNumFats)
+                    return KErrCorrupt;
+                return KErrNone;
+                }
+            };
+        TBool Valid(TUint32 c) { return c >= 2 && c - 2 < sTotalClus; }
+        TInt Next(TUint32 c, TUint32& next)
+            {
+            if (!Valid(c)) return KErrCorrupt;
+            TInt r = FatGet(c, next);
+            if (r != KErrNone) return r;
+            return (Valid(next) || next >= kEoc) ? KErrNone : KErrCorrupt;
+            }
+        TInt Chain(TUint32 first, TUint32& count, TUint32& last)
+            {
+            count = 0; last = 0;
+            if (!first) return KErrNone;
+            TUint32 c = first;
+            while (count < sTotalClus)
+                {
+                TUint32 n; TInt r = Next(c, n); if (r) return r;
+                ++count; last = c;
+                if (n >= kEoc) return KErrNone;
+                c = n;
+                }
+            return KErrCorrupt; // cycle or impossible length
+            }
+        TInt At(TUint32 first, TUint32 index, TUint32& c)
+            {
+            c = first;
+            if (index >= sTotalClus) return KErrCorrupt;
+            while (index--)
+                {
+                TUint32 n; TInt r = Next(c, n); if (r) return r;
+                c = n;
+                }
+            return Valid(c) ? KErrNone : KErrCorrupt;
+            }
+        TInt Load(File& f, Found& found, TUint8* ent)
+            {
+            if (!f.open || f.volume != sCur || f.device != sDev ||
+                f.partition != sPartLba) return KErrBadHandle;
+            if (!Valid(f.dirCluster) || f.dirSector >= sSecPerClus || f.dirIndex >= 16)
+                return KErrBadHandle;
+            TInt r = AtaRead(sDev, ClusLba(f.dirCluster) + f.dirSector, 1, sSec);
+            if (r) return r;
+            for (int i = 0; i < 32; ++i) ent[i] = sSec[f.dirIndex * 32 + i];
+            for (int i = 0; i < 11; ++i) if (ent[i] != f.name[i]) return KErrBadHandle;
+            if (!ent[0] || ent[0] == 0xe5 || (ent[11] & 0x18)) return KErrBadHandle;
+            found.dirClus = f.dirCluster; found.dirSec = f.dirSector; found.dirIdx = f.dirIndex;
+            found.attr = ent[11]; found.size = Rd32(ent + 28);
+            found.firstClus = (TUint32)Rd16(ent + 20) << 16 | Rd16(ent + 26);
+            TUint32 count, last; r = Chain(found.firstClus, count, last);
+            if (r) return r;
+            TUint32 bytes = sSecPerClus * 512;
+            if (found.size && (found.size - 1) / bytes >= count) return KErrCorrupt;
+            return KErrNone;
+            }
+        TInt Publish(Found& f, TUint8* ent)
+            {
+            Wr16(ent + 20, (TUint16)(f.firstClus >> 16));
+            Wr16(ent + 26, (TUint16)f.firstClus); Wr32(ent + 28, f.size);
+            ent[11] |= 0x20;
+            return DirWriteAt(f, ent);
+            }
+        TInt MutationError(TInt r) { if (r) StoragePoison(sDev); return r; }
+        // FSInfo is a hint, but a formerly exact count must not remain falsely
+        // authoritative. Preserve signatures/other fields; propagate actual I/O
+        // failure. This port's mounted profile places primary FSInfo at +1.
+        TInt InvalidateHint()
+            {
+            TUint8 b[512]; TInt r=AtaRead(sDev,sPartLba+1,1,b); if(r) return r;
+            if(Rd32(b)!=0x41615252u || Rd32(b+484)!=0x61417272u) return KErrNone;
+            Wr32(b+488,0xffffffffu); Wr32(b+492,0xffffffffu);
+            return AtaWrite(sDev,sPartLba+1,1,b);
+            }
+        // Unlike legacy helpers, do not collapse I/O errors or ignore FAT-copy
+        // writes. No speculative rollback after uncertain sector completion.
+        TInt Allocate(TUint32& out)
+            {
+            out = 0;
+            for (TUint32 c = 2; c - 2 < sTotalClus; ++c)
+                {
+                TUint32 v; TInt r = FatGet(c, v); if (r) return r;
+                if (v) continue;
+                r = InvalidateHint(); if (r) return r;
+                r = FatSet(c, kEoc); if (r) return r;
+                TUint8 zero[512]; for (int i = 0; i < 512; ++i) zero[i] = 0;
+                for (TUint s = 0; s < sSecPerClus; ++s)
+                    { r = AtaWrite(sDev, ClusLba(c) + s, 1, zero); if (r) return r; }
+                out = c; return KErrNone;
+                }
+            return KErrDiskFull;
+            }
+        TInt Extend(Found& f, TUint32 wanted)
+            {
+            TUint32 count, last; TInt r = Chain(f.firstClus, count, last); if (r) return r;
+            while (count < wanted)
+                {
+                TUint32 c; r = Allocate(c); if (r) return r;
+                if (last) { r = FatSet(last, c); if (r) return r; }
+                else f.firstClus = c;
+                last = c; ++count;
+                }
+            return KErrNone;
+            }
+        TInt Slot(Found& f)
+            {
+            TUint32 c = sCwdClus;
+            for (TUint32 visited = 0; visited < sTotalClus; ++visited)
+                {
+                if (!Valid(c)) return KErrCorrupt;
+                for (TUint s = 0; s < sSecPerClus; ++s)
+                    {
+                    TInt r = AtaRead(sDev, ClusLba(c) + s, 1, sSec); if (r) return r;
+                    for (TUint e = 0; e < 16; ++e)
+                        if (!sSec[e*32] || sSec[e*32] == 0xe5)
+                            {
+                            TBool end=!sSec[e*32];
+                            f.dirClus=c; f.dirSec=s; f.dirIdx=e;
+                            if(!end) return KErrNone;
+                            // Preserve the logical directory end before publishing
+                            // into its old marker (including a sector boundary).
+                            TUint32 nextc=c; TUint nexts=s,nexte=e+1;
+                            if(nexte==16) { nexte=0; if(++nexts==sSecPerClus)
+                                { nexts=0; r=Next(c,nextc); if(r) return r;
+                                  if(nextc>=kEoc) return KErrNone; } }
+                            r=AtaRead(sDev,ClusLba(nextc)+nexts,1,sSec); if(r) return r;
+                            sSec[nexte*32]=0;
+                            r=AtaWrite(sDev,ClusLba(nextc)+nexts,1,sSec);
+                            return MutationError(r);
+                            }
+                    }
+                TUint32 n; TInt r = Next(c,n); if (r) return r;
+                if (n >= kEoc)
+                    {
+                    r = Allocate(n); if (r) return MutationError(r);
+                    r = FatSet(c,n); if (r) return MutationError(r);
+                    f.dirClus=n; f.dirSec=0; f.dirIdx=0; return KErrNone;
+                    }
+                c=n;
+                }
+            return KErrCorrupt;
+            }
+        TInt Lookup(const char* path, Found& f, TBool create)
+            {
+            if (!path || (*path != '/' && *path != '\\')) return KErrArgument;
+            sCwdClus=sRootClus; sCwdDepth=0;
+            const char* p=path+1;
+            for (;;)
+                {
+                char part[13]; TUint n=0;
+                while (*p && *p!='/' && *p!='\\')
+                    { if (n==12) return KErrArgument; part[n++]=*p++; }
+                part[n]=0; char name[11]; TInt r=Prep83(part,name); if (r) return r;
+                // Bound directory traversal before using the legacy name scan.
+                TUint32 count,last; r=Chain(sCwdClus,count,last); if(r) return r;
+                r=DirFind(part,f);
+                if (*p)
+                    {
+                    if (r) return r;
+                    if (!(f.attr&0x10) || !Valid(f.firstClus)) return KErrPathNotFound;
+                    sCwdClus=f.firstClus; ++p; continue;
+                    }
+                if (!r) return create ? KErrAlreadyExists : ((f.attr&0x18) ? KErrNotSupported : KErrNone);
+                if (r!=KErrNotFound || !create) return r;
+                r=Slot(f); if(r) return r;
+                TUint8 ent[32]; Make83Ent(ent,name,0x20,0,0); StampNow(ent);
+                r=DirWriteAt(f,ent); if(r) return MutationError(r);
+                f.firstClus=0; f.size=0; f.attr=0x20; return KErrNone;
+                }
+            }
+        }
+    TInt Open(char drive, const char* path, TBool create, File& f)
+        {
+        if (f.open) return KErrInUse;
+        VolumeScope scope; TInt v=-1;
+        if (drive>='a' && drive<='z') drive-=32;
+        for (int i=0;i<8;++i) if(sVols[i].mounted && sVols[i].letter==drive) {v=i;break;}
+        TInt r=scope.Select(v); if(r) return r;
+        CwdSnapshot cwd; cwd.Save(); Found found;
+        r=Lookup(path,found,create); cwd.Restore(); if(r) return r;
+        f.volume=v; f.device=sDev; f.partition=sPartLba;
+        f.dirCluster=found.dirClus; f.dirSector=found.dirSec; f.dirIndex=found.dirIdx;
+        r=AtaRead(sDev,ClusLba(found.dirClus)+found.dirSec,1,sSec); if(r) return r;
+        for(int i=0;i<11;++i) f.name[i]=sSec[found.dirIdx*32+i];
+        f.open=ETrue; scope.complete=ETrue; return KErrNone;
+        }
+    TInt Size(File& f,TUint32& size)
+        {
+        size=0; if(!f.open) return KErrBadHandle;
+        VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+        Found found; TUint8 ent[32]; r=Load(f,found,ent); if(!r) size=found.size; return r;
+        }
+    TInt Read(File& f,TUint32 offset,TUint8* data,TUint length,TUint& done)
+        {
+        done=0; if(!f.open) return KErrBadHandle; if(!data && length) return KErrArgument;
+        VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+        Found found; TUint8 ent[32]; r=Load(f,found,ent); if(r) return r;
+        if(offset>=found.size) return KErrNone;
+        if(length>found.size-offset) length=found.size-offset;
+        while(done<length)
+            {
+            TUint32 pos=offset+done,c; r=At(found.firstClus,pos/(sSecPerClus*512),c); if(r) return r;
+            r=AtaRead(sDev,ClusLba(c)+(pos/512)%sSecPerClus,1,sSec); if(r) return r;
+            TUint n=512-pos%512; if(n>length-done) n=length-done;
+            for(TUint i=0;i<n;++i) data[done+i]=sSec[pos%512+i];
+            done+=n;
+            }
+        return KErrNone;
+        }
+    TInt Write(File& f,TUint32 offset,const TUint8* data,TUint length,TUint& done)
+        {
+        done=0; if(!f.open) return KErrBadHandle; if(!data && length) return KErrArgument;
+        VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+        Found found; TUint8 ent[32]; r=Load(f,found,ent); if(r) return r;
+        if(found.attr&1) return KErrAccessDenied;
+        if(offset>found.size) offset=found.size;
+        if(length>0xffffffffu-offset) return KErrTooBig;
+        while(done<length)
+            {
+            TUint32 pos=offset+done,c;
+            r=Extend(found,pos/(sSecPerClus*512)+1); if(r) return MutationError(r);
+            r=At(found.firstClus,pos/(sSecPerClus*512),c); if(r) return MutationError(r);
+            r=AtaRead(sDev,ClusLba(c)+(pos/512)%sSecPerClus,1,sSec); if(r) return MutationError(r);
+            TUint n=512-pos%512; if(n>length-done) n=length-done;
+            for(TUint i=0;i<n;++i) sSec[pos%512+i]=data[done+i];
+            r=AtaWrite(sDev,ClusLba(c)+(pos/512)%sSecPerClus,1,sSec); if(r) return MutationError(r);
+            done+=n;
+            if(offset+done>found.size) found.size=offset+done;
+            r=Publish(found,ent); if(r) return MutationError(r);
+            }
+        scope.complete=ETrue; return KErrNone;
+        }
+    TInt Resize(File& f,TUint32 size)
+        {
+        if(!f.open) return KErrBadHandle;
+        VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+        Found found; TUint8 ent[32]; r=Load(f,found,ent); if(r) return r;
+        if(found.attr&1) return KErrAccessDenied;
+        if(size==found.size) return KErrNone;
+        TUint32 bytes=sSecPerClus*512,wanted=size ? (size-1)/bytes+1 : 0;
+        if(size>found.size)
+            {
+            r=Extend(found,wanted); if(r) return MutationError(r);
+            found.size=size; r=Publish(found,ent);
+            if(r) return MutationError(r);
+            scope.complete=ETrue; return KErrNone;
+            }
+        TUint32 tail=found.firstClus,last=0;
+        if(wanted)
+            { r=At(found.firstClus,wanted-1,last); if(r) return r; r=Next(last,tail); if(r) return r; }
+        found.size=size; if(!wanted) found.firstClus=0;
+        // Publish smaller size before freeing, never expose freed bytes as live.
+        r=Publish(found,ent); if(r) return MutationError(r);
+        if(last) { r=FatSet(last,kEoc); if(r) return MutationError(r); }
+        if(tail && tail<kEoc) { r=InvalidateHint(); if(r) return MutationError(r); }
+        while(tail && tail<kEoc)
+            {
+            TUint32 next; r=Next(tail,next); if(r) return MutationError(r);
+            r=FatSet(tail,kFree); if(r) return MutationError(r); tail=next;
+            }
+        scope.complete=ETrue; return KErrNone;
+        }
+    TInt Flush(File& f,FlushDrive flush)
+        {
+        if(!f.open) return KErrBadHandle;
+        VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+        Found found; TUint8 ent[32]; r=Load(f,found,ent); if(r) return r;
+        r=(flush ? flush : AtaFlush)(sDev);
+        if(r) return MutationError(r);
+        scope.complete=ETrue; return KErrNone;
+        }
+    void Close(File& f) { f.open=EFalse; }
+    }
+
 TInt FatFormat(int aDev)
     {
+    if (StorageFailed(aDev)) return KErrCorrupt;
     AtaInit();
     if (!AtaPresent(aDev))
         return KErrNotFound;

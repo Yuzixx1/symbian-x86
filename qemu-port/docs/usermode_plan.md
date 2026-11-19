@@ -61,7 +61,7 @@ processes under our kernel. Genuine tree stays read-only; new code in
 4. **Process/thread bring-up**: `Kern::ProcessCreate` + first
    `RThread` with user PC/SP, user stack pages, heap reserve; `ESTART`
    equivalent: our loader IS estart (no separate estart.exe yet).
-5. **Shell verbs**: `exec <file> [args]` (load+run+report exit),
+ 5. **Shell verbs**: typed filename `[args]` (load+run+report exit),
    `ps` already lists processes.
 6. **Later**: DLLs + IAT import resolution against kernel exports,
    `RProcess` args/env, heaps, file-server session for user processes,
@@ -79,8 +79,8 @@ in-kernel loader against the known-good file.
   the genuine `ValidateHeader` rules; `tools/e32read.py` validates it
   (exit 0) and rejects corrupt/truncated/non-E32 inputs (exit 1).
 - [x] In-kernel twin `variant/e32load.cpp` (`E32Validate`, same genuine
-  CRC32/UID algorithms) + `FatRead` + shell `exec <file>`: verified live
-  in QEMU (`exec HELLO.E32` validates, `exec HELLO.TXT` rejected,
+   CRC32/UID algorithms) + `FatRead` + shell filename execution: verified live
+   in QEMU (`HELLO.E32` validates, `HELLO.TXT` rejected,
   corrupt `BAD.E32` prints `corrupt` — host and kernel agree).
 - [x] In-kernel loader (`variant/e32load.cpp` cont.): data copy + BSS
   zero + TEXT/DATA/INFERRED relocs (genuine `svRelocateSection` mirror);
@@ -108,8 +108,9 @@ in-kernel loader against the known-good file.
   `exec` tail-join, `args` verb, user-side CmdLen export (ord 3);
   `tools/test_args.py` round-trips shell -> process -> user thread.
 - [x] Exit history: 16-entry ring in `E32Reap` (name/id/type/reason, orphan
-  path marked) + shell `EXITS` verb; `test_crash.py`/`test_conc.py` cover
-  fault attribution and kill recovery. Blocking `wait` still out.
+  path marked) + shell `EXITS` verb + blocking `wait id [seconds]` (reaper
+  death predicate, bounded timeout); `test_crash.py`/`test_conc.py` cover
+  fault attribution and kill recovery, `test_wait.py` the verb itself.
 - [x] User allocator: `user/malloc.c` first-fit over 16 KiB (alignment, reuse,
   OOM-NULL, coalescing); `MALLOC.E32` in `test_userland.py`. Chunk-backed
   growth still out.
@@ -120,6 +121,9 @@ in-kernel loader against the known-good file.
 - [x] Console input: `PortCon` lease (`variant/usercon.cpp`) + `read_line`;
   shell yields while leased and reclaims on owner death; `INTERACT.E32` in
   `test_interact.py`. Real console server still out.
+- [x] Chunks: genuine `RChunk` executives (`chunk_create/open/base/size/adjust`)
+  — private write/read/adjust plus cross-process global sharing
+  (`CHUNK.E32`/`CHKOPEN.E32`, `test_chunk.py`).
 - [x] Build hygiene: `build/user/runtime.o` now depends on `user/runtime.c`
   (a missing dep silently shipped stale user binaries during this work).
 - [x] Compiled userland: freestanding GCC + `user/link.ld` +

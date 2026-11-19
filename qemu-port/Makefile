@@ -63,7 +63,7 @@ KERN_CIA_DEFS := $(KERN_DEFS) -D__CIA__ -masm=intel
 # (frame-pointer omission, as proven by the Phase-9 GEN slice) but NOT at -O0
 # (observed stack wipe via TPriListBase -> memclr). Never use -O0 here.
 KERN_CIA_FLAGS := -m32 -march=i486 -std=gnu++98 -ffreestanding -nostdlib -fno-builtin -fno-pic -fno-pie -fno-stack-protector -mno-red-zone -fno-exceptions -fno-rtti -fno-threadsafe-statics -O2
-KERN_INCLUDES := -I$(EKA)/include -I$(EKA)/include/nkern -I$(EKA)/include/kernel -I$(EKA)/include/kernel/x86 -I$(EKA)/include/nkern/x86 -I$(EKA)/common -I$(EKA)/include/memmodel/epoc -I$(EKA)/include/memmodel/epoc/direct -I$(EKA)/include/memmodel/epoc/direct/x86 -I$(QPORT)/inc -I$(QPORT)/build/export
+KERN_INCLUDES := -I$(EKA)/include -I$(EKA)/include/nkern -I$(EKA)/include/kernel -I$(EKA)/include/kernel/x86 -I$(EKA)/include/nkern/x86 -I$(EKA)/common -I$(EKA)/include/memmodel/epoc -I$(EKA)/include/memmodel/epoc/direct -I$(EKA)/include/memmodel/epoc/direct/x86 -I$(QPORT)/inc -I$(QPORT)/build/export -I$(QPORT)/fs
 KERN_BUILD := build/kern
 KERN_OBJS_1 := $(KERN_BUILD)/ncutilf.o $(KERN_BUILD)/ncutilf_cpp.o $(KERN_BUILD)/nctimer.o
 KERN_OBJS_2 := $(KERN_BUILD)/cglobals.o $(KERN_BUILD)/cexec.o $(KERN_BUILD)/cinit.o $(KERN_BUILD)/ckernel.o $(KERN_BUILD)/cipc.o $(KERN_BUILD)/csched.o $(KERN_BUILD)/cutils.o $(KERN_BUILD)/abort.o $(KERN_BUILD)/cache.o $(KERN_BUILD)/cexec_cia.o $(KERN_BUILD)/ckernel_cia.o $(KERN_BUILD)/csched_cia.o $(KERN_BUILD)/cutils_cia.o $(KERN_BUILD)/cumem.o $(KERN_BUILD)/cumem_cia.o
@@ -267,6 +267,62 @@ build/usercon.o: variant/usercon.cpp variant/qemu_variant.h | build
 KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o build/qemu_assp.o build/kernfull_glue.o build/qemu_variant_rom.o build/qemu_variant_asic.o build/qemu_variant_int.o build/qemu_pci.o build/qemu_ata.o build/qemu_ahci.o build/qemu_xhci.o build/fat32.o build/e32load.o build/qemu_usb.o build/qemu_usb_ohci.o build/kern_shell.o $(KNK_OBJS) $(KERN_OBJS_1) $(KERN_OBJS_2) $(KERN_OBJS_3) $(KERN_OBJS_4)
 
 KERNFULL_OBJS += build/userfiles.o build/usercon.o
+
+# R1 file service core + FAT32 backend. Compiled unconditionally so the
+# kernel can host a genuine RFs/RFile service on a FAT32 volume.
+# r1_fs_server.cpp (CServer2-based user-space server) is NOT compiled here;
+# it belongs in the user-space portfilesrv.exe host process.
+KERNFULL_OBJS += build/r1_fs_core.o build/r1_fs_fat.o
+
+build/r1_fs_core.o: fs/r1_fs_core.cpp fs/r1_fs_core.h fs/r1_fs_backend.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
+
+build/r1_fs_fat.o: fs/r1_fs_fat.cpp fs/r1_fs_fat.h fs/r1_fs_backend.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
+
+# Genuine G is explicit local research provisioning, never a legacy fallback.
+# Empty by default: ordinary all/ISO builds need no genuine local assets.
+R1_G_ASSET_DIR ?=
+R1_G_FLAGS :=
+R1_G_OBJS := build/r1_g_launch.o
+ifneq ($(strip $(R1_G_ASSET_DIR)),)
+ifeq ($(wildcard $(R1_G_ASSET_DIR)/r1_g_assets.inc),)
+$(error R1_G_ASSET_DIR lacks r1_g_assets.inc; use tools/stage_r1_g.py)
+endif
+R1_G_FLAGS := -DR1_G_ASSETS -I$(R1_G_ASSET_DIR)
+R1_G_OBJS += build/r1_g_objects.o build/r1_g_bootstrap.o build/e32g_format.o build/e32g_plan.o build/e32g_load.o
+build/r1_g_launch.o: $(R1_G_ASSET_DIR)/r1_g_assets.inc
+endif
+KERNFULL_OBJS += $(R1_G_OBJS)
+
+# R1 private FS channel — explicit opt-in, off by default. Plain `make`
+# builds all ISOs unchanged without the channel. The channel is compile- and
+# host-verified only (card 27); the guest service needs card-29 host launch
+# policy and the not-yet-implemented R1Fat backend, so it is deliberately not
+# linked into a default kernfull.elf.
+R1_FS_CHANNEL ?= 0
+R1_FS_CHANNEL_OBJ :=
+ifeq ($(strip $(R1_FS_CHANNEL)),1)
+R1_FS_CHANNEL_OBJ := build/r1_fs_channel.o
+build/r1_fs_channel.o: variant/r1_fs_channel.cpp variant/r1_fs_channel.h \
+ fs/r1_fs_channel.h fs/r1_fs_channel_state.h fs/r1_fs_wire_logic.h \
+ variant/r1_fat_offset.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/r1_fs_channel.cpp -o $@
+endif
+KERNFULL_OBJS += $(R1_FS_CHANNEL_OBJ)
+
+.PHONY: r1-g-config-force
+# Recompile when opt-in changes, so stale asset-enabled objects cannot leak into
+# a subsequent default legacy build (or silently omit newly provisioned assets).
+build/r1_g_launch.o: variant/r1_g_launch.cpp variant/r1_g_launch.h r1-g-config-force | build
+	$(if $(strip $(R1_G_ASSET_DIR)),python3 tools/stage_r1_g.py --verify --out "$(R1_G_ASSET_DIR)",@true)
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(R1_G_FLAGS) $(KERN_INCLUDES) -c $< -o $@
+build/r1_g_objects.o: variant/r1_g_objects.cpp variant/r1_g_objects.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
+build/r1_g_bootstrap.o: variant/r1_g_bootstrap.cpp variant/r1_g_bootstrap.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
+build/e32g_%.o: loader/e32g_%.cpp loader/e32g_%.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
 
 build/kernfull.elf: build/export/exec_enum.h $(KERNFULL_OBJS) boot/link.ld
 	$(LD) -m elf_i386 -nostdlib -static -T boot/link.ld -o $@ $(KERNFULL_OBJS) $(LIBGCC)

@@ -12,6 +12,13 @@
 #include <e32err.h>
 #include "qemu_variant.h"
 
+#ifdef R1_STORAGE_HOST_TEST
+// Host tests inject register access, never execute port instructions.
+static void Out8(unsigned, unsigned char);
+static void Out16(unsigned, unsigned short);
+static unsigned char In8(unsigned);
+static unsigned short In16(unsigned);
+#else
 static inline void Out8(unsigned aPort, unsigned char aVal)
     { __asm__ __volatile__("out %1, %0" : : "a"(aVal), "d"((unsigned short)aPort)); }
 static inline void Out16(unsigned aPort, unsigned short aVal)
@@ -20,6 +27,7 @@ static inline unsigned char In8(unsigned aPort)
     { unsigned char v; __asm__ __volatile__("in %0, %1" : "=a"(v) : "d"((unsigned short)aPort)); return v; }
 static inline unsigned short In16(unsigned aPort)
     { unsigned short v; __asm__ __volatile__("in %0, %1" : "=a"(v) : "d"((unsigned short)aPort)); return v; }
+#endif
 
 namespace
     {
@@ -186,6 +194,32 @@ const char* AtaModel(int aDev)
     if (!AtaPresent(aDev))
         return "(absent)";
     return gDevs[aDev].model;
+    }
+
+TInt AtaFlush(int aDev)
+    {
+    if (aDev < 0 || aDev >= 8) return KErrArgument;
+    if (aDev >= 4) return AhciFlush(aDev - 4);
+    if (!AtaPresent(aDev)) return KErrNotReady;
+    unsigned cmd = kChans[aDev / 2].cmd, ctl = kChans[aDev / 2].ctl;
+    // Do not switch a channel while a prior command is still busy.
+    TInt r = WaitNotBusy(cmd); if (r) return r;
+    Select(cmd, aDev % 2, 0);
+    r = WaitNotBusy(cmd); if (r) return r;
+    unsigned char s = In8(cmd + 7);
+    if (!s || s == 0xff) return KErrNotReady;
+    if (s & kStDrq) return KErrInUse;
+    Out8(cmd + 7, kCmdFlush);
+    Delay400ns(ctl);
+    for (TInt i = 0; i < kSpinBusy; ++i)
+        {
+        s = In8(cmd + 7);
+        if (s & kStBsy) continue;
+        if (!s || s == 0xff) return KErrNotReady;
+        if (s & (kStErr | kStDf)) return KErrGeneral;
+        if (!(s & kStDrq)) return KErrNone;
+        }
+    return KErrTimedOut;
     }
 
 TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf)

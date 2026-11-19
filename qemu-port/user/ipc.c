@@ -13,11 +13,18 @@ static struct Name descriptor(const char* text)
 }
 int ipc_wait(volatile int* status)
 {
-    /* Genuine WaitForRequest preserves surplus signals; stealing another
-       request's wakeup loses it. Poll first so an already-completed status
-       consumes no signal; leftover signals only cause harmless spurious
-       wakeups on the next wait. */
-    while (*status == (int)0x80000001u) { ipc_wait_any(); }
+    return ipc_wait_for(status);
+}
+
+int ipc_wait_for(volatile int* status)
+{
+    /* Genuine User::WaitForRequest accounting (us_exec.cpp): every wakeup
+       consumes one semaphore signal; wakeups that are not ours are reposted,
+       so concurrent outstanding requests never lose completions. Exactly
+       one signal is consumed per call however it resolves. */
+    int extra = -1;
+    do { ++extra; ipc_wait_any(); } while (*status == (int)0x80000001u);
+    if (extra) exec2(58, (unsigned)extra, 0);
     return *status;
 }
 int ipc_server_create(const char* name)
@@ -83,8 +90,18 @@ int ipc_call_args(int session, int function, const struct IpcArgs* args)
     volatile int status = (int)0x80000001u;
     int r = exec4(77, session, function, (unsigned)args, (unsigned)&status);
     if (r) return r;
-    ipc_wait(&status);
+    ipc_wait_for(&status);
     return status;
+}
+
+int ipc_call_async(int session, int function, const struct IpcArgs* args,
+                   volatile int* status)
+{
+    /* EExecSessionSend: queue only; completion arrives via the request
+       semaphore. Args are consumed at send time; status must outlive the
+       wait (caller stack is fine: waits complete before return). */
+    *status = (int)0x80000001u;
+    return exec4(37, session, function, (unsigned)args, (unsigned)status);
 }
 int ipc_connect(const char* name)
 {

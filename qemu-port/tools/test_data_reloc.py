@@ -64,7 +64,7 @@ def main():
                 raise RuntimeError("FAT mount did not finish")
             if not wait_for(log, b"C:/> ", 60):
                 raise RuntimeError("mount-all did not return to the shell")
-            vm.stdin.write(b"exec C:DREL.E32\n")
+            vm.stdin.write(b"C:DREL.E32\n")
             vm.stdin.flush()
             if not wait_for(log, b"DREL.E32 started", 30):
                 raise RuntimeError("E32 process did not start")
@@ -91,7 +91,7 @@ def main():
                 vm.wait()
     with open(LOG, "rb") as log:
         output = log.read().decode("latin1")
-    print("exec started:", "DREL.E32 started (user process)" in output)
+    print("started:", "DREL.E32 started (user process)" in output)
     values = re.findall(r"0000000002200010:\s*(0x[0-9a-fA-F]+)", result)
     print("user BSS result:", values[-1] if values else "not returned")
     faults = "FAULT" in output or re.search(r"\bExc [0-9a-fA-F]{2}\b", output)

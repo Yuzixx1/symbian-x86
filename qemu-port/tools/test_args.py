@@ -71,7 +71,7 @@ def main():
             vm.stdin.write(b"mount\n")
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b"C:/> ", pos)
-            pos = test_cli.run_command(vm, log, pos, f"exec C:ARGS.E32 {ARGS}",
+            pos = test_cli.run_command(vm, log, pos, f"C:ARGS.E32 {ARGS}",
                                        b"ARGS.E32 started (user process)", b"C:/> ")
             log.flush()
             with open(LOG, "rb") as src:
@@ -89,7 +89,7 @@ def main():
                                        f"len={len(ARGS)} \r\n{ARGS}".encode(), b"C:/> ")
             print(f"args verb: id={ids[-1]} shows {ARGS!r}")
             # Same binary without arguments: CmdLen must read back 0.
-            pos = test_cli.run_command(vm, log, pos, "exec C:ARGS.E32",
+            pos = test_cli.run_command(vm, log, pos, "C:ARGS.E32",
                                        b"ARGS.E32 started (user process)", b"C:/> ")
             log.flush()
             with open(LOG, "rb") as src:

@@ -29,5 +29,8 @@ int ipc_length(struct IpcMessage* message, int slot);
 void ipc_receive_async(int server, struct IpcMessage* message, volatile int* status);
 void ipc_receive_cancel(int server);
 int ipc_wait(volatile int* status);
+int ipc_wait_for(volatile int* status);
+int ipc_call_async(int session, int function, const struct IpcArgs* args,
+                   volatile int* status);
 void ipc_close(int handle);
 #endif

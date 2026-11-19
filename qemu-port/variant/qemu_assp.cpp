@@ -109,7 +109,12 @@ TUint QemuPit::WaitTicks(TUint aN)
 
 // --- QemuAsic: same method names as genuine class Asic (assp.h:174) ---
 TInt QemuAsic::StartupReason() { return 0; /* EStartupCold */ }
-TInt QemuAsic::MsTickPeriod() { return 1; /* 1ms, cf. NTimerQ::Init1 */ }
+    // Genuine Asic::MsTickPeriod returns the tick period in MICROSECONDS —
+    // the value lands straight in NTimerQ::Init1 (X86::Init1Interrupts),
+    // whose signature is also microseconds ("period %d us"). Returning 1
+    // made every NTick count read as 1us, so RTimer::After(1s) expired in
+    // ~64ms and all sleeps/timeouts collapsed (sleep insta-return bug).
+    TInt QemuAsic::MsTickPeriod() { return 1000; /* 1ms = 1000us */ }
 TUint QemuAsic::NanoWaitCalibration() { return 1000u; /* stub; genuine measures TSC */ }
 void QemuAsic::DebugOutput(TUint aChar) { QemuUart::PutC((char)aChar); }
 void QemuAsic::Idle() { __asm__ __volatile__("sti; hlt"); }

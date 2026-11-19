@@ -15,11 +15,11 @@ Media (all rebuilt by default `make`, never stale):
 1. BIOS + GRUB-CD + FAT-HDD second drive. Expect: GRUB menu -> `EKA2>`
    (serial shows boot; VGA shows shell banner).
 2. In shell: `mount`, `vol` (FAT disk as C:), then:
-   `exec C:HELLO.E32` -> VGA row 22 shows `HI!` + green D, `0`, green H,
-   green m. `exec C:IMP.E32` -> row 22 `IM`, row 21 col 0 yellow `P`.
+    `C:HELLO.E32` -> VGA row 22 shows `HI!` + green D, `0`, green H,
+    green m. `C:IMP.E32` -> row 22 `IM`, row 21 col 0 yellow `P`.
    `ps` -> only ekern (+ latest dead pending reap is NORMAL).
-   `exec C:SPIN.E32` (low prio spinner) -> `ps` shows SPIN, `kill <id>` ->
-   `killed`, next `exec` prints `reaped 1`, `ps` clean.
+    `C:SPIN.E32` (low prio spinner) -> `ps` shows SPIN, `kill <id>` ->
+    `killed`, next program launch prints `reaped 1`, `ps` clean.
 3. `meminfo` before/after several execs: heap must sit ~50-57K, not grow
    ~2.3K/run (that was the old leak; fixed).
 4. USB fingers: attach a USB keyboard to the VM (OHCI port, NOT xHCI —
@@ -36,20 +36,26 @@ Media (all rebuilt by default `make`, never stale):
    4+, tagged [AHCI] in `ide`).
 
 ## Real hardware (legacy BIOS first, then UEFI)
-- BIOS: write `symbian-grub.iso` to USB stick (`dd`), boot. PS/2 is the
-  safe input path; UHCI/OHCI and directly attached xHCI HID keyboards
-  are supported after `usb` is run. Expect `EKA2>` on VGA + serial
-  (115200 8N1).
-- UEFI: same stick via UEFI boot menu (BOOTX64.EFI). Expect same.
+- Begin with the **non-destructive** `hw_worksheet.md` VGA/PS/2 smoke on the
+  reference PC; it records unknown BIOS/media/controller facts without
+  mounting or writing the system disk. The GRUB ISO is El Torito, **not known
+  to be isohybrid**: prefer a burned CD-R for first legacy-BIOS boot. Do not
+  assume `dd` of this ISO to a USB stick boots BIOS or UEFI; treat any USB
+  attempt as an experiment on a positively identified disposable stick.
+- BIOS: boot the CD-R first; PS/2 is the safe input path. Expect `EKA2>` on
+  VGA; serial capture is **not currently available** on the reference PC.
+  UHCI/OHCI and directly attached xHCI HID input need separate hardware checks.
+- UEFI (only if available): test suitable boot media separately after the BIOS
+  smoke; do not assume the reference machine offers UEFI.
 - Storage: on-board IDE (PIO) or AHCI SATA (`ahci` verb to verify;
-  ATAPI CDs skipped). `mount`/`dir`/`exec` as above.
+   ATAPI CDs skipped). `mount`/`dir`/program launch as above.
 - USB: PS/2, UHCI/OHCI, or one directly attached xHCI HID boot keyboard.
   Run `usb` to auto-probe; if absent, use `xhciports` to identify the port,
   then `xhcikbd N` (1-based port). Test typing a shell command through the
   USB keyboard; report `xhci`, `xhciports`, and `usb` output. Hubs and
   multiple xHCI devices are not supported yet.
 - Report: board/ports used, where it hangs (last serial line), photos of
-  VGA row 22 after `exec C:HELLO.E32`.
+   VGA row 22 after `C:HELLO.E32`.
 
 ## Report format (paste into chat)
 For each run: profile (VBox BIOS / VBox EFI / HW board+BIOS-ver), last 10

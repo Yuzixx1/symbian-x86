@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Boot compiled ECHO and verify genuine user-side command-line copying."""
 import subprocess
+import time
 from pathlib import Path
 import test_cli
 
@@ -50,81 +51,94 @@ def main():
             cases = ['', 'hello world', '"two words"  three',
                      'one two three four five six seven eight nine ten', 'x' * 100]
             for tail in cases:
-                command = 'exec C:ECHO.E32' + (' ' + tail if tail else '')
+                command = 'C:ECHO.E32' + (' ' + tail if tail else '')
                 start = pos
                 pos = test_cli.run_command(vm, log, pos, command,
                                            b'ECHO.E32 started', b'C:/> ')
                 test_cli.wait_for(log, ('ECHO: ' + tail).encode(), start)
                 print('verified user output:', repr(tail))
+            # DOS-style: no extension, and a bare name from the CWD.
+            pos = test_cli.run_command(vm, log, pos, 'C:ECHO noext',
+                                       b'ECHO: noext', b'C:/> ')
+            pos = test_cli.run_command(vm, log, pos, 'ECHO.E32 bare',
+                                       b'ECHO: bare', b'C:/> ')
             # User-mode file access over genuine logical channels.
-            pos = test_cli.run_command(vm, log, pos, 'exec C:TYPE.E32 C:\\HELLO.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:TYPE.E32 C:\\HELLO.TXT',
                                        b'TYPE.E32 started', b'C:/> ')
             test_cli.wait_for(log, b'Hello from user file!', pos - 800)
             test_cli.wait_for(log, b'TYPE: EOF', pos - 800)
             print('verified user file read')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:TYPE.E32 C:\\MISSING.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:TYPE.E32 C:\\MISSING.TXT',
                                        b'open failed', b'C:/> ')
             print('verified user open-fail path')
             # User-mode write: CP copies via PortFile read+write, shell reads back.
-            pos = test_cli.run_command(vm, log, pos, 'exec C:CP.E32 C:\\HELLO.TXT C:\\COPY.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:CP.E32 C:\\HELLO.TXT C:\\COPY.TXT',
                                        b'CP: copied', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'type C:\\COPY.TXT',
                                        b'Hello from user file!', b'C:/> ')
             print('verified user file write')
-            pos = test_cli.run_command(vm, log, pos, 'exec CP.E32 "HELLO.TXT" "QUOTE.TXT"',
+            pos = test_cli.run_command(vm, log, pos, 'CP.E32 "HELLO.TXT" "QUOTE.TXT"',
                                        b'CP: copied', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'type QUOTE.TXT',
                                        b'Hello from user file!', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec CP.E32 HELLO.TXT QUOTE.TXT extra',
+            pos = test_cli.run_command(vm, log, pos, 'CP.E32 HELLO.TXT QUOTE.TXT extra',
                                        b'CP: use two paths', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec CP.E32 "HELLO.TXT QUOTE.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'CP.E32 "HELLO.TXT QUOTE.TXT',
                                        b'CP: use two paths', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec CP.E32 LARGE.TXT COPY.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'CP.E32 LARGE.TXT COPY.TXT',
                                        b'open source failed', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'type COPY.TXT',
                                        b'Hello from user file!', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec CP.E32 MID.TXT MIDCOPY.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'CP.E32 MID.TXT MIDCOPY.TXT',
                                        b'CP: copied', b'C:/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec TYPE.E32 MIDCOPY.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'TYPE.E32 MIDCOPY.TXT',
                                        b'END-MID-OK', b'C:/> ')
             for unused in range(3):
-                pos = test_cli.run_command(vm, log, pos, 'exec FILECHK.E32',
+                pos = test_cli.run_command(vm, log, pos, 'FILECHK.E32',
                                            b'FILECHECK: independent handles', b'C:/> ')
                 pos = test_cli.run_command(vm, log, pos, 'ps',
                                            b'PortFile channels: 0', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'md WORK', b'', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'copy HELLO.TXT WORK\\NOTE.TXT', b'', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'cd WORK', b'', b'C:/WORK/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\TYPE.E32 NOTE.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\TYPE.E32 NOTE.TXT',
                                        b'Hello from user file!', b'C:/WORK/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\CP.E32 NOTE.TXT NEW.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\CP.E32 NOTE.TXT NEW.TXT',
                                        b'CP: copied', b'C:/WORK/> ')
             pos = test_cli.run_command(vm, log, pos, 'type NEW.TXT',
                                        b'Hello from user file!', b'C:/WORK/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\TYPE.E32 ..\\HELLO.TXT',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\TYPE.E32 ..\\HELLO.TXT',
                                        b'Hello from user file!', b'C:/WORK/> ')
             print('verified inherited CWD, relative writes, and parent traversal')
             pos = test_cli.run_command(vm, log, pos, 'md SUB', b'', b'C:/WORK/> ')
             pos = test_cli.run_command(vm, log, pos, 'copy NOTE.TXT SUB\\NOTE.TXT', b'', b'C:/WORK/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\CWD.E32',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\CWD.E32',
                                        b'CWD: relative open ok', b'C:/WORK/> ')
             test_cli.wait_for(log, b'C:\\WORK', pos - 1500)
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\CWD.E32 SUB',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\CWD.E32 SUB',
                                        b'CWD-NEW:', b'C:/WORK/> ')
             test_cli.wait_for(log, b'C:\\WORK\\SUB', pos - 1500)
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\CWD.E32 \\NOPE',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\CWD.E32 \\NOPE',
                                        b'CWD: chdir failed', b'C:/WORK/> ')
             pos = test_cli.run_command(vm, log, pos, 'ps',
                                        b'PortFile channels: 0', b'C:/WORK/> ')
             print('verified mutable per-process CWD, shell isolation, and bad-dir rejection')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\MALLOC.E32',
+            pos = test_cli.run_command(vm, log, pos, 'C:\\MALLOC.E32',
                                        b'MALLOC: allocator verified', b'C:/WORK/> ')
             pos = test_cli.run_command(vm, log, pos, 'reap',
                                        b'reaped 1', b'C:/WORK/> ')
             pos = test_cli.run_command(vm, log, pos, 'exits',
                                        b'MALLOC.E32', b'C:/WORK/> ')
-            pos = test_cli.run_command(vm, log, pos, 'exec C:\\SLEEP.E32',
-                                       b'SLEEP: done', b'C:/WORK/> ')
+            # Real sleeps (NTick fix) mean program output races the shell's
+            # post-exec prints; sync the announce from the run start, then
+            # the completion as the final position marker.
+            start = pos
+            sleep_started = time.monotonic()
+            vm.stdin.write(b'C:\\SLEEP.E32\n')
+            vm.stdin.flush()
+            pos = test_cli.wait_for(log, b'SLEEP: done', start, 20)
+            elapsed = time.monotonic() - sleep_started
+            assert elapsed >= 0.35, f'SLEEP completed too quickly ({elapsed:.3f}s)'
             output = Path(test_cli.LOG).read_text(errors='replace')
             assert 'Exc ' not in output, output
             assert 'FAULT:' not in output, output

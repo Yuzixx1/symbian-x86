@@ -27,24 +27,28 @@ def main():
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b'C:/> ', pos)
             # Start the program; it leases the console before prompting.
-            vm.stdin.write(b'exec INTERACT.E32\n')
+            start = pos
+            vm.stdin.write(b'INTERACT.E32\n')
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b'Name? ', pos, timeout=30)
             # Only now type: anything earlier would be a shell command.
             vm.stdin.write(b'Ada\n')
             vm.stdin.flush()
-            # The shell reprints its prompt at exec time; the program runs
-            # concurrently, so synchronize on its own output, not the prompt.
+            # The program output and the shell's post-exec prints interleave
+            # nondeterministically (real sleeps changed the old ordering), so
+            # sync on the announce from the run start, then the next prompt.
+            pos = test_cli.wait_for(log, b'INTERACT.E32 started', start, timeout=30)
+            pos = test_cli.wait_for(log, b'C:/> ', pos, timeout=30)
+            # The prompt announces an asynchronous process, not its completion.
+            # Never inspect the log or terminate QEMU until the user program
+            # has consumed the input and finished.
             pos = test_cli.wait_for(log, b'Hello Ada!', pos, timeout=30)
             pos = test_cli.wait_for(log, b'INTERACT: done', pos, timeout=30)
-            # The program runs ahead of the shell's post-exec prints; consume
-            # the leftover post-exec prompt so the next command syncs cleanly.
-            pos = test_cli.wait_for(log, b'INTERACT.E32 started', pos, timeout=30)
-            pos = test_cli.wait_for(log, b'C:/> ', pos, timeout=30)
             output = Path(test_cli.LOG).read_text(errors='replace')
+            assert 'Hello Ada!' in output, output
+            assert 'INTERACT: done' in output, output
             assert 'INTERACT: ready 20' in output, output
             assert 'random=' in output, output
-            assert 'INTERACT: done' in output, output
             assert 'FAULT:' not in output and 'Exc ' not in output, output
             pos = test_cli.run_command(vm, log, pos, 'ps',
                                        b'PortFile channels: 0', b'C:/> ')

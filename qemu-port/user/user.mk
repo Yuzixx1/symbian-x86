@@ -3,7 +3,7 @@ USER_FLAGS := -m32 -march=i486 -Os -ffreestanding -fno-pic -fno-pie -fno-builtin
 
 .PHONY: userland
 userland: build/user/ECHO.E32 build/user/TYPE.E32 build/user/CP.E32 build/user/FILECHK.E32
-userland: build/user/IPCSRV.E32 build/user/IPCCLI.E32 build/user/CWD.E32 build/user/CRASH.E32 build/user/MALLOC.E32 build/user/INTERACT.E32 build/user/SLEEP.E32
+userland: build/user/IPCSRV.E32 build/user/IPCCLI.E32 build/user/CWD.E32 build/user/CRASH.E32 build/user/MALLOC.E32 build/user/INTERACT.E32 build/user/SLEEP.E32 build/user/CHUNK.E32 build/user/CHKOPEN.E32
 
 build/user/ipc.o: user/ipc.h
 build/user/ipcsrv.o build/user/ipccli.o: user/ipc.h
@@ -87,6 +87,20 @@ build/user/sleep.elf: build/user/start.o build/user/runtime.o build/user/sleep.o
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/SLEEP.E32: build/user/sleep.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+build/user/chunk.elf: build/user/start.o build/user/runtime.o build/user/chunk.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/CHUNK.E32: build/user/chunk.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+build/user/chunkopen.elf: build/user/start.o build/user/runtime.o build/user/chunkopen.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/CHKOPEN.E32: build/user/chunkopen.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 

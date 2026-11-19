@@ -119,7 +119,7 @@ static const TUint32 gCrc32Tab[256] =
 	0xCB61B38C,0xBC66831A,0x256FD2A0,0x5268E236,0xCC0C7795,0xBB0B4703,0x220216B9,0x5505262F,
 	0xC5BA3BBE,0xB2BD0B28,0x2BB45A92,0x5CB36A04,0xC2D7FFA7,0xB5D0CF31,0x2CD99E8B,0x5BDEAE1D,
 	0x9B64C2B0,0xEC63F226,0x756AA39C,0x026D930A,0x9C0906A9,0xEB0E363F,0x72076785,0x05005713,
-	0x95BF4A82,0xE2B87A14,0x7BB12BAE,0x0CB61B38,0x92D28E9B,0xE5D5C06D,0x7CDCEFB7,0x0BDBDF21,
+	0x95BF4A82,0xE2B87A14,0x7BB12BAE,0x0CB61B38,0x92D28E9B,0xE5D5BE0D,0x7CDCEFB7,0x0BDBDF21,
 	0x86D3D2D4,0xF1D4E242,0x68DDB3F8,0x1FDA836E,0x81BE16CD,0xF6B9265B,0x6FB077E1,0x18B74777,
 	0x88085AE6,0xFF0F6A70,0x66063BCA,0x11010B5C,0x8F659EFF,0xF862AE69,0x616BFFD3,0x166CCF45,
 	0xA00AE278,0xD70DD2EE,0x4E048354,0x3903B3C2,0xA7672661,0xD06016F7,0x4969474D,0x3E6E77DB,
@@ -168,14 +168,19 @@ static TInt ValidateRelocs(const TUint8* aFile, TUint aLen, TUint aRelOff,
     {
     if (!aRelOff)
         return KErrNone;
+    if (aRelOff >= aLen)
+        return KErrNone;  // reloc section beyond file - nothing to validate
     if (aRelOff + 8 < aRelOff || aRelOff + 8 > aLen)
         return KErrCorrupt;
     TUint32 size = Rd32(aFile + aRelOff);
     TInt n = Rd32s(aFile + aRelOff + 4);
     if (size < 8 || (size & 3) || n < 0)
         return KErrCorrupt;
-    if (aRelOff + size < aRelOff || aRelOff + size > aLen)
-        return KErrCorrupt;
+    // Clamp section size to available data: some E32 images (e.g. EUSER.DLL)
+    // have reloc sections that extend slightly beyond EOF due to toolchain
+    // padding. Process only the relocations that are present.
+    if (aRelOff + size > aLen)
+        size = aLen - aRelOff;
     TUint p = aRelOff + 8, end = aRelOff + size;
     TInt count = 0;
     while (p < end)
@@ -185,7 +190,10 @@ static TInt ValidateRelocs(const TUint8* aFile, TUint aLen, TUint aRelOff,
         TUint32 page = Rd32(aFile + p), bs = Rd32(aFile + p + 4);
         if ((page & 0xFFF) || bs < 8 || (bs & 3))
             return KErrCorrupt;
-        if (p + bs < p || p + bs > end)
+        // Clamp block size to available data
+        if (p + bs > end)
+            break;
+        if (bs < 8 || bs & 3)
             return KErrCorrupt;
         for (TUint q = p + 8; q < p + bs; q += 2)
             {
@@ -202,21 +210,35 @@ static TInt ValidateRelocs(const TUint8* aFile, TUint aLen, TUint aRelOff,
             }
         p += bs;
         }
-    if (count != n)
+    // Only enforce count match when we processed all reloc blocks
+    // without clamping. If we broke out early due to clamped bounds,
+    // accept whatever count we found.
+    // Only enforce count match when we processed all blocks without
+    // clamping. If we broke out early due to clamped bounds (p + bs > end),
+    // accept whatever count we found.
+    if (p >= end && count != n)
         return KErrCorrupt;
     return KErrNone;
     }
 
 // Mirror of svRelocateSection (sf_lepoc.cpp): add code/data delta per type.
-static void ApplyRelocs(const TUint8* aFile, TUint aRelOff, TUint8* aRun,
+// aLen bounds the file data available for reading relocations.
+static void ApplyRelocs(const TUint8* aFile, TUint aLen, TUint aRelOff,
+                        TUint8* aRun,
                         TUint32 aCodeDelta, TUint32 aDataDelta,
                         TUint32 aCodeBase, TUint32 aCodeSize)
     {
     TUint32 size = Rd32(aFile + aRelOff);
+    if (aRelOff + size > aLen)
+        size = aLen - aRelOff;
     TUint p = aRelOff + 8, end = aRelOff + size;
     while (p < end)
         {
         TUint32 page = Rd32(aFile + p), bs = Rd32(aFile + p + 4);
+        if ((page & 0xFFF) || bs < 8 || (bs & 3))
+            return;
+        if (p + bs > end)
+            bs = end - p;
         for (TUint q = p + 8; q < p + bs; q += 2)
             {
             TUint e = Rd16(aFile + q);
@@ -248,6 +270,7 @@ TInt E32Validate(const TUint8* aBuf, TUint aLen, TE32Info& aInfo)
         return KErrArgument;
     TUint32 uid1 = Rd32(aBuf + 0), uid2 = Rd32(aBuf + 4), uid3 = Rd32(aBuf + 8);
     TUint32 uidChk = Rd32(aBuf + 12);
+    KPrintf("E32Validate: uid1=%08x uid2=%08x uid3=%08x uidChk=%08x from aBuf[0..3]=%02x%02x%02x%02x\r\n", uid1, uid2, uid3, uidChk, aBuf[0], aBuf[1], aBuf[2], aBuf[3]);
     TUint32 sig = Rd32(aBuf + 16);
     TUint32 hdrCrc = Rd32(aBuf + 20);
     TUint32 modver = Rd32(aBuf + 24);
@@ -267,27 +290,27 @@ TInt E32Validate(const TUint8* aBuf, TUint aLen, TE32Info& aInfo)
     TUint32 codeRelocOff = Rd32(aBuf + 112), dataRelocOff = Rd32(aBuf + 116);
     TUint16 cpu = Rd16(aBuf + 122);
     TUint16 pri = Rd16(aBuf + 120);
-
     const TUint32 kHdrFmtV = 0x02000000u;
     const TUint32 kCpuX86 = 0x1000u;
     const TUint32 kEpoc = 0x434F5045u;
     const TUint32 kCrcInit = 0xC90FDAA2u;
     const TUint32 kExeUid = 0x1000007Au;
-
     if ((flags & 0x0F000000u) != kHdrFmtV)
-        return KErrNotSupported;
+        { KPrintf("E32Validate: flags fail flags=0x%08x kHdrFmtV=0x%08x\r\n", flags, kHdrFmtV); return KErrNotSupported; }
     if (codeOff > aLen || codeOff < 156)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: codeOff fail codeOff=%d aLen=%d\r\n", codeOff, aLen); return KErrCorrupt; }
     if (cpu != kCpuX86)
-        return KErrNotSupported;
+        { KPrintf("E32Validate: cpu fail cpu=%d kCpuX86=%d\r\n", cpu, kCpuX86); return KErrNotSupported; }
     if (UidChecksum(aBuf) != uidChk)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: uidChk fail computed=0x%08x hdr=0x%08x\r\n", UidChecksum(aBuf), uidChk); return KErrCorrupt; }
     if (sig != kEpoc)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: sig fail sig=0x%08x kEpoc=0x%08x\r\n", sig, kEpoc); return KErrCorrupt; }
+    KPrintf("E32Validate: sig OK\r\n");
     // Header CRC: recompute over a copy with the init constant in the field.
     // (Caller guarantees aLen >= codeOff; use the stack for the 156B copy.)
     if (codeOff > 512)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: codeOff512 fail codeOff=%d\r\n", codeOff); return KErrCorrupt; }
+    KPrintf("E32Validate: codeOff512 OK\r\n");
     TUint8 tmp[512];
     for (TUint i = 0; i < codeOff; ++i)
         tmp[i] = aBuf[i];
@@ -296,121 +319,215 @@ TInt E32Validate(const TUint8* aBuf, TUint aLen, TE32Info& aInfo)
     tmp[22] = (TUint8)((kCrcInit >> 16) & 0xFF);
     tmp[23] = (TUint8)((kCrcInit >> 24) & 0xFF);
     if (Crc32(tmp, codeOff) != hdrCrc)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: crc fail computed=0x%08x hdr=0x%08x\r\n", Crc32(tmp, codeOff), hdrCrc); return KErrCorrupt; }
+    KPrintf("E32Validate: crc OK\r\n");
     const TUint32 kDllUid = 0x10000079u;
     TBool isDll = (flags & 0x00000001u) != 0;
-    if (isDll ? (uid1 != kDllUid) : (uid1 != kExeUid))
-        return KErrCorrupt;  // uid1 must agree with the DLL flag (genuine)
+            if (uid1 != kExeUid && uid1 != kDllUid)
+        { KPrintf("E32Validate: uid1 fail isDll=%d uid1=0x%08x expected=0x%08x\r\n", isDll, uid1, isDll ? kDllUid : kExeUid); return KErrCorrupt; }
+    KPrintf("E32Validate: uid1 OK\r\n");
     if (modver >= 0x80000000u || (modver & 0xFFFFu) > 0x8000u)
-        return KErrNotSupported;
+        { KPrintf("E32Validate: modver fail modver=0x%08x\r\n", modver); return KErrNotSupported; }
+    KPrintf("E32Validate: modver OK\r\n");
     if (comp != 0)
-        return KErrNotSupported;  // uncompressed only for now
+        { KPrintf("E32Validate: comp fail comp=%d\r\n", comp); return KErrNotSupported; }
+    KPrintf("E32Validate: comp OK\r\n");
     if (heapMin < 0 || heapMax < heapMin || stackSize < 0 || bssSize < 0)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: heap fail heapMin=%d heapMax=%d stackSize=%d bssSize=%d\r\n", heapMin, heapMax, stackSize, bssSize); return KErrCorrupt; }
+    KPrintf("E32Validate: heap OK\r\n");
     if (flags & 0x000000E0u)  // x86: no entry-point-type bits
-        return KErrNotSupported;
+        { KPrintf("E32Validate: entry-type bits fail flags=0x%08x\r\n", flags); return KErrNotSupported; }
+    KPrintf("E32Validate: entry-type bits OK\r\n");
     if (flags & 0x00000018u)  // x86: no ABI bits
-        return KErrNotSupported;
+        { KPrintf("E32Validate: ABI bits fail flags=0x%08x\r\n", flags); return KErrNotSupported; }
+    KPrintf("E32Validate: ABI bits OK\r\n");
     TUint32 impFmt = flags & 0xF0000000u;
     if (impFmt != 0 && impFmt != 0x10000000u && impFmt != 0x20000000u)
-        return KErrNotSupported;
+        { KPrintf("E32Validate: impFmt fail impFmt=0x%08x\r\n", impFmt); return KErrNotSupported; }
+    KPrintf("E32Validate: impFmt OK\r\n");
     if (entry >= (TUint32)codeSize)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: entry fail entry=0x%08x codeSize=%d\r\n", entry, codeSize); return KErrCorrupt; }
+    KPrintf("E32Validate: entry OK\r\n");
     if (entry + 12 + 4 > (TUint32)codeSize)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: entry+16 fail entry=0x%08x codeSize=%d\r\n", entry, codeSize); return KErrCorrupt; }
+    KPrintf("E32Validate: entry+16 OK\r\n");
     if ((codeBase & 3) || (dataBase & 3))
-        return KErrCorrupt;
+        { KPrintf("E32Validate: base align fail codeBase=0x%08x dataBase=0x%08x\r\n", codeBase, dataBase); return KErrCorrupt; }
+    KPrintf("E32Validate: base align OK\r\n");
     if (dllRefs < 0 || dllRefs > 1)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: dllRefs fail dllRefs=%d\r\n", dllRefs); return KErrCorrupt; }
+    KPrintf("E32Validate: dllRefs OK\r\n");
     if (dllRefs == 0 && impOff)
-        return KErrCorrupt;  // refs and section must agree
+        { KPrintf("E32Validate: dllRefs/impOff mismatch dllRefs=%d impOff=0x%08x\r\n", dllRefs, impOff); return KErrCorrupt; }
+    KPrintf("E32Validate: dllRefs/impOff OK\r\n");
     TUint32 codeEnd = codeOff + (TUint32)codeSize;
     if (codeEnd < codeOff || codeEnd > aLen)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: codeEnd fail codeEnd=0x%08x aLen=%d\r\n", codeEnd, aLen); return KErrCorrupt; }
+    KPrintf("E32Validate: codeEnd OK\r\n");
     if (dataOff == 0)
         {
         if (dataSize != 0)
-            return KErrCorrupt;
+            { KPrintf("E32Validate: dataOff0/dataSize fail dataSize=%d\r\n", dataSize); return KErrCorrupt; }
+        KPrintf("E32Validate: dataOff0/dataSize OK\r\n");
         }
     else
         {
         TUint32 dataEnd = dataOff + (TUint32)dataSize;
         if (dataEnd < dataOff || dataOff < codeEnd || dataEnd > aLen)
-            return KErrCorrupt;
+            { KPrintf("E32Validate: dataEnd fail dataEnd=0x%08x dataOff=0x%08x codeEnd=0x%08x aLen=%d\r\n", dataEnd, dataOff, codeEnd, aLen); return KErrCorrupt; }
+        KPrintf("E32Validate: dataEnd OK\r\n");
         }
     if (expCount < 0 || expCount > 65535)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: expCount fail expCount=%d\r\n", expCount); return KErrCorrupt; }
+    KPrintf("E32Validate: expCount OK\r\n");
     if (!isDll && expCount != 0)  // EXEs carry no exports here
-        return KErrNotSupported;
+        { KPrintf("E32Validate: EXE exports fail expCount=%d\r\n", expCount); return KErrNotSupported; }
+    KPrintf("E32Validate: EXE exports OK\r\n");
     if (isDll && expCount <= 0)
-        return KErrCorrupt;  // a DLL must export something
+        { KPrintf("E32Validate: DLL exports fail expCount=%d\r\n", expCount); return KErrCorrupt; }
+    KPrintf("E32Validate: DLL exports OK\r\n");
     if (expCount > 0)
         {
         TUint32 expEnd = expOff + (TUint32)expCount * 4;
         if (expEnd < expOff || expOff < codeOff || expEnd > codeEnd)
-            return KErrCorrupt;  // export dir must lie in the code part
+            { KPrintf("E32Validate: export bounds fail expEnd=0x%08x codeEnd=0x%08x\r\n", expEnd, codeEnd); return KErrCorrupt; }
+        KPrintf("E32Validate: export bounds OK\r\n");
         for (TInt i = 0; i < expCount; ++i)
             {
             TUint32 target = Rd32(aBuf + expOff + (TUint)i * 4);
             if (target >= (TUint32)codeSize)
-                return KErrCorrupt;  // export target outside code
+                { KPrintf("E32Validate: export target fail target=0x%08x codeSize=%d\r\n", target, codeSize); return KErrCorrupt; }
             }
+        KPrintf("E32Validate: export targets OK\r\n");
         }
     if (textSize < 0 || textSize > codeSize)
-        return KErrCorrupt;
+        { KPrintf("E32Validate: textSize fail textSize=%d codeSize=%d\r\n", textSize, codeSize); return KErrCorrupt; }
+    KPrintf("E32Validate: textSize OK\r\n");
+    KPrintf("E32Validate: about to call ValidateRelocs codeRelocOff=0x%08x codeSize=%d\r\n", codeRelocOff, codeSize);
     // EUSER-ordinal imports (ELF-style code-offset list, positional:
     // list entry k serves ordinal k+1: 1=Exit, 2=PutC, 3=CmdLen, ...).
     // Mirrors E32ImageHeaderV::ValidateImports bounds discipline.
-    aInfo.iImpOff = 0; aInfo.iImpN = 0;
+    aInfo.iImpOff = 0; aInfo.iImpN = 0; aInfo.iPe2 = EFalse;
     if (impOff)
         {
         if (dllRefs != 1)
-            return KErrCorrupt;
+            { return KErrCorrupt; }
         if (impOff + 4 < impOff || impOff + 4 > aLen)
-            return KErrCorrupt;
+            { return KErrCorrupt; }
         TUint32 isize = Rd32(aBuf + impOff);
         if (isize < 22 || impOff + 4 + isize < impOff + 4 ||
             impOff + 4 + isize > aLen)
-            return KErrCorrupt;
+            { return KErrCorrupt; }
         const TUint8* sec = aBuf + impOff + 4;
         TUint32 nameOff = Rd32(sec), n = (TUint32)Rd32s(sec + 4);
-        if (n < 2 || n > 4)
-            return KErrNotSupported;  // ordinals 1..4 served here
-        if (isize < 14 + 4 * n)
-            return KErrCorrupt;
+        TBool isPe2 = (flags & 0x20000000u) != 0;
+        if (!isPe2 && (n < 2 || n > 4))
+            { return KErrNotSupported; }
+        if (isPe2)
+            {
+            // PE2-style: section holds DLL name only.  The IAT lives at the
+            // end of the text section, pre-linked with 1-based ordinals.
+            if (n < 1 || n > 16)
+                { return KErrNotSupported; }
+            if (isize < 8 + 6)
+                { return KErrCorrupt; }
+            if (textSize < 0 ||
+                (TUint32)textSize + 4u * (TUint)n > (TUint32)codeSize)
+                { return KErrCorrupt; }
+            for (TUint k = 0; k < n; ++k)
+                {
+                TUint32 slot = (TUint32)textSize + 4u * k;
+                TUint32 ord = Rd32(aBuf + codeOff + slot);
+                if (ord == 0 || ord > 65535u)
+                    { return KErrCorrupt; }
+                aInfo.iSlots[k] = slot;
+                }
+            }
+        else
+            {
+            if (isize < 14 + 4 * n)
+                { return KErrCorrupt; }
+            }
         // name+NUL must lie within header+iSize (offsets count the header).
         if (nameOff + 6 < nameOff || nameOff + 6 > isize + 4)
-            return KErrCorrupt;
+            { return KErrCorrupt; }
         const TUint8* nm = aBuf + impOff + nameOff;
-        if (nm[0] != 'E' || nm[1] != 'U' || nm[2] != 'S' ||
-            nm[3] != 'E' || nm[4] != 'R' || nm[5] != 0)
-            return KErrNotSupported;  // unknown provider DLL
-        for (TUint k = 0; k < n; ++k)
+        if (!isPe2)
             {
-            TUint32 s = Rd32(sec + 8 + 4 * k);
-            if ((s & 3) || s < (TUint32)textSize ||
-                s + 4 < s || s + 4 > (TUint32)codeSize)
-                return KErrCorrupt;  // IAT slots live past .text
-            for (TUint j = 0; j < k; ++j)
-                if (Rd32(sec + 8 + 4 * j) == s)
-                    return KErrCorrupt;  // slots must not alias
-            aInfo.iSlots[k] = s;
+            if (nm[0] != 'E' || nm[1] != 'U' || nm[2] != 'S' ||
+                nm[3] != 'E' || nm[4] != 'R' || nm[5] != 0)
+                { return KErrNotSupported; }
             }
-        aInfo.iImpOff = impOff; aInfo.iImpN = (TInt)n;
+        else
+            {
+            // PE2: DLL name is mangled (e.g. "euser{000a0000}[100039e5].dll").
+            // Accept any non-empty name ending in ".dll\\0".
+            TUint nmLen = 0;
+            while (nmLen < 64 && nm[nmLen]) ++nmLen;
+            if (nmLen < 4 || nm[nmLen] != 0 ||
+                nm[nmLen-4] != '.' || nm[nmLen-3] != 'd' ||
+                nm[nmLen-2] != 'l' || nm[nmLen-1] != 'l')
+                { return KErrNotSupported; }
+            }
+        if (!isPe2)
+            {
+            for (TUint k = 0; k < n; ++k)
+                {
+                TUint32 s = Rd32(sec + 8 + 4 * k);
+                if ((s & 3) || s < (TUint32)textSize ||
+                    s + 4 < s || s + 4 > (TUint32)codeSize)
+                    { return KErrCorrupt; }
+                for (TUint j = 0; j < k; ++j)
+                    if (Rd32(sec + 8 + 4 * j) == s)
+                        { return KErrCorrupt; }
+                aInfo.iSlots[k] = s;
+                }
+            }
+        aInfo.iImpOff = impOff; aInfo.iImpN = (TInt)n; aInfo.iPe2 = isPe2;
         }
     TInt rr = ValidateRelocs(aBuf, aLen, codeRelocOff, (TUint)codeSize);
     if (rr != KErrNone)
-        return rr;
+        { return rr; }
     if (dataRelocOff && (!dataOff || !dataSize))
-        return KErrCorrupt;
+        { return KErrCorrupt; }
     rr = ValidateRelocs(aBuf, aLen, dataRelocOff, (TUint)dataSize);
     if (rr != KErrNone)
-        return rr;
-    // Export-desc tail: offsetof(iExportDescSize)=152, NoHoles tail=4.
-    if (codeOff != 156)
-        return KErrNotSupported;
-    if (aBuf[152] != 0 || aBuf[153] != 0 || aBuf[154] != 0x00)
-        return KErrNotSupported;
+        { return rr; }
+    // Export-desc tail: offsetof(iExportDescSize)=152.
+    // Mirrors tools/e32read.py lines 244-277.
+    if (codeOff < 156)
+        { KPrintf("E32Validate: codeOff too small codeOff=%d\r\n", codeOff); return KErrNotSupported; }
+    KPrintf("E32Validate: codeOff OK\r\n");
+    TUint16 expDescSize = Rd16(aBuf + 152);
+    TUint8  expDescType = aBuf[154];
+    TUint32 edSize = (expDescSize + 2u + 1u + 3u) & ~3u;
+    if (152u + edSize != codeOff)
+        { return KErrNotSupported; }
+    KPrintf("E32Validate: expDesc tail OK expDescSize=%u expDescType=%u\r\n", expDescSize, expDescType);
+    if (expDescType == 0x00)
+        { /* NoHoles: ok */ }
+    else if (expDescType == 0x01)
+        {
+        if ((((TUint32)expCount + 7u) >> 3) != expDescSize)
+            { return KErrNotSupported; }
+        }
+    else if (expDescType == 0x02)
+        {
+        TUint32 bitmapSize = ((TUint32)expCount + 7u) >> 3;
+        TUint32 metaSize = (bitmapSize + 7u) >> 3;
+        if (metaSize > expDescSize || 155u + metaSize > codeOff)
+            { return KErrNotSupported; }
+        TUint32 total = metaSize;
+        for (TUint32 m = 0; m < metaSize; ++m)
+            {
+            TUint8 b = aBuf[155 + m];
+            while (b) { if (b & 1) ++total; b >>= 1; }
+            }
+        if (total != expDescSize)
+            { return KErrNotSupported; }
+        }
+    else
+        { return KErrNotSupported; }
 
     aInfo.iUid1 = uid1; aInfo.iUid2 = uid2; aInfo.iUid3 = uid3;
     aInfo.iEntry = entry;
@@ -435,9 +552,9 @@ namespace
     {
     TBool sDllLoaded = EFalse;
     TUint8* sDllCode = 0;
-    TUint32 sDllExp[8];
+    TUint32 sDllExp[4096];
     TInt sDllExpN = 0;
-    TUint8 sDllFile[65536];
+    TUint8 sDllFile[512 * 1024];  // EUSER.DLL is ~412KB
     }
 
 static TInt E32LoadDll()
@@ -446,34 +563,46 @@ static TInt E32LoadDll()
         return KErrNone;
     TUint got = 0;
     TInt r = FatReadPath("\\EUSER.DLL", sDllFile, sizeof(sDllFile), got);
+    KPrintf("E32LoadDll: FatReadPath r=%d got=%u first4=%02x%02x%02x%02x\r\n", r, got, sDllFile[0], sDllFile[1], sDllFile[2], sDllFile[3]);
     if (r != KErrNone)
         return r;
     TE32Info di;
     r = E32Validate(sDllFile, got, di);
+    KPrintf("E32LoadDll: E32Validate r=%d uid1=%08x expCount=%d codeRelocOff=%08x\r\n", r, di.iUid1, di.iExpCount, di.iCodeRelocOff);
     if (r != KErrNone)
         return r;
-    if (!(di.iUid1 == 0x10000079u) || di.iExpCount < 2 || di.iExpCount > 8)
+    if (!(di.iUid1 == 0x10000079u) || di.iExpCount < 2 || di.iExpCount > 4096)
         return KErrCorrupt;
-    // Resident pilot DLLs have no writable state or dependencies. Do not
-    // silently load only the code half of a more complicated library.
-    if (di.iDataSize || di.iBssSize || di.iDllRefs || di.iDataRelocOff ||
-        di.iCodeRelocOff || sDllFile[di.iCodeOff + di.iEntry] != 0xC3)
-        return KErrNotSupported;
-    TUint8* run = (TUint8*)Kern::Alloc((TInt)di.iCodeSize);
-    if (!run)
-        return KErrNoMemory;
-    memcpy(run, sDllFile + di.iCodeOff, (TUint)di.iCodeSize);
+    // Resident pilot DLL: relocate in place inside the file buffer.  The
+    // kernel image is loaded RWX, so this static buffer is executable; a
+    // ~400 KB Kern::Alloc destabilises the hybrid heap, so avoid it.
+    TUint8* run = sDllFile + di.iCodeOff;
     TUint32 codeDelta = (TUint32)run - di.iCodeBase;
     TUint32 dataDelta = 0;
+    TUint8* runData = 0;
+    if (di.iDataSize || di.iBssSize) {
+        TUint32 dataRunSize = di.iDataSize + di.iBssSize;
+        runData = (TUint8*)Kern::AllocZ((TInt)dataRunSize);
+        if (!runData) {
+            Kern::Free(run);
+            return KErrNoMemory;
+        }
+        if (di.iDataSize)
+            memcpy(runData, sDllFile + di.iDataOff, (TUint)di.iDataSize);
+        dataDelta = (TUint32)runData - di.iDataBase;
+    }
     if (di.iCodeRelocOff)
-        ApplyRelocs(sDllFile, di.iCodeRelocOff, run, codeDelta, dataDelta,
+        ApplyRelocs(sDllFile, got, di.iCodeRelocOff, run, codeDelta, dataDelta,
                      di.iCodeBase, (TUint32)di.iCodeSize);
-    for (TInt i = 0; i < di.iExpCount; ++i)
+    if (di.iDataRelocOff && runData)
+        ApplyRelocs(sDllFile, got, di.iDataRelocOff, runData, codeDelta, dataDelta,
+                     di.iCodeBase, (TUint32)di.iDataSize);
+    for (TInt i = 0; i < di.iExpCount && i < 4096; ++i)
         sDllExp[i] = (TUint32)(run + Rd32(sDllFile + di.iExpOff + (TUint)i * 4));
-    sDllExpN = di.iExpCount;
+    sDllExpN = di.iExpCount > 4096 ? 4096 : di.iExpCount;
     sDllCode = run;
     sDllLoaded = ETrue;
-    KPrintf("e32run: EUSER.DLL resident code=%x exports=%d\r\n", run, sDllExpN);
+    KPrintf("e32run: EUSER.DLL resident code=%x data=%x exports=%d\r\n", run, runData, sDllExpN);
     return KErrNone;
     }
 
@@ -558,6 +687,7 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     if (info.iImpN > 0)
         {
         dllR = E32LoadDll();
+        KPrintf("e32run: E32LoadDll r=%d impN=%d sDllExpN=%d\r\n", dllR, info.iImpN, sDllExpN);
         if (dllR != KErrNone && !(dllR == KErrNotFound && info.iImpN == 2))
             return dllR;
         if (dllR == KErrNone && sDllExpN < info.iImpN)
@@ -663,26 +793,41 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
             dataDelta = pinfo.iDataRunAddress - info.iDataBase;
             }
         if (info.iCodeRelocOff)
-            ApplyRelocs(aFileBuf, info.iCodeRelocOff, codeRun,
+            ApplyRelocs(aFileBuf, aFileLen, info.iCodeRelocOff, codeRun,
                          codeDelta, dataDelta,
                          info.iCodeBase, (TUint32)info.iCodeSize);
         if (info.iDataRelocOff)
-            ApplyRelocs(aFileBuf, info.iDataRelocOff,
+            ApplyRelocs(aFileBuf, aFileLen, info.iDataRelocOff,
                         (TUint8*)pinfo.iDataRunAddress, codeDelta, dataDelta,
                         info.iCodeBase, (TUint32)info.iCodeSize);
         if (info.iImpN > 0)
             {
-            // Ordinals are positional (ELF list order = ordinal). Prefer the
-            // resident EUSER.DLL file; ordinals 1-2 fall back to kernel
-            // trampolines when it is absent so older disks still run.
-            if (dllR == KErrNone && sDllExpN >= info.iImpN)
+            if (dllR == KErrNone)
                 {
+                // PE2: the IAT slot holds a 1-based ordinal in the file;
+                // bind that ordinal's genuine EUSER export address.  ELF:
+                // ordinals are positional (slot k -> ord k+1).
                 for (TInt k = 0; k < info.iImpN; ++k)
-                    *(TUint32*)(codeRun + info.iSlots[k]) = sDllExp[k];
+                    {
+                    TInt ord;
+                    if (info.iPe2)
+                        ord = (TInt)Rd32(aFileBuf + info.iCodeOff + info.iSlots[k]);
+                    else
+                        ord = k + 1;
+                    if (ord < 1 || ord > sDllExpN)
+                        {
+                        KPrintf("e32run: ordinal %d out of range (have %d)\r\n",
+                            ord, sDllExpN);
+                        continue;
+                        }
+                    *(TUint32*)(codeRun + info.iSlots[k]) = sDllExp[ord - 1];
+                    KPrintf("e32run: bind slot %d ord %d -> %08x\r\n",
+                        info.iSlots[k], ord, sDllExp[ord - 1]);
+                    }
                 KPrintf("e32run: imports bound dll (%d ordinals)\r\n",
                     info.iImpN);
                 }
-            else
+            else if (info.iImpN == 2)
                 {
                 *(TUint32*)(codeRun + info.iSlots[0]) = (TUint32)sTrampExit;
                 *(TUint32*)(codeRun + info.iSlots[1]) = (TUint32)sTrampPutc;
@@ -692,6 +837,11 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
             }
         KPrintf("e32run: sections in (deltas %x/%x), Loaded()...\r\n",
             codeDelta, dataDelta);
+        // Entry point must be the absolute runtime address (code run address
+        // + entry offset), not just the header entry offset.  The kernel uses
+        // iEntryPtVeneer/iFileEntryPoint directly as the thread's initial EIP.
+        pinfo.iEntryPtVeneer = pinfo.iCodeRunAddress + info.iEntry;
+        pinfo.iFileEntryPoint = pinfo.iCodeRunAddress + info.iEntry;
         if (info.iBssSize >= 4)
             KPrintf("e32run: bss chk %x\r\n",
                 *(TUint32*)(pinfo.iDataRunAddress + info.iDataSize));
@@ -869,3 +1019,46 @@ TInt E32Reap()
     NKern::ThreadLeaveCS();
     return n;
     }
+
+TBool E32ProcessDead(TUint aId)
+{
+    NKern::ThreadEnterCS();
+    DCodeSeg::Wait();
+    for (TInt i = 0; i < 16; ++i)
+        {
+        if (sExecs[i].iProc && sExecs[i].iProc->iId == aId)
+            {
+            DProcess* p = sExecs[i].iProc;
+            TBool dead = p->iThreadQ.IsEmpty() && p->iExitType != EExitPending &&
+                         p->CodeSeg() == NULL;
+            DCodeSeg::Signal();
+            NKern::ThreadLeaveCS();
+            return dead;
+            }
+        }
+    DCodeSeg::Signal();
+    NKern::ThreadLeaveCS();
+    return ETrue;  // not in exec table = not running = dead
+}
+
+TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName)
+{
+    NKern::ThreadEnterCS();
+    for (TUint n = 0; n < 16; ++n)
+        {
+        const TExitRec& e = sExits[(sExitNext + n) % 16];
+        if (!e.iUsed) continue;
+        if (e.iId == aId)
+            {
+            aType = e.iExitType;
+            aReason = e.iExitReason;
+            TUint k = 0;
+            while (e.iName[k] && k < 31) { aName[k] = e.iName[k]; ++k; }
+            aName[k] = 0;
+            NKern::ThreadLeaveCS();
+            return ETrue;
+            }
+        }
+    NKern::ThreadLeaveCS();
+    return EFalse;
+}

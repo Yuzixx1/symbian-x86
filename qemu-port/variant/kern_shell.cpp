@@ -225,11 +225,11 @@ static const TCommandHelp kHelp[] =
     {"vol", "VOL", "Show mounted drives and their backing devices."},
     {"drive", "DRIVE [X]", "Show drives or switch to a mounted drive; X: also switches."},
     {"format", "FORMAT device yes", "DESTROYS the whole specified disk and creates one FAT32 partition."},
-    {"exec", "EXEC [X:]file.e32 [args...]", "Start an E32 user-mode process (64 KiB file limit). Trailing words become its command line."},
     {"args", "ARGS id", "Show a process's command line (see PS for IDs)."},
     {"kill", "KILL id", "Terminate a user process; use PS to find its ID."},
     {"reap", "REAP", "Release dead user-image code segments."},
     {"exits", "EXITS", "Show recent user-process exit records (survives reaping)."},
+    {"wait", "WAIT id [seconds]", "Block until a process dies (default 30s, max 300s), then report its exit."},
     {"version", "VERSION", "Show kernel and CPU information."},
     {"uptime", "UPTIME", "Show milliseconds since boot."},
     {"date", "DATE [YYYY-MM-DD HH:MM:SS]", "Show RTC date and time; with both arguments, set the CMOS clock (2000-2099) and read it back."},
@@ -261,7 +261,8 @@ static void PrintHelp(const char* aName)
         KPrintf("EKA2 DOS-style command shell  (HELP command for details)\r\n");
         KPrintf("Files:    DIR  CD  TYPE  WRITE  COPY  REN  DEL  MKDIR  RMDIR  CLS\r\n");
         KPrintf("Drives:   MOUNT  VOL  DRIVE  X:  FORMAT\r\n");
-        KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  EXEC  KILL  REAP  EXITS  REBOOT\r\n");
+        KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  REAP  EXITS  WAIT  REBOOT\r\n");
+        KPrintf("Programs: type a file name to run it, e.g. HELLO.E32 or HELLO args\r\n");
         KPrintf("Hardware: PCI  IDE  AHCI  USB  XHCI  XHCIPORTS\r\n");
         KPrintf("Paths: X:name selects a mounted drive; quote names containing spaces.\r\n");
         return;
@@ -504,6 +505,54 @@ static TBool ParseTime(const char* aText, TInt& aHour, TInt& aMin, TInt& aSec)
     return (aHour <= 23 && aMin <= 59 && aSec <= 59) ? ETrue : EFalse;
     }
 
+// Run an E32 image as a user process. DOS-style: the name is tried as
+// given, then with ".E32" appended when it has no extension. aTail (the raw
+// words after the name) becomes the process command line.
+static void RunImage(const char* aName, const char* aTail)
+    {
+    static TUint8 eBuf[65536];
+    char cand[2][164];
+    int n = 0;
+    while (aName[n] && n < 150) { cand[0][n] = aName[n]; ++n; }
+    cand[0][n] = 0;
+    int nCand = 1;
+    int hasDot = 0;
+    for (int i = 0; cand[0][i]; ++i)
+        if (cand[0][i] == '.') { hasDot = 1; break; }
+    if (!hasDot)
+        {
+        int k = 0;
+        while (cand[0][k] && k < 150) { cand[1][k] = cand[0][k]; ++k; }
+        cand[1][k++] = '.'; cand[1][k++] = 'E'; cand[1][k++] = '3'; cand[1][k++] = '2';
+        cand[1][k] = 0;
+        nCand = 2;
+        }
+    TUint got = 0;
+    TInt r = KErrNotFound;
+    char prev = 0;
+    const char* inner = 0;
+    for (int c = 0; c < nCand; ++c)
+        {
+        char pv = 0;
+        const char* in = VolPrefix(cand[c], &pv);
+        if (!in || !in[0]) { VolRestore(pv); continue; }
+        TInt rr = FatReadPath(in, eBuf, sizeof(eBuf), got);
+        if (rr == KErrNone) { r = KErrNone; prev = pv; inner = in; break; }
+        VolRestore(pv);
+        }
+    if (r != KErrNone)
+        { KPrintf("%s: not found\r\n", aName); return; }
+    TInt reaped = E32Reap();
+    if (reaped)
+        KPrintf("reaped %d dead user image(s)\r\n", reaped);
+    TInt rr = E32Run(eBuf, got, inner, aTail);
+    if (rr == KErrNone)
+        KPrintf("%s started (user process)\r\n", aName);
+    else
+        KPrintf("%s (%s)\r\n", aName, ErrName(rr));
+    VolRestore(prev);
+    }
+
 static void Exec()
     {
     sLine[sLen] = 0;
@@ -538,8 +587,10 @@ static void Exec()
             while (*p && *p != ' ' && *p != '\t')
                 ++p;
             }
-        if (argc == 2)
+        if (argc == 1)
             {
+            // Raw words after the first token become a program's command
+            // line (DOS-style implicit execution).
             execTail = original + (p - sLine);
             while (*execTail == ' ' || *execTail == '\t')
                 ++execTail;
@@ -547,6 +598,14 @@ static void Exec()
         }
     if (!argc)
         return;
+    // Save the raw first token (case preserved) for implicit execution.
+    char progName[128];
+    {
+    int k = 0;
+    for (const char* p = argv[0]; *p && k < 127; ++p)
+        progName[k++] = *p;
+    progName[k] = 0;
+    }
     for (char* p = argv[0]; *p; ++p)
         if (*p >= 'A' && *p <= 'Z') *p += 32;
     const char* cmd = argv[0];
@@ -1120,42 +1179,6 @@ static void Exec()
                 KPrintf("format: %s\r\n", ErrName(r));
             }
         }
-    else if (StrEq(cmd, "exec"))
-        {
-        // Load an E32 from FAT32 and run it as a genuine user process.
-        // Extra words become the process command line (UTF-16 in HBuf,
-        // readable via User::CommandLine or the `args` verb).
-        if (argc < 2)
-            PrintHelp("exec");
-        else
-            {
-            char prev = 0;
-            const char* name = VolPrefix(argv[1], &prev);
-            if (!name || !name[0])
-                KPrintf("exec: no such drive\r\n");
-            else
-                {
-                static TUint8 eBuf[65536];
-                TUint got = 0;
-                TInt r = FatReadPath(name, eBuf, sizeof(eBuf), got);
-                KPrintf("exec: read %u bytes r=%d\r\n", got, r);
-                if (r != KErrNone)
-                    KPrintf("exec: %s\r\n", ErrName(r));
-                else
-                    {
-                    TInt reaped = E32Reap();
-                    if (reaped)
-                        KPrintf("exec: reaped %d dead user image(s)\r\n", reaped);
-                    r = E32Run(eBuf, got, name, execTail);
-                    if (r == KErrNone)
-                        KPrintf("exec: %s started (user process)\r\n", name);
-                    else
-                        KPrintf("exec: %s (%s)\r\n", name, ErrName(r));
-                    }
-                }
-            VolRestore(prev);
-            }
-        }
     else if (StrEq(cmd, "kill"))
         {
         // Kill a user process by container id (see ps). Never the kernel.
@@ -1173,6 +1196,11 @@ static void Exec()
                 KPrintf("kill: %s\r\n", ErrName(r));
             }
         }
+    else if (StrEq(cmd, "gboot"))
+        {
+        TInt r = R1GCommand(argc == 2 ? argv[1] : "help");
+        KPrintf("gboot: result=%d\r\n", r);
+        }
     else if (StrEq(cmd, "reap"))
         {
         // Post-mortem code-seg cleanup (also runs automatically on exec).
@@ -1183,6 +1211,54 @@ static void Exec()
         {
         // Recent exit records: survive reaping, unlike `ps` rows.
         E32PrintExits();
+        }
+    else if (StrEq(cmd, "wait"))
+        {
+        // Block until a user process dies or the timeout elapses, then
+        // report its recorded exit. Polls liveness with hlt between checks
+        // (IRQs wake us ~1ms); bounded so a spinner cannot hang the shell.
+        if (argc < 2)
+            PrintHelp("wait");
+        else
+            {
+            TUint id = 0;
+            for (const char* p = argv[1]; *p >= '0' && *p <= '9'; ++p)
+                id = id * 10 + (TUint)(*p - '0');
+            TUint seconds = 30;
+            if (argc >= 3)
+                {
+                seconds = 0;
+                for (const char* p = argv[2]; *p >= '0' && *p <= '9'; ++p)
+                    seconds = seconds * 10 + (TUint)(*p - '0');
+                if (seconds > 300) seconds = 300;
+                }
+            TUint32 t0 = NKern::TickCount();
+            TBool done = EFalse;
+            for (;;)
+                {
+                if (E32ProcessDead(id))
+                    {
+                    // Reap first so the ring (and `ps`) settle, then report.
+                    E32Reap();
+                    TUint8 type = 0;
+                    TInt reason = 0;
+                    char name[32];
+                    if (E32FindExit(id, type, reason, name))
+                        KPrintf("wait: %s id=%u type=%d reason=%d\r\n",
+                            name[0] ? name : "?", id,
+                            (TInt)type, reason);
+                    else
+                        KPrintf("wait: id=%u dead, no record\r\n", id);
+                    done = ETrue;
+                    break;
+                    }
+                if ((TUint32)(NKern::TickCount() - t0) >= seconds * 1000u)
+                    break;
+                __asm__ __volatile__("hlt");
+                }
+            if (!done)
+                KPrintf("wait: id=%u still alive after %u s\r\n", id, seconds);
+            }
         }
     else if (StrEq(cmd, "segs"))
         {
@@ -1222,7 +1298,8 @@ static void Exec()
             __asm__ __volatile__("hlt");
         }
     else
-        KPrintf("unknown command, try `help`\r\n");
+        // DOS-style: an unrecognised first word is a program to run.
+        RunImage(progName, execTail);
     }
 
 static void ShellMain(TAny* /*aPtr*/)
@@ -1351,7 +1428,7 @@ void ShellSpawnFull()
     info.iFunction = ShellDThreadFn;
     info.iPtr = 0;
     info.iSupervisorStack = 0;  // auto-allocate (cf. supervisor thread)
-    info.iSupervisorStackSize = 0;
+    info.iSupervisorStackSize = 0x8000;
     info.iInitialThreadPriority = 10;
     info.iName.Set(KLitShellName);
     info.iTotalSize = sizeof(info);

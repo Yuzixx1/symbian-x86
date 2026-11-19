@@ -28,10 +28,10 @@ def main():
             vm.stdin.write(b'mount\n')
             vm.stdin.flush()
             pos = test_cli.wait_for(log, b'C:/> ', pos)
-            pos = test_cli.run_command(vm, log, pos, 'exec CRASH.E32',
+            pos = test_cli.run_command(vm, log, pos, 'CRASH.E32',
                                        b'CRASH: about to fault', b'C:/> ')
             # Shell survives the fault and runs the next program.
-            pos = test_cli.run_command(vm, log, pos, 'exec ECHO.E32 alive',
+            pos = test_cli.run_command(vm, log, pos, 'ECHO.E32 alive',
                                        b'ECHO: alive', b'C:/> ')
             pos = test_cli.run_command(vm, log, pos, 'ps',
                                        b'PortFile channels: 0', b'C:/> ')

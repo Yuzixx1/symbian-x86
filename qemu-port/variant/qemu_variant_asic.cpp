@@ -9,6 +9,18 @@
 #include <e32hal.h>
 #include <kernel/kernel.h>
 #include "qemu_variant.h"
+#include "../fs/r1_fs_core.h"
+#include "../fs/r1_fs_fat.h"
+
+// Global R1 file service instance (Core + FAT32 backend).
+namespace {
+R1Fs::FatBackend* gFatBackend = 0;
+R1Fs::Core* gCore = 0;
+uint32_t gSession = 0;
+} // namespace
+
+extern "C" TInt R1FsSession() { return gSession; }
+extern "C" R1Fs::Core* R1FsCore() { return gCore; }
 
 // QEMU drivers (variant/qemu_assp.cpp, linked in): plain builtins here so the
 // genuine e32def.h typedefs never clash textually (cf. genuine_glue.cpp).
@@ -83,6 +95,24 @@ void QemuVariantAsic::Init3()
     QemuIrq::Enable(0);       // PIT tick -> genuine NTimerQ::Tick
     QemuIrq::Enable(1);       // PS/2 keyboard
     QemuIrq::Enable(4);       // COM1 receive
+
+    // Start the R1 file server (!FileServer) on the FAT32 volume.
+    // Mount the first partition of the first AHCI disk (dev 4, part 0 as
+    // discovered by QEMU: "ahci: port 0 QEMU HARDDISK").
+    gFatBackend = new R1Fs::FatBackend();
+    if (gFatBackend) {
+        TInt mr = gFatBackend->Mount(4, 0);  // dev 4, part 0
+        if (mr == R1Fs::Success) {
+            gCore = new R1Fs::Core(*gFatBackend);
+            if (gCore) {
+                gSession = 0;
+                TInt sr = gCore->Connect(0x100039e5, gSession);  // SID from portfilesrv
+                if (sr != R1Fs::Success) {
+                    gSession = 0;
+                }
+            }
+        }
+    }
     ShellSpawnFull();         // interactive console as genuine NThread
     }
 
@@ -100,7 +130,15 @@ void QemuVariantAsic::Idle()
 
 TInt QemuVariantAsic::MsTickPeriod()
     {
-    return 1;  // PIT programmed for 1000Hz in Init1
+    // Genuine Asic::MsTickPeriod returns the MS tick period in MICROSECONDS:
+    // the value goes straight into genuine NTimerQ::Init1 (cinit A::Init1 ->
+    // Arm::Init1Interrupts), whose arg is also microseconds ("period %d us").
+    // Returning 1 configured the NTick as 1us, which rescaled every timeout:
+    // TTickQ's delta_us=delta*1 and ms conversions descaled by 1000, so
+    // sleep_ms(1000) actually waited ~64ms (2^14-pow milliseconds pitfall:
+    // 64 x 15625us collapse). All RTimer sleeps and read_line timeouts were
+    // near-instant until this was set to 1000.
+    return 1000;  // PIT programmed for 1000Hz in Init1 => 1000us per tick
     }
 
 TUint32 QemuVariantAsic::NanoWaitCalibration()
@@ -252,8 +290,7 @@ extern "C" TInt QemuVariantEntry(TInt /*aReason*/)
     sp.iRamBootData = (TLinAddr)&gRamBanks[0];
     for (TUint i = 0; i < (TUint)KNumTraceMaskWords; ++i)
         sp.iDebugMask[i] = 0;
-    sp.iDebugMask[0] = (1u << 1);  // KBOOT only (nk_trace.h: KBOOT=1):
-                                   // boot progress without scheduler chatter
+    sp.iDebugMask[0] = (1u << 1);  // KBOOT only: boot progress without scheduler chatter
     return 0;  // aMode=0: no per-mode VariantInitialise calls
     }
 

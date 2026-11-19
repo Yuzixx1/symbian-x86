@@ -12,6 +12,9 @@ which does not exist here yet.
 - Client: `ipc_connect("Name")` (connect + version handshake) →
   `ipc_call(session, function, argument)` or `ipc_call_args` for descriptors
   → `ipc_close(session)`.
+- Async: `ipc_call_async(session, function, args, &status)` queues without
+  waiting; `ipc_wait_for(&status)` completes with genuine surplus accounting,
+  so several requests may overlap and be waited in any order.
 - Integers ride in `args[4]`; binary data rides in descriptors
   (`IpcConst8`/`IpcBuffer8`, `IpcConst16`/`IpcBuffer16` with matching
   `TIpcArgs` flags: `EDesC8=6`, `EDes8=4`, `EDesC16=7`, `EDes16=5`).
@@ -32,5 +35,6 @@ multi-check client, restart and kill recovery):
 
 Upstream `CServer2`/`CSession2`, multi-threaded servers, session sharing and
 security policies arrive with the genuine EUSER/CBase integration. Until
-then: one request at a time per thread, 8.3-style short service names, and
-the fixtures above as your template.
+then: short service names for now, and
+the fixtures above as your template. Concurrent overlapping requests are
+supported (`ipc_call_async` + `ipc_wait_for` with genuine surplus accounting).
