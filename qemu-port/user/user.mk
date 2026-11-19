@@ -5,6 +5,25 @@ USER_FLAGS := -m32 -march=i486 -Os -ffreestanding -fno-pic -fno-pie -fno-builtin
 userland: build/user/ECHO.E32 build/user/TYPE.E32 build/user/CP.E32 build/user/FILECHK.E32
 userland: build/user/IPCSRV.E32 build/user/IPCCLI.E32 build/user/CWD.E32 build/user/CRASH.E32 build/user/MALLOC.E32 build/user/INTERACT.E32 build/user/SLEEP.E32 build/user/CHUNK.E32 build/user/CHKOPEN.E32
 userland: build/user/PORTFILESRV.E32
+userland: build/user/SVCMGR.E32
+userland: build/user/WAITFOR.E32
+userland: build/user/ca_test.e32
+
+# P-06: user-mode blocking wait via the genuine ProcessLogon executive (123).
+build/user/waitfor.elf: build/user/start.o build/user/runtime.o build/user/waitfor.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/WAITFOR.E32: build/user/waitfor.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+# I-07: compiled userland CActive/CActiveScheduler fixture (genuine-ABI shim).
+build/user/ca_test.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/euser_shim.o build/user/ca_test.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/ca_test.e32: build/user/ca_test.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
 
 build/user/ipc.o: user/ipc.h
 build/user/ipcsrv.o build/user/ipccli.o: user/ipc.h
@@ -129,6 +148,17 @@ build/user/portfilesrv.elf: build/user/start.o build/user/runtime.o build/user/i
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/PORTFILESRV.E32: build/user/portfilesrv.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+# S-02: service manager E32 (ordered startup + supervision + shutdown).
+build/user/svcmgr.o: user/svcmgr.cpp user/runtime.h user/ipc.h | build/user
+	$(CXX) $(USER_FLAGS) -Iuser -c $< -o $@
+
+build/user/svcmgr.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/svcmgr.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/SVCMGR.E32: build/user/svcmgr.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 

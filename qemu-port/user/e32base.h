@@ -38,7 +38,7 @@ public:
     TInt iInt;
     TRequestStatus() : iInt(KRequestPending) {}
     explicit TRequestStatus(TInt aInit) : iInt(aInit) {}
-    TBool IsComplete() const { return iInt != KRequestPending; }
+    TBool IsComplete() const { return iInt != (TInt)KRequestPending; }
 };
 
 /* EPriorityNormal / TThreadPriority come from e32cmn.h. */
@@ -64,6 +64,10 @@ public:
         return aStatus.iInt;
     }
     static void WaitForAnyRequest() { ipc_wait_any(); }
+    /* P-06: block until the process with kernel id aPid dies. aStatus completes
+       with the target's exit reason (or KErrTimedOut / an open error). The
+       genuine kernel logon executives (116/123/117/124) do the blocking. */
+    static TInt WaitForExit(TUint aPid, TRequestStatus& aStatus, TInt aTimeoutMs);
     static void RequestComplete(TRequestStatus& aStatus, TInt aRequestStatus) {
         aStatus.iInt = aRequestStatus;
         exec2(58, 1, 0);
@@ -94,60 +98,144 @@ public:
     CBase* iNext;
 };
 
-/* ==================================================================== CActive */
-class CActive {
+/* ============================================================= TPriQueLink */
+/* Genuine EUSER layout: CActive::iLink is a TPriQueLink carrying the priority
+ * and intrusive next/prev pointers used by CActiveScheduler's priority queue. */
+class TPriQueLink {
 public:
-    enum { EPriorityStandard = 0 };
-    CActive(TInt aPriority) : iPriority(aPriority), iActive(EFalse), iNext(nullptr) {}
-    ~CActive() {}
-    void RunL() {}
-    void DoCancel() {}
-    void SetActive() { iActive = ETrue; }
-    void Cancel() { DoCancel(); iActive = EFalse; }
-    TBool IsActive() const { return iActive; }
+    TPriQueLink() : iPriority(0), iNext(nullptr), iPrev(nullptr) {}
     TInt iPriority;
-    CActive* iNext;
+    TPriQueLink* iNext;
+    TPriQueLink* iPrev;
+};
+
+/* ==================================================================== CActive */
+/* Genuine ABI: derives from CBase, owns a TRequestStatus, has virtual RunL()/
+ * DoCancel()/RunError(), and is dispatched only through the scheduler vptr. */
+class CActive : public CBase {
+public:
+    enum {
+        EPriorityIdle = -100, EPriorityLow = -10, EPriorityStandard = 0,
+        EPriorityUserInput = 10, EPriorityHigh = 20
+    };
+    CActive(TInt aPriority)
+        : iPriority(aPriority), iActive(EFalse), iAdded(EFalse) {
+        iStatus.iInt = KRequestPending;
+        iLink.iPriority = aPriority;
+    }
+    virtual ~CActive() { Cancel(); Deque(); }
+    /* Pure virtual: a concrete active MUST supply its own vtable entry. */
+    virtual void RunL() = 0;
+    virtual void DoCancel() = 0;
+    virtual TInt RunError(TInt aError) { (void)aError; return KErrNone; }
+
+    void SetActive() { iActive = ETrue; }
+    void Cancel() {
+        if (iActive) { DoCancel(); iStatus.iInt = KErrNone; iActive = EFalse; }
+    }
+    void Deque();
+    TBool IsActive() const { return iActive; }
+    TBool IsAdded() const { return iAdded; }
+    void SetPriority(TInt aPriority) {
+        iPriority = aPriority; iLink.iPriority = aPriority;
+    }
+    TInt Priority() const { return iLink.iPriority; }
+
+    TRequestStatus iStatus;     /* completion word, written by the producer */
+    TInt iPriority;             /* source-compatible mirror of iLink.iPriority */
+    TPriQueLink iLink;          /* intrusive priority-queue link */
 protected:
     TBool iActive;
+    TBool iAdded;
+    friend class CActiveScheduler;
 };
 
 /* ========================================================= CActiveScheduler */
-class CActiveScheduler {
+/* Genuine wait loop: WaitForAnyRequest() blocks on the current thread's
+ * request semaphore; completed actives are dequeued and RunL() is called
+ * through the active's vptr. Stop() ends the loop. */
+class CActiveScheduler : public CBase {
 public:
-    CActiveScheduler() : iCurrent(nullptr) {}
-    ~CActiveScheduler() {}
-    static void Install(CActiveScheduler* aScheduler) { iScheduler = aScheduler; }
-    static CActiveScheduler* Current() { return iScheduler; }
-    static void Add(CActive* aActive) {
-        aActive->iNext = iActiveQ;
-        iActiveQ = aActive;
-    }
-    static void Stop() { exec2(58, 1, 0); }
-    static void Start() {
-        while (true) {
-            WaitForAnyRequest();
-            if (!iActiveQ) break;
+    CActiveScheduler() : iActiveQ(nullptr), iStopping(EFalse) {}
+    virtual ~CActiveScheduler() {
+        while (iActiveQ) {
             CActive* a = iActiveQ;
-            if (a->IsActive()) {
-                iActiveQ = a->iNext;
-                a->RunL();
-                continue;
-            }
-            break;
+            iActiveQ = (CActive*)a->iLink.iNext;
+            a->iLink.iNext = nullptr; a->iAdded = EFalse;
+        }
+        if (iScheduler == this) iScheduler = nullptr;
+    }
+    static void Install(CActiveScheduler* aScheduler) { iScheduler = aScheduler; }
+    static void Replace(CActiveScheduler* aScheduler) { iScheduler = aScheduler; }
+    static CActiveScheduler* Current() { return iScheduler; }
+    /* Priority-ordered intrusive queue (highest priority first). */
+    static void Add(CActive* aActive) {
+        if (!iScheduler || !aActive) return;
+        aActive->iAdded = ETrue;
+        CActive* prev = nullptr;
+        CActive* cur = iScheduler->iActiveQ;
+        while (cur && cur->iLink.iPriority >= aActive->iLink.iPriority) {
+            prev = cur; cur = (CActive*)cur->iLink.iNext;
+        }
+        aActive->iLink.iNext = (TPriQueLink*)cur;
+        if (prev) prev->iLink.iNext = (TPriQueLink*)aActive;
+        else iScheduler->iActiveQ = aActive;
+    }
+    static void Start() {
+        CActiveScheduler* s = iScheduler;
+        if (!s) return;
+        s->iStopping = EFalse;
+        while (!s->iStopping) {
+            s->WaitForAnyRequest();
+            if (s->iStopping) break;
+            s->DoRunL();
         }
     }
+    static void Stop() { if (iScheduler) iScheduler->iStopping = ETrue; }
     static TInt RunIfReady(TInt& aError, TInt aMinimumPriority) {
-        (void)aMinimumPriority;
-        if (!iActiveQ || !iActiveQ->IsActive()) { aError = KErrNone; return 0; }
-        CActive* a = iActiveQ; iActiveQ = a->iNext; a->RunL(); return 1;
+        (void)aMinimumPriority; aError = KErrNone;
+        if (!iScheduler || !iScheduler->iActiveQ) return 0;
+        iScheduler->DoRunL();
+        return 1;
     }
-    static void WaitForAnyRequest() { User::WaitForAnyRequest(); }
-    static void Error(TInt aError) { (void)aError; process_exit(aError); }
+    virtual void WaitForAnyRequest() { User::WaitForAnyRequest(); }
+    static void Error(TInt aError) { (void)aError; }
 protected:
+    void DoRunL() {
+        CActive* prev = nullptr;
+        CActive* cur = iActiveQ;
+        while (cur) {
+            CActive* next = (CActive*)cur->iLink.iNext;
+            if (cur->iActive && cur->iStatus.IsComplete()) {
+                if (prev) prev->iLink.iNext = (TPriQueLink*)next;
+                else iActiveQ = next;
+                cur->iLink.iNext = nullptr; cur->iAdded = EFalse;
+                cur->iActive = EFalse;
+                cur->RunL();                 /* vtable dispatch */
+            }
+            prev = cur; cur = next;
+        }
+    }
+    CActive* iActiveQ;          /* priority-ordered queue head (instance) */
+    TBool iStopping;
     static CActiveScheduler* iScheduler;
-    static CActive* iActiveQ;
-    CActiveScheduler* iCurrent;
+    friend class CActive;       /* CActive::Deque() unlinks from iActiveQ */
 };
+
+inline void CActive::Deque() {
+    Cancel();
+    if (iAdded && CActiveScheduler::Current()) {
+        CActiveScheduler* s = CActiveScheduler::Current();
+        CActive* prev = nullptr;
+        CActive* cur = s->iActiveQ;
+        while (cur && cur != this) { prev = cur; cur = (CActive*)cur->iLink.iNext; }
+        if (cur == this) {
+            if (prev) prev->iLink.iNext = iLink.iNext;
+            else s->iActiveQ = (CActive*)iLink.iNext;
+        }
+    }
+    iLink.iNext = nullptr; iLink.iPrev = nullptr; iAdded = EFalse;
+}
 
 /* CActiveSchedulerWait */
 class CActiveSchedulerWait {

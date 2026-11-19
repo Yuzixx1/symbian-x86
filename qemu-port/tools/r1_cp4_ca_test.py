@@ -7,8 +7,9 @@ ca_test (built by tools/mke32_ca_test.py) and EUSER.DLL are staged into the
 FAT image with mtools before it is embedded. QEMU is booted like the
 known-working smoke-test command, the serial console is fed timed input
 (newline, "mount", "ca_test"), and the serial log is checked for the
-expected markers. Exits 0 only if all markers pass. Only this file is
-created; no other project file is touched.
+expected markers. Exits 0 only if all markers pass. The fixture now also
+binds the genuine EUSER RTimer/CTimer and request ordinals (887, 881, 885,
+925, 928, 929, 617, 626) alongside the scheduler ordinals.
 
 Usage:
     python3 r1_cp4_ca_test.py [--kernel KERN] [--no-rebuild-disk] [--log LOG]
@@ -36,12 +37,14 @@ EUSER_DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/eus
 DEFAULT_KERNEL = "/home/yuzi/Documents/Sybian REAL/qemu-port/build/kernfull.elf"
 
 # Ordinals the fixture imports from EUSER.DLL (see tools/mke32_ca_test.py).
-# CP4 proof uses a GENUINE Start()/Stop() round trip: RunL() is dispatched by
-# the real scheduler via the object vptr, not by direct vtable call.  The wait
-# is the genuine int 0x20 fast exec (WaitForAnyRequest), woken by EExecTimerAfter.
-# 430 ctor, 428 Install, 426 Start, 425 Stop, 1091 CActive ctor,
-# 1090 SetActive, 915 RDebug::Printf (markers), 424 Add.
-BIND_ORDS = [430, 428, 426, 425, 1091, 1090, 915, 424]
+# Genuine Start()/Stop() round trip: RunL() is dispatched by the real scheduler
+# via the object vptr; WaitForAnyRequest() is the genuine int 0x20 fast exec,
+# woken by the kernel timer device (the executive beneath RTimer::After).
+# Scheduler/active: 430 ctor, 428 Install, 426 Start, 425 Stop, 1091 CActive
+# ctor, 1090 SetActive, 915 RDebug::Printf (markers), 424 Add.
+# RTimer/CTimer + request surface: 887, 881, 885, 925, 928, 929, 617, 626.
+BIND_ORDS = [430, 428, 426, 425, 1091, 1090, 915, 424,
+             887, 881, 885, 925, 928, 929, 617, 626]
 
 # Emitted by the fixture, in order, only if the CP4 round trip succeeds.
 MARKERS = [

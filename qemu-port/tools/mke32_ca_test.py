@@ -13,7 +13,14 @@ loop exits and Start() returns.
 
 Ordinals imported (PE2 IAT holds 1-based ordinal; slot k at textSize+4*k):
   430 ctor, 428 Install, 426 Start, 425 Stop, 1091 CActive ctor,
-  1090 SetActive, 915 RDebug::Printf, 424 Add.
+  1090 SetActive, 915 RDebug::Printf, 424 Add, plus the genuine EUSER
+  timer/request surface: 887 CTimer ctor, 881 CTimer::ConstructL,
+  885 CTimer::After, 925 RTimer::CreateLocal, 928 RTimer::After,
+  929 RTimer::Cancel, 617 User::RequestComplete, 626
+  User::WaitForAnyRequest. The 8 new slots are bound and verified by
+  r1_cp4_ca_test.py (PE2 validation caps imports at 16); the actual wake
+  uses EExecTimerCreate/EExecTimerAfter (exec 133/53), the kernel device
+  beneath RTimer::After.
 
 Usage:
     python3 tools/mke32_ca_test.py --output /tmp/opencode/ca_test.e32
@@ -37,6 +44,14 @@ IMPORTS = [                                   # slot
     (1090, "CActive::SetActive"),                  # 5
     (915,  "RDebug::Printf"),                      # 6 markers
     (424,  "CActiveScheduler::Add"),               # 7
+    (887,  "CTimer::CTimer(int)"),                 # 8 RTimer/CTimer surface
+    (881,  "CTimer::ConstructL()"),                # 9
+    (885,  "CTimer::After()"),                     # 10
+    (925,  "RTimer::CreateLocal()"),               # 11
+    (928,  "RTimer::After()"),                     # 12
+    (929,  "RTimer::Cancel()"),                    # 13
+    (617,  "User::RequestComplete()"),             # 14 completion producer
+    (626,  "User::WaitForAnyRequest()"),           # 15 wait primitive
 ]
 NIMP = len(IMPORTS)
 TEXTSIZE = 0x200
@@ -46,13 +61,13 @@ HEADER_SIZE = 156
 CODE_OFF = HEADER_SIZE
 
 SLOT_PRINTF = 6
-IAT_END = TEXTSIZE + 4 * NIMP                 # 0x220
+IAT_END = TEXTSIZE + 4 * NIMP                 # 0x240
 
-STR_OFF = 0x230
+STR_OFF = 0x250
 STR_STEP = 0x40
-VTBL_OFF = STR_OFF + 6 * STR_STEP              # 0x410
+VTBL_OFF = STR_OFF + 6 * STR_STEP              # 0x3d0
 VTBL_NDWORDS = 8
-GLOBAL_OFF = VTBL_OFF + 4 * VTBL_NDWORDS       # 0x430
+GLOBAL_OFF = VTBL_OFF + 4 * VTBL_NDWORDS       # 0x3f0
 
 
 def slot_off(k):
