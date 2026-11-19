@@ -55,6 +55,17 @@ const TInt KErrAccessDenied  = -21;
 const TInt KErrNotSupported  = -49;
 const TInt KRequestPending   = (TInt)0x80000000u;
 
+/* Genuine EUSER thread priorities */
+enum TThreadPriority {
+    EPriorityNull      = -30,
+    EPriorityMuchLess  = -20,
+    EPriorityLess      = -10,
+    EPriorityNormal    = 0,
+    EPriorityMore      = 10,
+    EPriorityMuchMore  = 20,
+    EPriorityRealTime  = 30
+};
+
 /* ----------------------------------------------------------- 16-bit descs */
 class TDesC16 {
 public:

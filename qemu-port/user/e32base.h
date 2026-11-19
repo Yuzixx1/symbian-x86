@@ -2,9 +2,10 @@
 #define QPORT_USER_E32BASE_H
 
 /*
- * e32base.h — EUSER CBase/CServer2/CSession2/RMessage2 shim for S-04.
- * C++98, -ffreestanding -fno-exceptions -fno-rtti, no STL.
- * ALL classes are non-virtual — no RTTI required.
+ * e32base.h — EUSER CBase/CServer2/CSession2/RMessage2 shim for S-04/I-08.
+ * Freestanding, no STL. CServer2/CSession2 are now genuine virtual classes
+ * with compiler-generated vtables (RTTI is on by default for the user build);
+ * the fake RTTI/vtable arrays were removed from euser_shim.cpp.
  * All methods defined inline.
  */
 #include "e32cmn.h"
@@ -19,6 +20,10 @@ extern "C" {
 extern "C" int exec0(unsigned number);
 extern "C" int exec2(unsigned, unsigned, unsigned);
 extern "C" int ipc_wait_any(void);
+
+/* Symbian placement-new tag: new(ELeave) T maps to CBase::operator new(size,TLeave).
+ * An enum needs no out-of-line ELeave definition, so it is safe in a header. */
+enum TLeave { ELeave };
 
 /* Forward declarations */
 class CSession2;
@@ -35,6 +40,8 @@ public:
     explicit TRequestStatus(TInt aInit) : iInt(aInit) {}
     TBool IsComplete() const { return iInt != KRequestPending; }
 };
+
+/* EPriorityNormal / TThreadPriority come from e32cmn.h. */
 
 /* ===================================================================== User */
 class User {
@@ -69,8 +76,16 @@ private:
 class CBase {
 public:
     CBase() : iNext(nullptr) {}
-    ~CBase() {}
+    /* Virtual so CServer2 can delete a CSession2 through the base pointer and
+     * still run FileSession::~FileSession (which disconnects its Core token). */
+    virtual ~CBase() {}
     static void* operator new(TUint aSize) {
+        void* p = malloc(aSize ? aSize : 1u);
+        if (!p) User::Leave(KErrNoMemory);
+        return p;
+    }
+    /* new(ELeave) T -- the genuine Symbian allocation idiom. */
+    static void* operator new(TUint aSize, TLeave) {
         void* p = malloc(aSize ? aSize : 1u);
         if (!p) User::Leave(KErrNoMemory);
         return p;
@@ -159,21 +174,43 @@ public:
         if (!iMessage) return KErrBadHandle;
         return ipc_length(iMessage, aSlot);
     }
-    TInt GetDesMaxLength(TInt aSlot) const { return GetDesLength(aSlot); }
-    TInt Read(TInt aSlot, TDes& aDesc) const {
+    /* EExecMessageGetDesMaxLength (168) is the writable capacity; GetDesLength
+     * (167) alone cannot distinguish a const package from a writable buffer. */
+    TInt GetDesMaxLength(TInt aSlot) const {
         if (!iMessage) return KErrBadHandle;
-        TUint16* ptr = aDesc.Ptr();
-        TInt maxLen = aDesc.MaxLength();
-        TInt r = ipc_read16(iMessage, aSlot, ptr, maxLen * 2, 0);
+        return exec2(168, (TUint)iMessage->handle, (TUint)aSlot);
+    }
+    /* 16-bit descriptors. */
+    TInt Read(TInt aSlot, TDes& aDesc) const { return Read(aSlot, aDesc, 0); }
+    TInt Read(TInt aSlot, TDes& aDesc, TInt aOffset) const {
+        if (!iMessage) return KErrBadHandle;
+        TInt r = ipc_read16(iMessage, aSlot, aDesc.Ptr(),
+                            aDesc.MaxLength() * 2, aOffset);
         if (r < 0) return r;
         aDesc.SetLength(r / 2);
         return KErrNone;
     }
-    TInt Write(TInt aSlot, const TDesC& aDesc) {
+    /* 8-bit descriptors (packages, byte transfers) with byte offset. */
+    TInt Read(TInt aSlot, TDes8& aDesc) const { return Read(aSlot, aDesc, 0); }
+    TInt Read(TInt aSlot, TDes8& aDesc, TInt aOffset) const {
         if (!iMessage) return KErrBadHandle;
-        const TUint16* ptr = aDesc.Ptr();
-        TInt len = aDesc.Length();
-        return ipc_write8(iMessage, aSlot, ptr, len * 2, 0);
+        TInt r = ipc_read8(iMessage, aSlot, aDesc.Ptr(),
+                           aDesc.MaxLength(), aOffset);
+        if (r < 0) return r;
+        aDesc.SetLength(r);
+        return KErrNone;
+    }
+    TInt Write(TInt aSlot, const TDesC& aDesc) const { return Write(aSlot, aDesc, 0); }
+    TInt Write(TInt aSlot, const TDesC& aDesc, TInt aOffset) const {
+        if (!iMessage) return KErrBadHandle;
+        return ipc_write16(iMessage, aSlot, aDesc.Ptr(),
+                           aDesc.Length() * 2, aOffset);
+    }
+    TInt Write(TInt aSlot, const TDesC8& aDesc) const { return Write(aSlot, aDesc, 0); }
+    TInt Write(TInt aSlot, const TDesC8& aDesc, TInt aOffset) const {
+        if (!iMessage) return KErrBadHandle;
+        return ipc_write8(iMessage, aSlot, aDesc.Ptr(),
+                          aDesc.Length(), aOffset);
     }
     void Complete(TInt aResult) const {
         if (iMessage) ipc_complete(iMessage, aResult);
@@ -193,8 +230,9 @@ class CSession2 : public CBase {
 public:
     CSession2() : iServer(0), iHandle(0) {}
     ~CSession2() {}
-    void ServiceL(const RMessage2& aMessage) {}
-    void ServiceError(const RMessage2& aMessage, TInt aError)
+    /* Virtual: CServer2::Start dispatches through CSession2* to FileSession. */
+    virtual void ServiceL(const RMessage2& aMessage) { (void)aMessage; }
+    virtual void ServiceError(const RMessage2& aMessage, TInt aError)
         { (void)aMessage; (void)aError; }
 protected:
     const CServer2* iServer;
@@ -215,12 +253,15 @@ public:
         for (TInt i = 0; i < 64; ++i) iName[i] = 0;
     }
     ~CServer2() {}
+    /* const, matching genuine CServer2 and FileServer::NewSessionL. */
     virtual CSession2* NewSessionL(const TVersion& aVersion,
-                                   const RMessage2& aMessage) {
+                                   const RMessage2& aMessage) const {
+        (void)aVersion; (void)aMessage;
         return nullptr;
     }
-    void Start(const TDesC16& aName);
-    TInt Publish() { return KErrNone; }
+    /* Blocks in the receive loop; returns a Symbian error if the server dies. */
+    TInt Start(const TDesC16& aName);
+    TInt Publish() { return KErrNone; } /* overridden by concrete servers */
 protected:
     TInt iPriority;
     TInt iType;
@@ -231,39 +272,58 @@ protected:
     TUint16 iName[64];
 };
 
-/* CServer2::Start */
-inline void CServer2::Start(const TDesC16& aName) {
-    (void)aName;
-    int server = ipc_server_create("!FileServer");
-    if (server < 0) return;
+/* CServer2::Start -- genuine receive loop.
+ * The kernel echoes the cookie passed to ipc_accept() in IpcMessage::session,
+ * so the session pointer itself is the opaque cookie. Connect messages (RMessage2
+ * ::EConnect) build a session with the derived NewSessionL; all later messages
+ * are dispatched to that session's virtual ServiceL, which completes them. */
+inline TInt CServer2::Start(const TDesC16& aName) {
+    char name[64];
+    const TInt n = aName.Length();
+    if (n <= 0 || n >= (TInt)sizeof(name)) return KErrArgument;
+    const TUint16* text = aName.Ptr();
+    for (TInt i = 0; i < n; ++i)
+        name[i] = text[i] <= 0x7f ? (char)text[i] : '?';
+    name[n] = 0;
+
+    const int server = ipc_server_create(name);
+    if (server < 0) return server;
     iServerHandle = server;
     iStatus = KRequestPending;
 
-    while (true) {
+    for (;;) {
         struct IpcMessage msg;
-        TInt r = ipc_receive(server, &msg);
-        if (r < 0) break;
+        const TInt r = ipc_receive(server, &msg);
+        if (r < 0) { ipc_receive_cancel(server); return r; }
 
         RMessage2 rmsg(&msg);
 
-        if (msg.handle == 0) {
-            TVersion version(KF32MajorVersionNumber, KF32MinorVersionNumber, KF32BuildVersionNumber);
+        if (msg.function == RMessage2::EConnect) {
+            const TVersion version(KF32MajorVersionNumber,
+                                   KF32MinorVersionNumber,
+                                   KF32BuildVersionNumber);
             CSession2* session = NewSessionL(version, rmsg);
-            if (session) {
-                session->iServer = this;
-                session->iHandle = 1;
-                ipc_accept(&msg, session);
-                ipc_complete(&msg, KErrNone);
-            } else {
-                ipc_complete(&msg, KErrNoMemory);
-            }
-        } else if (msg.handle == 1) {
-            iMessage = rmsg;
-            // Existing session - complete with not supported for now
-            ipc_complete(&msg, KErrNotSupported);
-        } else {
-            ipc_complete(&msg, KErrBadHandle);
+            if (!session) { ipc_complete(&msg, KErrNoMemory); continue; }
+            session->iServer = this;
+            session->iHandle = ++iSessionCount;
+            ipc_accept(&msg, session);          /* cookie == session pointer */
+            ipc_complete(&msg, KErrNone);
+            continue;
         }
+
+        if (msg.function == RMessage2::EDisConnect) {
+            CSession2* session = (CSession2*)msg.session;
+            if (session) { delete session; --iSessionCount; }
+            ipc_complete(&msg, KErrNone);
+            continue;
+        }
+
+        CSession2* session = (CSession2*)msg.session;
+        if (!session) { ipc_complete(&msg, KErrBadHandle); continue; }
+        iMessage = rmsg;
+        session->ServiceL(rmsg);
+        /* Every message must receive exactly one terminal reply. */
+        if (msg.handle) ipc_complete(&msg, KErrNone);
     }
 }
 

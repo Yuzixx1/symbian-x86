@@ -1,5 +1,5 @@
 # Included from the port Makefile; no hosted libc or cross SDK needed.
-USER_FLAGS := -m32 -march=i486 -Os -ffreestanding -fno-pic -fno-pie -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -fno-unwind-tables -mpreferred-stack-boundary=2 -Wall -Wextra
+USER_FLAGS := -m32 -march=i486 -Os -ffreestanding -fno-pic -fno-pie -fno-builtin -fno-stack-protector -fno-exceptions -fno-asynchronous-unwind-tables -fno-unwind-tables -mpreferred-stack-boundary=2 -Wall -Wextra -Iuser -fno-rtti
 
 .PHONY: userland
 userland: build/user/ECHO.E32 build/user/TYPE.E32 build/user/CP.E32 build/user/FILECHK.E32
@@ -118,9 +118,14 @@ build/user/MALLOC.E32: build/user/malloc.elf tools/elf2e32.py tools/mke32.py
 
 # S-04: PORTFILESRV.E32 — EUSER shim user host (E32 file server process).
 build/user/euser_shim.o: user/euser_shim.cpp user/e32base.h user/e32cmn.h user/f32ver.h
-build/user/portfilesrv.o: user/portfilesrv.cpp user/e32base.h user/e32cmn.h user/f32ver.h user/ipc.h user/runtime.h
+build/user/portfilesrv.o: user/portfilesrv.cpp user/e32base.h user/e32cmn.h user/f32ver.h user/ipc.h user/runtime.h fs/r1_fs_server.h fs/r1_fs_core.h | build/user
+	$(CXX) $(USER_FLAGS) -Iuser -Ifs -c $< -o $@
 
-build/user/portfilesrv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/euser_shim.o build/user/portfilesrv.o build/user/malloc.o build/user/r1_fs_core.o user/link.ld
+# I-08: genuine CServer2/CSession2 file server (fs/r1_fs_server.cpp).
+build/user/r1_fs_server.o: fs/r1_fs_server.cpp fs/r1_fs_server.h fs/r1_fs_core.h user/e32base.h user/e32cmn.h user/f32ver.h | build/user
+	$(CXX) $(USER_FLAGS) -Iuser -Ifs -c $< -o $@
+
+build/user/portfilesrv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/euser_shim.o build/user/portfilesrv.o build/user/malloc.o build/user/r1_fs_core.o build/user/r1_fs_server.o user/link.ld
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/PORTFILESRV.E32: build/user/portfilesrv.elf tools/elf2e32.py tools/mke32.py

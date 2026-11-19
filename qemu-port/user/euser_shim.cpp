@@ -11,30 +11,8 @@ CActiveScheduler* CActiveScheduler::iScheduler = nullptr;
 CActive* CActiveScheduler::iActiveQ = nullptr;
 CBase* CleanupStack::iStack = nullptr;
 TInt User::iTlsIndex = 0;
+/* ELeave is an enumerator in e32base.h; no out-of-line definition is needed. */
 
-/* RTTI typeinfo objects needed for -frtti with virtual classes.
-   The compiler references these for classes with virtual functions. */
-void* __ZTVN10__cxxabiv117__class_type_infoE[] = {
-    0, 0, 0, 0, 0, 0
-};
-void* __ZTVN10__cxxabiv120__si_class_type_infoE[] = {
-    0, 0, 0, 0, 0, 0
-};
-char __ZTI10__cxxabiv117__class_type_info[] = { 0 };
-char __ZTI10__cxxabiv120__si_class_type_info[] = { 0 };
-
-// Typeinfo objects for user classes
-char __ZTI7CBase[] = { 0 };
-char __ZTI7CActive[] = { 0 };
-char __ZTI14CActiveScheduler[] = { 0 };
-char __ZTI9CServer2[] = { 0 };
-char __ZTI9CSession2[] = { 0 };
-char __ZTI9RMessage2[] = { 0 };
-
-// Vtables for user classes
-void* __ZTV7CBase[] = { 0, 0, 0, 0, 0, 0 };
-void* __ZTV7CActive[] = { 0, 0, 0, 0, 0, 0 };
-void* __ZTV14CActiveScheduler[] = { 0, 0, 0, 0, 0, 0 };
-void* __ZTV9CServer2[] = { 0, 0, 0, 0, 0, 0 };
-void* __ZTV9CSession2[] = { 0, 0, 0, 0, 0, 0 };
-void* __ZTV9RMessage2[] = { 0, 0, 0, 0, 0, 0 };
+/* No hand-written RTTI/vtable arrays: the build uses -fno-rtti and the
+ * compiler emits real vtables for CBase/CServer2/CSession2 and their derived
+ * classes. Fake __ZTV/__ZTI symbols only confused the linker. */
