@@ -1,0 +1,16 @@
+// Port-owned recipe; genuine HAL implementation, not a replacement HAL.
+TARGET          hal.dll
+TARGETTYPE      dll
+LINKAS          hal.dll
+NOEXPORTLIBRARY
+SOURCEPATH      ../../../kernelhwsrv/halservices/hal/src
+SOURCE          hal_main.cpp userhal.cpp
+SOURCEPATH      generated
+SOURCE          values.cpp config.cpp
+OS_LAYER_SYSTEMINCLUDE_SYMBIAN
+LIBRARY         euser.lib
+// Strict Unicode stem: Raptor appends u, resolving genuine eabi/halu.def.
+DEFFILE         ../../../kernelhwsrv/halservices/hal/eabi/hal.def
+UID             0x1000008d 0x100039e8
+CAPABILITY      all
+VENDORID        0x70000001

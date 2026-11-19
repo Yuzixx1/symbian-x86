@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Worker CLI for .sybian coordination app.
+
+Usage:
+  python3 .sybian/bin/work claim <card-id>
+  python3 .sybian/bin/work submit <handoff.md>
+  python3 .sybian/bin/work qemu-acquire
+  python3 .sybian/bin/work qemu-release
+"""
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+SYBIAN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COORD = os.path.join(SYBIAN, "coordinator")
+WORKERS = os.path.join(SYBIAN, "workers")
+STATE_PATH = os.path.join(COORD, "state.json")
+CARDS_DIR = os.path.join(COORD, "cards")
+INBOX_DIR = os.path.join(WORKERS, "inbox")
+OUTBOX_DIR = os.path.join(WORKERS, "outbox")
+LOCK_PATH = os.path.join(SYBIAN, "qemu-slot.lock")
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_state():
+    if not os.path.exists(STATE_PATH):
+        return {"wave": 0, "qemu_lock": None, "cards": {}, "dependencies": {},
+                "exclusivity": {}, "updated_at": None}
+    with open(STATE_PATH) as f:
+        return json.load(f)
+
+
+def save_state(state):
+    state["updated_at"] = now_iso()
+    with open(STATE_PATH, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def cmd_claim(args):
+    if len(args) != 1:
+        print("Usage: work claim <card-id>")
+        return 1
+    card_id = args[0]
+    state = load_state()
+
+    brief_path = os.path.join(INBOX_DIR, f"{card_id}.brief.md")
+    if not os.path.exists(brief_path):
+        print(f"Error: no brief for {card_id} in workers/inbox/")
+        print("  (coordinator may not have dispatched it yet)")
+        return 1
+
+    card_path = os.path.join(CARDS_DIR, f"{card_id}.json")
+    if os.path.exists(card_path):
+        with open(card_path) as f:
+            card = json.load(f)
+        card["status"] = "in-progress"
+        card["updated_at"] = now_iso()
+        with open(card_path, "w") as f:
+            json.dump(card, f, indent=2)
+
+    if card_id in state["cards"]:
+        state["cards"][card_id]["status"] = "in-progress"
+        state["cards"][card_id]["updated_at"] = now_iso()
+    save_state(state)
+
+    print(f"Claimed {card_id}. Brief:")
+    print("----")
+    with open(brief_path) as f:
+        print(f.read(), end="")
+    print("----")
+    print(f"Marked {card_id} status=in-progress in state.json")
+    return 0
+
+
+def cmd_submit(args):
+    if len(args) != 1:
+        print("Usage: work submit <handoff.md>")
+        return 1
+    handoff_path = args[0]
+    if not os.path.exists(handoff_path):
+        print(f"Error: handoff file not found: {handoff_path}")
+        return 1
+
+    with open(handoff_path) as f:
+        content = f.read()
+
+    # Extract card id from handoff content or filename.
+    card_id = None
+    for line in content.splitlines():
+        if line.lower().startswith("card id:"):
+            card_id = line.split(":", 1)[1].strip()
+            break
+    if not card_id:
+        base = os.path.basename(handoff_path)
+        if base.endswith(".handoff.md"):
+            card_id = base[:-len(".handoff.md")]
+    if not card_id:
+        print("Error: could not determine card id from handoff.")
+        return 1
+
+    outbox_path = os.path.join(OUTBOX_DIR, f"{card_id}.handoff.md")
+    os.makedirs(OUTBOX_DIR, exist_ok=True)
+    # Normalize filename to card-X.handoff.md
+    with open(outbox_path, "w") as f:
+        f.write(content if content.endswith("\n") else content + "\n")
+
+    state = load_state()
+    card_path = os.path.join(CARDS_DIR, f"{card_id}.json")
+    if os.path.exists(card_path):
+        with open(card_path) as f:
+            card = json.load(f)
+        card["status"] = "complete"
+        card["updated_at"] = now_iso()
+        with open(card_path, "w") as f:
+            json.dump(card, f, indent=2)
+    if card_id in state["cards"]:
+        state["cards"][card_id]["status"] = "complete"
+        state["cards"][card_id]["updated_at"] = now_iso()
+    save_state(state)
+
+    print(f"Submitted handoff for {card_id} -> workers/outbox/{card_id}.handoff.md")
+    print(f"Marked {card_id} status=complete in state.json")
+    print("Run /coord collect (coordinator) to archive and finalize.")
+    return 0
+
+
+def lock_holder():
+    if not os.path.exists(LOCK_PATH):
+        return None
+    try:
+        with open(LOCK_PATH) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def cmd_qemu_acquire(args):
+    state = load_state()
+    holder = lock_holder() or state.get("qemu_lock")
+    if holder:
+        print(f"QEMU slot already held by {holder}. Acquisition failed.")
+        return 1
+    # Default holder = card being claimed/in-progress, if exactly one.
+    in_progress = [cid for cid, info in state["cards"].items()
+                   if info.get("status") == "in-progress"]
+    holder = in_progress[0] if len(in_progress) == 1 else "worker"
+    with open(LOCK_PATH, "w") as f:
+        f.write(holder + "\n")
+    state["qemu_lock"] = holder
+    save_state(state)
+    print(f"QEMU slot acquired by {holder}.")
+    return 0
+
+
+def cmd_qemu_release(args):
+    holder = lock_holder() or state_get_lock()
+    if not holder:
+        print("QEMU slot is not held.")
+        return 0
+    with open(LOCK_PATH, "w") as f:
+        f.write("")
+    state = load_state()
+    state["qemu_lock"] = None
+    save_state(state)
+    print(f"QEMU slot released (was held by {holder}).")
+    return 0
+
+
+def state_get_lock():
+    state = load_state()
+    return state.get("qemu_lock")
+
+
+COMMANDS = {
+    "claim": cmd_claim,
+    "submit": cmd_submit,
+    "qemu-acquire": cmd_qemu_acquire,
+    "qemu-release": cmd_qemu_release,
+}
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return 1
+    cmd = argv[1]
+    rest = argv[2:]
+    if cmd not in COMMANDS:
+        print(f"Unknown command: {cmd}")
+        print("Available: " + ", ".join(sorted(COMMANDS)))
+        return 1
+    return COMMANDS[cmd](rest)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

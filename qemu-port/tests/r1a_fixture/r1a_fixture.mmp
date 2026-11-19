@@ -1,0 +1,30 @@
+// R1A_FIXTURE.MMP - port-authored R1-A fixture (NOT an upstream test).
+// UNCOMPILED / UNRUN. See README.md.
+//
+// Modelled on kerneltest/e32test/group/t_cactw.mmp (euser only) and
+// kerneltest/f32test/group/fhserver.mmp (euser + efsrv).
+//
+// Requires the build variant that defines SYMBIAN_ENABLE_64_BIT_FILE_SERVER_API
+// (port-x86-rfile64-v1); the source #errors out if the macro is missing.
+
+TARGET          r1a_fixture.exe
+TARGETTYPE      EXE
+
+SOURCEPATH      .
+SOURCE          r1a_fixture.cpp
+
+LIBRARY         euser.lib efsrv.lib
+
+OS_LAYER_SYSTEMINCLUDE_SYMBIAN
+
+// UID3 is a PLACEHOLDER from the unprotected test range (0xE...). It is not
+// registered anywhere; the coordinator may substitute a reserved value.
+UID             0x00000000 0xE1A0F001
+
+// Zero capabilities: the fixture is an unprivileged application. The file
+// service is launched by the privileged harness, never by this image.
+CAPABILITY      NONE
+
+VENDORID        0x70000001
+
+SMPSAFE

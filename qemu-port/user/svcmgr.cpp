@@ -1,33 +1,226 @@
 /*
- * svcmgr.cpp — S-02: ordered system-server startup + supervision + shutdown.
+ * svcmgr.cpp — S-02: service manager (ordered startup + supervision + shutdown)
+ * that also owns the "!FileServer" global name.
  *
- * User-mode E32 service manager (app_main via user/start.S). It owns a static
- * service table {image path, publish name, depends-on}, starts each service in
- * dependency order through a trusted launch exec (kernel-side E32Run variant),
- * waits for each to publish its global name, supervises children (restart on
- * death with bounded exponential backoff), and shuts down in reverse order
- * (E32Kill each child, then E32Reap) before returning to process_exit.
+ * Two modes, selected by the process command line (svc_launch passes one):
+ *   - no args : orchestrator. Boots the ordered service table, waits for each
+ *               service's global name, supervises children (restart on death
+ *               with bounded backoff), shuts down in reverse on fatal error.
+ *   - "fs"    : FileServer host. Constructs the R1 filesystem backend, registers
+ *               as the FS owner thread, FileServer::NewL + Publish("!FileServer")
+ *               and blocks forever in CServer2::Start's IPC receive loop.
  *
- * The launch/kill/ctl execs (268/269/270) are installed over three test-only
- * slow-exec slots by variant/e32load.cpp::SvcMgrExecInstall() at boot. The
- * genuine kernel source tree (kernelhwsrv/) is not modified.
+ * The manager launches itself with "fs" as service 0, so the FileServer is
+ * published before any other service and PortFile is retired from the table.
+ * Launch/kill/ctl execs (268/269/270) are installed by
+ * variant/e32load.cpp::SvcMgrExecInstall at boot; kernelhwsrv/ is untouched.
  *
  * C++98 / -ffreestanding -fno-exceptions -fno-rtti, no libstdc++, no globals
- * with constructors. Mirrors docs/r1_service_manager_design_v1.md.
+ * with constructors (elf2e32 rejects .init_array).
  */
 
 extern "C" {
 #include "runtime.h"
 #include "ipc.h"
 }
+#include "../fs/r1_fs_core.h"
+#include "e32base.h"
+#include "../fs/r1_fs_server.h"
 
+extern "C" int exec0(unsigned number);
 extern "C" int exec2(unsigned number, unsigned, unsigned);
 
-/* Trusted service-manager exec numbers (see SvcMgrExecInstall). */
+/* Genuine kernel executive numbers (build/export/exec_enum.h). */
+enum { EExecFsRegisterThread = 81 };
 enum { ESvcLaunch = 268, ESvcKill = 269, ESvcCtl = 270 };
 enum { ESvcCtlDead = 0, ESvcCtlReap = 1 };
 
-/* TDesC8-shaped descriptor {type|length, ptr}, as used by ipc.c. */
+/* Freestanding operator new/delete (no libstdc++ in E32 user images). */
+void operator delete(void* p) noexcept { free(p); }
+void operator delete(void* p, unsigned) noexcept { free(p); }
+void* operator new(unsigned, void* where) noexcept { return where; }
+
+/*--------------------------------------------------------------------------*/
+/* Ring-3 filesystem backend — in-memory stand-in for the kernel FAT adapter. */
+/* Mirrors the proven portfilesrv.cpp backend; the Core/CServer2 wiring is     */
+/* unchanged when a ring-3 FAT adapter lands.                                  */
+/*--------------------------------------------------------------------------*/
+namespace {
+const unsigned KBackFiles = 16;
+const uint32_t KBackMaxBytes = 8u * 1024u * 1024u;
+
+class FatBackend : public R1Fs::Backend {
+public:
+    FatBackend() : iNextGeneration(1) {}
+
+    int32_t Lookup(const R1Fs::Path& path, R1Fs::Meta& meta) {
+        const Entry* e = FindPath(path);
+        if (!e) return R1Fs::NotFound;
+        meta.size = e->size;
+        meta.identity = e->generation;
+        return R1Fs::Success;
+    }
+
+    int32_t Open(const R1Fs::Path& path, R1Fs::Disposition how,
+                 R1Fs::Key& key, R1Fs::Meta& meta) {
+        Entry* e = FindPath(path);
+        if (how == R1Fs::OpenExisting) {
+            if (!e) return R1Fs::NotFound;
+        } else if (how == R1Fs::CreateNew) {
+            if (e) return R1Fs::AlreadyExists;
+            e = FreeEntry();
+            if (!e) return R1Fs::NoMemory;
+            InitEntry(*e, path);
+        } else { /* ReplaceExisting */
+            if (e) { e->size = 0; }
+            else { e = FreeEntry(); if (!e) return R1Fs::NoMemory; InitEntry(*e, path); }
+        }
+        if (e->open) return R1Fs::InUse;
+        e->open = true;
+        key.slot = (unsigned)(e - iFiles);
+        key.generation = e->generation;
+        meta.size = e->size;
+        meta.identity = e->generation;
+        return R1Fs::Success;
+    }
+
+    R1Fs::IoResult ReadAt(R1Fs::Key key, uint64_t offset, uint8_t* dst,
+                          uint32_t capacity) {
+        R1Fs::IoResult r = R1Fs::IoResult();
+        r.error = R1Fs::Success; r.stable = true;
+        Entry* e = FindKey(key);
+        if (!e || !dst) { r.error = R1Fs::BadHandle; return r; }
+        if (offset >= e->size) { r.size = e->size; return r; }
+        uint32_t avail = e->size - (uint32_t)offset;
+        uint32_t n = capacity < avail ? capacity : avail;
+        for (uint32_t i = 0; i < n; ++i) dst[i] = e->data[(uint32_t)offset + i];
+        r.committed = n; r.size = e->size;
+        return r;
+    }
+
+    R1Fs::IoResult WriteAt(R1Fs::Key key, uint64_t offset, const uint8_t* src,
+                           uint32_t length) {
+        R1Fs::IoResult r = R1Fs::IoResult();
+        r.error = R1Fs::Success; r.stable = true;
+        Entry* e = FindKey(key);
+        if (!e || !src) { r.error = R1Fs::BadHandle; return r; }
+        if (offset > KBackMaxBytes || length > KBackMaxBytes - (uint32_t)offset) {
+            r.error = R1Fs::TooBig; r.size = e->size; return r;
+        }
+        uint64_t end = offset + length;
+        if (end > e->cap) {
+            uint32_t want = end > KBackMaxBytes ? KBackMaxBytes : (uint32_t)end;
+            uint32_t cap = e->cap ? e->cap : 256;
+            while (cap < want) cap = cap > KBackMaxBytes / 2 ? want : cap * 2;
+            uint8_t* bigger = (uint8_t*)malloc(cap);
+            if (!bigger) { r.error = R1Fs::NoMemory; r.size = e->size; return r; }
+            for (uint32_t i = 0; i < e->size; ++i) bigger[i] = e->data[i];
+            free(e->data); e->data = bigger; e->cap = cap;
+        }
+        for (uint32_t i = 0; i < length; ++i) e->data[(uint32_t)offset + i] = src[i];
+        if (end > e->size) e->size = (uint32_t)end;
+        r.committed = length; r.size = e->size;
+        return r;
+    }
+
+    R1Fs::IoResult Resize(R1Fs::Key key, uint64_t newSize) {
+        R1Fs::IoResult r = R1Fs::IoResult();
+        r.error = R1Fs::Success; r.stable = true;
+        Entry* e = FindKey(key);
+        if (!e) { r.error = R1Fs::BadHandle; return r; }
+        if (newSize > KBackMaxBytes) { r.error = R1Fs::TooBig; r.size = e->size; return r; }
+        if (newSize > e->cap) {
+            uint32_t cap = e->cap ? e->cap : 256;
+            while (cap < newSize) cap = cap > KBackMaxBytes / 2 ? (uint32_t)newSize : cap * 2;
+            uint8_t* bigger = (uint8_t*)malloc(cap);
+            if (!bigger) { r.error = R1Fs::NoMemory; r.size = e->size; return r; }
+            for (uint32_t i = 0; i < e->size; ++i) bigger[i] = e->data[i];
+            free(e->data); e->data = bigger; e->cap = cap;
+        }
+        for (uint32_t i = (uint32_t)newSize; i < e->size; ++i) e->data[i] = 0;
+        e->size = (uint32_t)newSize;
+        r.size = e->size;
+        return r;
+    }
+
+    int32_t Flush(R1Fs::Key key) { return FindKey(key) ? R1Fs::Success : R1Fs::BadHandle; }
+
+    int32_t Close(R1Fs::Key key) {
+        Entry* e = FindKey(key);
+        if (!e) return R1Fs::BadHandle;
+        e->open = false;
+        return R1Fs::Success;
+    }
+
+private:
+    struct Entry {
+        bool used, open;
+        R1Fs::Key key;
+        R1Fs::Path path;
+        uint8_t* data;
+        uint32_t size, cap, generation;
+        Entry() : used(false), open(false), data(0), size(0), cap(0), generation(0) {}
+    };
+    Entry iFiles[KBackFiles];
+    uint32_t iNextGeneration;
+
+    static bool SamePath(const R1Fs::Path& a, const R1Fs::Path& b) {
+        if (a.length != b.length) return false;
+        for (uint32_t i = 0; i < a.length; ++i) if (a.text[i] != b.text[i]) return false;
+        return true;
+    }
+    Entry* FindPath(const R1Fs::Path& p) {
+        for (unsigned i = 0; i < KBackFiles; ++i)
+            if (iFiles[i].used && SamePath(iFiles[i].path, p)) return &iFiles[i];
+        return 0;
+    }
+    Entry* FreeEntry() {
+        for (unsigned i = 0; i < KBackFiles; ++i) if (!iFiles[i].used) return &iFiles[i];
+        return 0;
+    }
+    Entry* FindKey(const R1Fs::Key& k) {
+        if (k.slot >= KBackFiles) return 0;
+        Entry* e = &iFiles[k.slot];
+        if (!e->used || !e->open || e->generation != k.generation) return 0;
+        return e;
+    }
+    void InitEntry(Entry& e, const R1Fs::Path& p) {
+        e.used = true; e.open = false; e.path = p;
+        e.data = 0; e.size = 0; e.cap = 0;
+        e.generation = iNextGeneration++;
+        if (!e.generation) e.generation = iNextGeneration++;
+    }
+};
+}
+
+/* POD store: backend is placement-constructed inside app_main (no .init_array). */
+static uint32_t g_backend_store[(sizeof(FatBackend) + 3) / 4];
+
+/*--------------------------------------------------------------------------*/
+/* FileServer host mode — owns "!FileServer" and blocks in the IPC loop.       */
+/*--------------------------------------------------------------------------*/
+static int run_fileserver(void)
+    {
+    print("SVCMGR: FileServer host starting");
+
+    FatBackend* backend = new ((void*)g_backend_store) FatBackend();
+
+    /* B2: register this thread as the FS owner (EExecFsRegisterThread = 81). */
+    exec0(EExecFsRegisterThread);
+
+    /* B3: publish. CServer2::Start owns the accept/dispatch/complete loop and
+       blocks forever; it only returns if the server handle is closed. */
+    R1Fs::FileServer* server = R1Fs::FileServer::NewL(*backend);
+    const TInt r = server->Publish();
+
+    print(r == KErrNone ? "SVCMGR: FileServer stopped" : "SVCMGR: server failed");
+    delete server;
+    return r;
+    }
+
+/*--------------------------------------------------------------------------*/
+/* Orchestrator mode — ordered startup, supervision, shutdown.                 */
+/*--------------------------------------------------------------------------*/
 struct Desc { unsigned type_length; const char* ptr; };
 static Desc desc(const char* text)
     {
@@ -37,29 +230,27 @@ static Desc desc(const char* text)
     return d;
     }
 
-static int svc_launch(const char* path)
+static int svc_launch(const char* path, const char* cmd)
     {
-    Desc d = desc(path);
-    return exec2(ESvcLaunch, (unsigned)&d, 0);  /* >0 = new process id */
+    Desc p = desc(path);
+    Desc c = desc(cmd ? cmd : "");
+    return exec2(ESvcLaunch, (unsigned)&p, (unsigned)&c);  /* >0 = new pid */
     }
 static int svc_kill(int pid)   { return exec2(ESvcKill, (unsigned)pid, 0); }
 static int svc_dead(int pid)   { return exec2(ESvcCtl, (unsigned)ESvcCtlDead, (unsigned)pid); }
 static int svc_reap(void)      { return exec2(ESvcCtl, (unsigned)ESvcCtlReap, 0); }
 
-/* Static service table. Storage/FAT mount is already done by Asic::Init3;
-   F32 is portfilesrv owning "!FileServer". Console (!ConsoleServer) and loader
-   (!Loader) are stubbed until H-02/L-06 land (design doc step 3). */
-struct Service { const char* path; const char* name; const char* depends; };
+/* Storage/FAT mount is already done by Asic::Init3. Service 0 is this image in
+   "fs" mode (owns F32); console/loader are stubbed until H-02/L-06 land. */
+struct Service { const char* path; const char* cmd; const char* name; const char* depends; };
 static const Service kServices[] =
     {
-    { "\\PORTFILESRV.E32", "!FileServer", 0 },  /* storage -> F32 */
-    /* { "\\CONSOLE.E32",   "!ConsoleServer", "!FileServer" },  H-02 */
-    /* { "\\LOADER.E32",    "!Loader",        "!ConsoleServer"}, L-06 */
+    { "\\SVCMGR.E32", "fs", "!FileServer", 0 },  /* storage -> F32 (manager-owned) */
+    /* { "\\CONSOLE.E32", 0, "!ConsoleServer", "!FileServer" },  H-02 */
+    /* { "\\LOADER.E32",  0, "!Loader",        "!ConsoleServer" }, L-06 */
     };
 enum { KServiceCount = (int)(sizeof(kServices) / sizeof(kServices[0])) };
 
-/* Bounded readiness probe: connect to the published global name. ipc_connect
-   returns a negative error until CServer2::Start publishes the name. */
 static int wait_ready(const char* name)
     {
     for (int attempt = 0; attempt < 250; ++attempt)
@@ -74,8 +265,6 @@ static int wait_ready(const char* name)
 static int sPid[KServiceCount];
 static int sRestarts[KServiceCount];
 
-/* Shutdown: clients before servers (reverse table order), E32Kill each live
-   child, withdraw, then final E32Reap. */
 static void shutdown_services(void)
     {
     print("SVCMGR: shutdown (reverse order)");
@@ -92,16 +281,14 @@ static void shutdown_services(void)
     svc_reap();
     }
 
-extern "C" int app_main(void)
+static int run_orchestrator(void)
     {
     print("SVCMGR: starting");
 
-    /* Ordered startup: each service starts only after its dependency's global
-       name is connectable. depends-on is honoured by table order today. */
     for (int i = 0; i < KServiceCount; ++i)
         {
         const Service& s = kServices[i];
-        int pid = svc_launch(s.path);
+        int pid = svc_launch(s.path, s.cmd);
         if (pid <= 0) { print("SVCMGR: launch failed"); shutdown_services(); return -1; }
         sPid[i] = pid;
         sRestarts[i] = 0;
@@ -111,25 +298,23 @@ extern "C" int app_main(void)
         }
     print("SVCMGR: ordered startup complete");
 
-    /* Supervision: poll each child; restart an unexpected death with bounded
-       exponential backoff. A deliberate kill (our own shutdown) is not polled
-       because shutdown sets sPid to 0 before returning. */
+    /* Supervise forever: restart an unexpected death with bounded backoff. */
     const int kMaxRestarts = 4;
     const int kBackoffMs[4] = {50, 100, 200, 400};
-    for (int pass = 0; pass < 100; ++pass)  /* run budget; stop IPC is future */
+    for (;;)
         {
         sleep_ms(100);
         int terminal = 0;
         for (int i = 0; i < KServiceCount; ++i)
             {
             if (sPid[i] <= 0 || !svc_dead(sPid[i])) continue;
-            svc_reap();  /* free the dead child's exec/reaper record */
+            svc_reap();
             if (sRestarts[i] >= kMaxRestarts)
                 { print("SVCMGR: restart limit reached"); terminal = 1; break; }
             const int b = kBackoffMs[sRestarts[i]];
             ++sRestarts[i];
             sleep_ms(b);
-            int pid = svc_launch(kServices[i].path);
+            int pid = svc_launch(kServices[i].path, kServices[i].cmd);
             if (pid <= 0) { print("SVCMGR: relaunch failed"); terminal = 1; break; }
             sPid[i] = pid;
             if (kServices[i].name && wait_ready(kServices[i].name) != 0)
@@ -142,4 +327,25 @@ extern "C" int app_main(void)
     shutdown_services();
     print("SVCMGR: stopped");
     return 0;
+    }
+
+/*--------------------------------------------------------------------------*/
+/* app_main — entry point called by user/start.S _start.                       */
+/*--------------------------------------------------------------------------*/
+extern "C" int app_main(void)
+    {
+    U16 cmd[64];
+    const int n = command_line(cmd, 64);
+    for (int i = 0; i + 1 < n; ++i)
+        {
+        U16 c = cmd[i];
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+        if (c == 'f' && i + 1 < n)
+            {
+            U16 d = cmd[i + 1];
+            if (d >= 'A' && d <= 'Z') d = d - 'A' + 'a';
+            if (d == 's') return run_fileserver();
+            }
+        }
+    return run_orchestrator();
     }

@@ -1,0 +1,12 @@
+// Port-owned values for the linked kernfull x86/direct profile.
+ECPU=x86
+ECPUABI=x86
+// Genuine kernel/stimer.cpp TTickQ::Init: nominal 64 Hz system tick.
+ESystemTickPeriod=15625
+// Port QemuVariantAsic::MsTickPeriod: 1000 us; NOT the system tick above.
+ENanoTickPeriod=1000
+// Genuine direct/x86/mmboot.h: KPageShift=12, KPageSize=1<<12.
+EMemoryPageSize=4096
+EKeyboardIndex=0
+EDisplayMode=0
+EDisplayNumberOfScreens=1

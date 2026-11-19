@@ -1,0 +1,25 @@
+{
+  "wave": 0,
+  "qemu_lock": null,
+  "cards": {
+    "card-A": {
+      "status": "dispatched",
+      "tier": "strong",
+      "wave": 0,
+      "owned_paths": [
+        "variant/e32load.cpp"
+      ]
+    },
+    "card-A-1": {
+      "status": "dispatched",
+      "tier": "strong",
+      "wave": 0,
+      "owned_paths": [
+        "variant/e32load.cpp"
+      ]
+    }
+  },
+  "dependencies": {},
+  "exclusivity": {},
+  "updated_at": "2026-10-29T19:33:19.912930+00:00"
+}

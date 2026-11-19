@@ -1,0 +1,21 @@
+{
+  "id": "card-A",
+  "tier": "strong",
+  "owned_paths": [
+    "variant/e32load.cpp"
+  ],
+  "dependencies": [],
+  "exclusivity": [],
+  "constraints": [
+    "Do not modify proof apps under apps/proof/",
+    "Do not run hardware tests",
+    "Do not change the QEMU lock file"
+  ],
+  "deliverables": [
+    "variant/e32load.cpp"
+  ],
+  "effort_estimate": "tbd",
+  "status": "dispatched",
+  "wave": 0,
+  "updated_at": "2026-10-29T19:33:05.361302+00:00"
+}

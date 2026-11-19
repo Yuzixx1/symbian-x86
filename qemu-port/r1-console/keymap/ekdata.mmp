@@ -1,0 +1,15 @@
+// Port-owned data DLL; genuine translator and fixed upstream exports.
+TARGET          ekdata.dll
+TARGETTYPE      dll
+LINKAS          ekdata.dll
+SOURCEPATH      .
+SOURCE          keymap.cpp
+OS_LAYER_SYSTEMINCLUDE_SYMBIAN
+LIBRARY         euser.lib
+// Strict Unicode stem resolves local ekdatau.def, byte-identical to the
+// genuine kernel/eka/eabi/ekdata.def. Explicit ./ prevents platform-dir fallback.
+DEFFILE         ./ekdata.def
+UID             0x1000008d 0x100039e0
+CAPABILITY      all
+VENDORID        0x70000001
+UNPAGEDCODE

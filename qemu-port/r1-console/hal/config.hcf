@@ -1,0 +1,10 @@
+// Port-owned fixed-layout R1 profile. Omitted attributes are unsupported.
+// Zero denotes genuine immutable InitialValue lookup, NOT an implementation.
+ECPU=0
+ECPUABI=0
+ESystemTickPeriod=0
+ENanoTickPeriod=0
+EMemoryPageSize=0
+EKeyboardIndex=0
+EDisplayMode=0
+EDisplayNumberOfScreens=0

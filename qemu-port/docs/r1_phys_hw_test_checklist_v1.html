@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sybian EKA2 — Hardware Test Checklist</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.4rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; }
+  h2 { font-size: 1.15rem; margin-top: 1.6rem; border-bottom: 1px solid #999; padding-bottom: 0.25rem; }
+  .meta { background: #f4f4f4; border: 1px solid #ccc; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+  .meta label { display: inline-block; width: 130px; font-weight: 600; margin-right: 0.5rem; }
+  .meta input { border: 1px solid #999; padding: 0.25rem; border-radius: 3px; margin-bottom: 0.3rem; display: inline-block; width: 260px; }
+  table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.95rem; }
+  th { text-align: left; background: #e8e8e8; padding: 0.5rem; border: 1px solid #bbb; font-weight: 600; }
+  td { padding: 0.5rem; border: 1px solid #ddd; vertical-align: top; }
+  td input[type="checkbox"] { width: 1.1rem; height: 1.1rem; margin: 0; }
+  td input[type="text"] { width: 100%; border: 1px solid #999; padding: 0.2rem; border-radius: 3px; box-sizing: border-box; }
+  .result-row td:first-child { font-weight: 600; background: #f0f0f0; }
+  .overall { background: #f9f9f9; border: 2px solid #333; padding: 1.2rem; border-radius: 6px; margin-top: 1.8rem; }
+  .overall h3 { margin-top: 0; }
+  .actions { margin-top: 1.5rem; display: flex; gap: 0.8rem; }
+  button { padding: 0.6rem 1.4rem; font-size: 1rem; cursor: pointer; border: 1px solid #333; background: #fff; border-radius: 4px; }
+  button.primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
+  button.primary:hover { background: #1d4ed8; }
+  button.outline:hover { background: #f0f0f0; }
+  .hidden { display: none; }
+  #summary { white-space: pre-wrap; background: #f4f4f4; border: 1px solid #ccc; padding: 1rem; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.9rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>Sybian EKA2 — Hardware Test Checklist</h1>
+
+<div class="meta">
+  <label>Tester:</label> <input id="tester" type="text"><br>
+  <label>Date:</label> <input id="date" type="text"><br>
+  <label>VM / Hardware:</label> <input id="hw" type="text"><br>
+  <label>ISO used:</label>
+  <input id="iso_grubbios" type="checkbox" value="symbian-grub-bios.iso"> <label for="iso_grubbios">symbian-grub-bios.iso</label>
+  <input id="iso_grub" type="checkbox" value="symbian-grub.iso"> <label for="iso_grub">symbian-grub.iso</label>
+  <input id="iso_pc" type="checkbox" value="symbian-pc.iso"> <label for="iso_pc">symbian-pc.iso</label>
+  <input id="iso_other" type="checkbox" value="other"> <label for="iso_other">Other:</label> <input id="iso_other_val" type="text" placeholder="filename">
+</div>
+
+<h2>1. Boot</h2>
+<table>
+  <thead><tr><th>Step</th><th>What to see</th><th>Pass</th><th>Fail</th><th>Notes</th></tr></thead>
+  <tr><td class="result-row">GRUB menu appears</td><td>"Symbian EKA2 full kernel (genuine)" / "nanokernel"</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+  <tr><td class="result-row">Kernel loads</td><td>"Booting full kernel..." → "Multiboot ok, booting..."</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+  <tr><td class="result-row">Protected mode</td><td>"KEKA2-QEMU bridge: 32-bit protected mode..."</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+  <tr><td class="result-row">Shell prompt</td><td>`EKA2>` prompt visible</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+</table>
+<p><strong>Shell prompt reached?</strong> ☐ Yes &nbsp; ☐ No</p>
+
+<h2>2. FAT Disk Mount</h2>
+<table>
+  <thead><tr><th>Step</th><th>Command</th><th>Expected output</th><th>Pass</th><th>Fail</th><th>Notes</th></tr></thead>
+  <tr><td class="result-row">Mount FAT disk</td><td>`mount`</td><td>"mounted C: dev X part Y"</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+  <tr><td class="result-row">List files</td><td>`dir C:`</td><td>Shows `portfilesrv` (884 bytes)</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+</table>
+<p><strong>FAT disk mounted?</strong> ☐ Yes &nbsp; ☐ No &nbsp;&nbsp; <strong>Drive letter:</strong> <input type="text" style="width:60px"></p>
+
+<h2>3. Run hello.e32 (import-free EXE)</h2>
+<table>
+  <thead><tr><th>Step</th><th>Command</th><th>Expected output</th><th>Pass</th><th>Fail</th><th>Notes</th></tr></thead>
+  <tr><td class="result-row">Validate + run</td><td>`hello.e32`</td><td>`e32run: validate r=0` → `hello.e32 started (user process)`</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+</table>
+<p><strong>hello.e32 passed validation?</strong> ☐ Yes &nbsp; ☐ No &nbsp;&nbsp; <strong>hello.e32 started?</strong> ☐ Yes &nbsp; ☐ No</p>
+
+<h2>4. Run portfilesrv (PE2 import EXE)</h2>
+<table>
+  <thead><tr><th>Step</th><th>Command</th><th>Expected output</th><th>Pass</th><th>Fail</th><th>Notes</th></tr></thead>
+  <tr><td class="result-row">Validate + run</td><td>`portfilesrv`</td><td>`e32run: validate r=0` → `e32run: Resume()...`</td><td><input type="checkbox"></td><td><input type="checkbox"></td><td><input type="text"></td></tr>
+</table>
+<p><strong>portfilesrv passed validation?</strong> ☐ Yes &nbsp; ☐ No &nbsp;&nbsp; <strong>portfilesrv started?</strong> ☐ Yes &nbsp; ☐ No</p>
+
+<div class="overall">
+  <h3>5. Overall Result</h3>
+  <p><strong>All tests passed?</strong> ☐ Yes &nbsp; ☐ No</p>
+  <label>Failed at step:</label> <input id="failstep" type="text" style="width:220px"><br>
+  <label>Error message:</label> <input id="errmsg" type="text" style="width:100%;"><br>
+  <label>Additional notes:</label><br>
+  <textarea id="notes" rows="4" style="width:100%; border:1px solid #999; border-radius:3px; padding:0.4rem;"></textarea>
+</div>
+
+<div class="actions">
+  <button class="primary" onclick="generateSummary()">Generate Summary</button>
+  <button class="outline" onclick="window.print()">Print</button>
+  <button class="outline" onclick="this.form.reset()">Reset</button>
+</div>
+
+<div id="summary" class="hidden"></div>
+
+<script>
+function generateSummary() {
+  const tester = document.getElementById('tester').value;
+  const date = document.getElementById('date').value;
+  const hw = document.getElementById('hw').value;
+  const failstep = document.getElementById('failstep').value;
+  const errmsg = document.getElementById('errmsg').value;
+  const notes = document.getElementById('notes').value;
+
+  const isos = [];
+  document.querySelectorAll('input[id^="iso_"]').forEach(cb => { if (cb.checked) isos.push(cb.value); });
+
+  const checks = [];
+  document.querySelectorAll('table tbody tr').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length >= 5) {
+      const step = cells[0].textContent.trim();
+      const expected = cells[2] ? cells[2].textContent.trim() : '';
+      const pass = cells[3].querySelector('input').checked;
+      const fail = cells[4] ? cells[4].querySelector('input').checked : false;
+      const note = cells[cells.length-1].querySelector('input') ? cells[cells.length-1].querySelector('input').value : '';
+      checks.push({ step, expected, pass, fail, note });
+    }
+  });
+
+  const passed = checks.filter(c => c.pass).length;
+  const failed = checks.filter(c => c.fail).length;
+
+  let out = `=== Sybian EKA2 — Hardware Test Checklist ===\n`;
+  out += `Tester: ${tester}\nDate: ${date}\nHardware/VM: ${hw}\nISO(s): ${isos.join(', ')}\n\n`;
+
+  out += `--- Test Results ---\n`;
+  checks.forEach(c => {
+    const status = c.pass ? 'PASS' : (c.fail ? 'FAIL' : 'NOT TESTED');
+    out += `[${status}] ${c.step}\n`;
+    if (c.note) out += `      Note: ${c.note}\n`;
+  });
+
+  out += `\n--- Summary ---\n`;
+  out += `Checks passed: ${passed}\n`;
+  out += `Checks failed: ${failed}\n`;
+  out += `All tests passed: ${failstep ? 'No' : 'Yes'}\n`;
+  if (failstep) out += `Failed at step: ${failstep}\n`;
+  if (errmsg) out += `Error message: ${errmsg}\n`;
+  if (notes) out += `Additional notes: ${notes}\n`;
+
+  document.getElementById('summary').textContent = out;
+  document.getElementById('summary').classList.remove('hidden');
+  document.getElementById('summary').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>

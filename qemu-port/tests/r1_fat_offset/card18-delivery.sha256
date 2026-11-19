@@ -1,0 +1,5 @@
+829a7335c590a2d96caa7d309aea90e59322f641cf65108667bebc3882f55184  qemu-port/variant/fat32.cpp
+8b6b2ae7d7f26f5624e6ffb3697cc1518f5fb5eb038f7f18dc1fbc61cf81217f  qemu-port/variant/r1_fat_offset.h
+4b6430d7fe2df45341835cf9328006c080e21ee1b3b4e65f0c92da3ec3314b7b  qemu-port/variant/qemu_ata.cpp
+18b173e8005a593da7a152541b2fb2e5537da0ad3d4b79014f7a64a233740249  qemu-port/variant/qemu_ahci.cpp
+0c62a9101094b0fdcbd944117d43e3be98ef0742d408f3507c4ccd80cde2a213  qemu-port/variant/qemu_variant.h

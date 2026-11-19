@@ -1,0 +1,322 @@
+--- a/qemu-port/variant/fat32.cpp
++++ b/qemu-port/variant/fat32.cpp
+@@ -13,6 +13,27 @@
+ #include <e32err.h>
+ #include "qemu_variant.h"
+ #include "r1_fat_offset.h"
++
++namespace
++    {
++    // Device-wide, boot-lifetime quarantine: all partitions/letters on the same
++    // dispatch device share it. Never indexed by reusable mount-table slot.
++    TBool sStorageFailed[8] = { EFalse };
++    TUint32 sWriteAttempts[8] = { 0 };
++    TBool StorageFailed(TInt dev)
++        { return dev < 0 || dev >= 8 || sStorageFailed[dev]; }
++    void StoragePoison(TInt dev)
++        { if (dev >= 0 && dev < 8) sStorageFailed[dev] = ETrue; }
++    TInt StorageWrite(int dev,TUint32 lba,TUint count,const TUint8* data)
++        {
++        if (StorageFailed(dev)) return KErrCorrupt;
++        ++sWriteAttempts[dev]; // attempted writes can complete despite error
++        return AtaWrite(dev,lba,count,data);
++        }
++    }
++// Every write from this TU, including legacy helpers/format, crosses the guard.
++// Driver callers elsewhere are outside the FAT ownership boundary.
++#define AtaWrite StorageWrite
+ 
+ namespace QemuUart
+     {
+@@ -1084,6 +1105,7 @@
+ 
+ TInt FatWrite(const char* aName, const TUint8* aData, TUint aLen)
+     {
++    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
+     if (!sMounted)
+         return KErrNotReady;
+     char name83[11];
+@@ -1173,6 +1195,7 @@
+ // clusters are copied and the old name remains if the sector write fails.
+ TInt FatRename(const char* aOld, const char* aNew)
+     {
++    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
+     if (!sMounted) return KErrNotReady;
+     char old83[11], new83[11];
+     if (Prep83(aOld, old83) != KErrNone || Prep83(aNew, new83) != KErrNone)
+@@ -1219,6 +1242,7 @@
+ 
+ TInt FatDel(const char* aName)
+     {
++    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
+     if (!sMounted)
+         return KErrNotReady;
+     Found f;
+@@ -1264,6 +1288,7 @@
+ 
+ TInt FatMkdir(const char* aName)
+     {
++    if (sMounted && StorageFailed(sDev)) return KErrCorrupt;
+     if (!sMounted)
+         return KErrNotReady;
+     char name83[11];
+@@ -1510,18 +1535,27 @@
+     {
+     namespace
+         {
+-        TBool failed[8] = { EFalse };
+         struct VolumeScope
+             {
+             TInt old;
++            TInt selected;
++            TUint32 writes;
++            TBool complete;
+             VolState original;
+-            VolumeScope() : old(sCur) { GlobalsToVol(original); SaveCur(); }
+-            ~VolumeScope() { sCur = old; VolToGlobals(original); }
++            VolumeScope() : old(sCur), selected(-1), writes(0), complete(EFalse)
++                { GlobalsToVol(original); SaveCur(); }
++            ~VolumeScope()
++                {
++                if (selected >= 0 && !complete && writes != sWriteAttempts[selected])
++                    StoragePoison(selected);
++                sCur = old; VolToGlobals(original);
++                }
+             TInt Select(TInt v)
+                 {
+                 if (v < 0 || v >= 8 || !sVols[v].mounted) return KErrNotReady;
+                 sCur = v; LoadCur();
+-                if (failed[v]) return KErrCorrupt;
++                if (StorageFailed(sDev)) return KErrCorrupt;
++                selected=sDev; writes=sWriteAttempts[sDev];
+                 if (!sSecPerClus || sSecPerClus > 128 || !sTotalClus ||
+                     sTotalClus > 0x0fffffedu || sFatSz <= (sTotalClus + 1) / 128)
+                     return KErrCorrupt;
+@@ -1594,7 +1628,7 @@
+             ent[11] |= 0x20;
+             return DirWriteAt(f, ent);
+             }
+-        TInt MutationError(TInt r) { if (r) failed[sCur] = ETrue; return r; }
++        TInt MutationError(TInt r) { if (r) StoragePoison(sDev); return r; }
+         // FSInfo is a hint, but a formerly exact count must not remain falsely
+         // authoritative. Preserve signatures/other fields; propagate actual I/O
+         // failure. This port's mounted profile places primary FSInfo at +1.
+@@ -1715,7 +1749,7 @@
+         f.dirCluster=found.dirClus; f.dirSector=found.dirSec; f.dirIndex=found.dirIdx;
+         r=AtaRead(sDev,ClusLba(found.dirClus)+found.dirSec,1,sSec); if(r) return r;
+         for(int i=0;i<11;++i) f.name[i]=sSec[found.dirIdx*32+i];
+-        f.open=ETrue; return KErrNone;
++        f.open=ETrue; scope.complete=ETrue; return KErrNone;
+         }
+     TInt Size(File& f,TUint32& size)
+         {
+@@ -1761,7 +1795,7 @@
+             if(offset+done>found.size) found.size=offset+done;
+             r=Publish(found,ent); if(r) return MutationError(r);
+             }
+-        return KErrNone;
++        scope.complete=ETrue; return KErrNone;
+         }
+     TInt Resize(File& f,TUint32 size)
+         {
+@@ -1774,7 +1808,9 @@
+         if(size>found.size)
+             {
+             r=Extend(found,wanted); if(r) return MutationError(r);
+-            found.size=size; return MutationError(Publish(found,ent));
++            found.size=size; r=Publish(found,ent);
++            if(r) return MutationError(r);
++            scope.complete=ETrue; return KErrNone;
+             }
+         TUint32 tail=found.firstClus,last=0;
+         if(wanted)
+@@ -1789,21 +1825,23 @@
+             TUint32 next; r=Next(tail,next); if(r) return MutationError(r);
+             r=FatSet(tail,kFree); if(r) return MutationError(r); tail=next;
+             }
+-        return KErrNone;
++        scope.complete=ETrue; return KErrNone;
+         }
+     TInt Flush(File& f,FlushDrive flush)
+         {
+         if(!f.open) return KErrBadHandle;
+         VolumeScope scope; TInt r=scope.Select(f.volume); if(r) return r;
+         Found found; TUint8 ent[32]; r=Load(f,found,ent); if(r) return r;
+-        if(!flush) return KErrNotSupported;
+-        return MutationError(flush(sDev));
++        r=(flush ? flush : AtaFlush)(sDev);
++        if(r) return MutationError(r);
++        scope.complete=ETrue; return KErrNone;
+         }
+     void Close(File& f) { f.open=EFalse; }
+     }
+ 
+ TInt FatFormat(int aDev)
+     {
++    if (StorageFailed(aDev)) return KErrCorrupt;
+     AtaInit();
+     if (!AtaPresent(aDev))
+         return KErrNotFound;
+--- a/qemu-port/variant/r1_fat_offset.h
++++ b/qemu-port/variant/r1_fat_offset.h
+@@ -25,19 +25,19 @@
+     // DATA bytes, even if later metadata fails. Always inspect return code.
+     TInt Write(File& aFile, TUint32 aOffset, const TUint8* aData, TUint aLength, TUint& aDone);
+     TInt Resize(File& aFile, TUint32 aSize);
+-    // No lower cache-flush hook exists in current shared interface. Default
+-    // returns NotSupported, NEVER durable success. Future hook must synchronously
+-    // flush the passed actual drive and propagate error, not wait for IPC.
++    // Default calls real AtaFlush, routing actual device 4..7 to AHCI 0..3.
++    // Optional injected hook must synchronously flush the passed actual device
++    // and propagate error, not wait for IPC. No power-loss guarantee.
+     typedef TInt (*FlushDrive)(TInt aDrive);
+     TInt Flush(File& aFile, FlushDrive aFlush = 0);
+     void Close(File& aFile); // release token only, not a durability boundary
+     // Mutation errors can leave leaked allocations, divergent FAT copies, changed
+     // data or uncertain directory state. Affected volume is fail-stopped for ALL
+-    // new API handles until reboot/offline repair; no automatic error clearing.
++    // device (all partition/letter aliases), including legacy FAT writes, until
++    // reboot/offline repair; no clearing by close/drop/remount/format.
+     // No transaction, crash recovery or media-sector atomicity is promised.
+     // No handle generations across remounts: close all before topology changes.
+-    // Legacy APIs are unchanged and do not consult fail-stop state. Integration
+-    // must quarantine an errored volume from legacy mutations too, externally.
++    // Legacy mutation entry points and every FAT-sector write consult quarantine.
+     // Resize growth contents unspecified (new clusters zeroed, retained tail
+     // bytes may reappear); position belongs to FS and Resize never changes it.
+     }
+--- a/qemu-port/variant/qemu_ata.cpp
++++ b/qemu-port/variant/qemu_ata.cpp
+@@ -12,6 +12,13 @@
+ #include <e32err.h>
+ #include "qemu_variant.h"
+ 
++#ifdef R1_STORAGE_HOST_TEST
++// Host tests inject register access, never execute port instructions.
++static void Out8(unsigned, unsigned char);
++static void Out16(unsigned, unsigned short);
++static unsigned char In8(unsigned);
++static unsigned short In16(unsigned);
++#else
+ static inline void Out8(unsigned aPort, unsigned char aVal)
+     { __asm__ __volatile__("out %1, %0" : : "a"(aVal), "d"((unsigned short)aPort)); }
+ static inline void Out16(unsigned aPort, unsigned short aVal)
+@@ -20,6 +27,7 @@
+     { unsigned char v; __asm__ __volatile__("in %0, %1" : "=a"(v) : "d"((unsigned short)aPort)); return v; }
+ static inline unsigned short In16(unsigned aPort)
+     { unsigned short v; __asm__ __volatile__("in %0, %1" : "=a"(v) : "d"((unsigned short)aPort)); return v; }
++#endif
+ 
+ namespace
+     {
+@@ -188,6 +196,32 @@
+     return gDevs[aDev].model;
+     }
+ 
++TInt AtaFlush(int aDev)
++    {
++    if (aDev < 0 || aDev >= 8) return KErrArgument;
++    if (aDev >= 4) return AhciFlush(aDev - 4);
++    if (!AtaPresent(aDev)) return KErrNotReady;
++    unsigned cmd = kChans[aDev / 2].cmd, ctl = kChans[aDev / 2].ctl;
++    // Do not switch a channel while a prior command is still busy.
++    TInt r = WaitNotBusy(cmd); if (r) return r;
++    Select(cmd, aDev % 2, 0);
++    r = WaitNotBusy(cmd); if (r) return r;
++    unsigned char s = In8(cmd + 7);
++    if (!s || s == 0xff) return KErrNotReady;
++    if (s & kStDrq) return KErrInUse;
++    Out8(cmd + 7, kCmdFlush);
++    Delay400ns(ctl);
++    for (TInt i = 0; i < kSpinBusy; ++i)
++        {
++        s = In8(cmd + 7);
++        if (s & kStBsy) continue;
++        if (!s || s == 0xff) return KErrNotReady;
++        if (s & (kStErr | kStDf)) return KErrGeneral;
++        if (!(s & kStDrq)) return KErrNone;
++        }
++    return KErrTimedOut;
++    }
++
+ TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf)
+     {
+     if (aDev >= 4)
+--- a/qemu-port/variant/qemu_ahci.cpp
++++ b/qemu-port/variant/qemu_ahci.cpp
+@@ -20,10 +20,15 @@
+ 
+ namespace
+     {
++#ifdef R1_STORAGE_HOST_TEST
++    static TUint32 Rd32(TUint32);
++    static void Wr32(TUint32,TUint32);
++#else
+     static inline TUint32 Rd32(TUint32 aAddr)
+         { return *(volatile TUint32*)aAddr; }
+     static inline void Wr32(TUint32 aAddr, TUint32 aVal)
+         { *(volatile TUint32*)aAddr = aVal; }
++#endif
+ 
+     enum
+         {
+@@ -136,9 +141,15 @@
+         prd[14] = (TUint8)(dbc >> 16); prd[15] = 0;
+         // Clear port IS, issue slot, poll CI.
+         Wr32(PReg(aPort, kPxIs), 0xFFFFFFFFu);
++        __asm__ __volatile__("" : : : "memory"); // publish command table before CI
+         Wr32(PReg(aPort, kPxCi), kSlotBit);
+         for (TInt i = 0; i < kSpinCmd; ++i)
+             {
++            if ((aCmd == kCmdFlush || aCmd == kCmdFlushExt) &&
++                ((Rd32(PReg(aPort,kPxIs)) & 0x7d000000u) ||
++                 (!(Rd32(PReg(aPort,kPxTfd)) & 0x80u) &&
++                  (Rd32(PReg(aPort,kPxTfd)) & 0x21u))))
++                return KErrGeneral;
+             if (!(Rd32(PReg(aPort, kPxCi)) & kSlotBit))
+                 {
+                 TUint32 tfd = Rd32(PReg(aPort, kPxTfd));
+@@ -375,6 +386,25 @@
+     return KErrNone;
+     }
+ 
++TInt AhciFlush(int aDev)
++    {
++    if (aDev < 0 || aDev >= (int)kMaxPorts) return KErrArgument;
++    if (!AhciPresent(aDev)) return KErrNotReady;
++    Port& pt = gPorts[aDev];
++    // Do not overwrite any in-flight command list/table. A timed out command
++    // stays outstanding; callers must quarantine, not recycle its DMA memory.
++    if (Rd32(PReg(pt.port,kPxCi)) || Rd32(PReg(pt.port,kPxSact))) return KErrInUse;
++    TInt r = WaitClear(PReg(pt.port,kPxTfd),0x88u); // BSY|DRQ
++    if (r) return r;
++    r = RunCmd(pt.port,pt.lba48 ? kCmdFlushExt : kCmdFlush,0,0,0,0,0,EFalse);
++    if (r) return r;
++    TUint32 tfd = Rd32(PReg(pt.port,kPxTfd));
++    if (tfd & 0x21u) return KErrGeneral; // ERR or DF
++    if (tfd & 0x88u) return KErrTimedOut; // CI clear alone is not completion
++    if (Rd32(PReg(pt.port,kPxIs)) & 0x7d000000u) return KErrGeneral;
++    return KErrNone;
++    }
++
+ TInt AhciRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf)
+     {
+     return AhciIo(aDev, aLba, aCount, aBuf, EFalse);
+--- a/qemu-port/variant/qemu_variant.h
++++ b/qemu-port/variant/qemu_variant.h
+@@ -65,6 +65,7 @@
+ const char* AtaModel(int aDev);
+ TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf);
+ TInt AtaWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf);
++TInt AtaFlush(int aDev); // synchronous correct-device cache flush; errors propagate
+ 
+ // AHCI SATA driver (variant/qemu_ahci.cpp). Ports present as Fat devices
+ // 4..7 behind the Ata* dispatch below. DMA, polled.
+@@ -75,6 +76,7 @@
+ const char* AhciModel(int aDev);
+ TInt AhciRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf);
+ TInt AhciWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf);
++TInt AhciFlush(int aDev); // AHCI-local port index 0..3
+ void AhciInfo();
+ 
+ // xHCI USB3, polled command/event/transfer rings and one direct-root-port

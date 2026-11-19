@@ -1,0 +1,42 @@
+# R1 console staging asset manifest (card 26). Private, local-only; no redistribution.
+# Hashes and sizes are the accepted card-24 (HAL v2 / EKDATA v3) evidence values.
+# Assets are staged under sys/bin/ and must be byte-identical to the audited images.
+
+[HAL.DLL]
+path = sys/bin/HAL.DLL
+sha256 = 4a95dbe01d201b8a0b347e0e5c4cc39f798a7d89d6e163d7f63d71d3a04cb150
+size = 10960
+uid1 = 0x10000079
+uid2 = 0x1000008d
+uid3 = 0x100039e8
+sid = 0x100039e8
+vid = 0x70000001
+caps0 = 0x000fffff
+caps1 = 0x00000000
+exports = 6
+data_size = 0
+bss = 0
+data_reloc = 0
+immutable = true
+
+[EKDATA.DLL]
+path = sys/bin/EKDATA.DLL
+sha256 = 2e11e7287325a7829a28b7cb510c5605390e57b1953a0b16704b8210c4aced0f
+size = 2780
+uid1 = 0x10000079
+uid2 = 0x1000008d
+uid3 = 0x100039e0
+sid = 0x100039e0
+vid = 0x70000001
+exports = 3
+data_size = 0
+bss = 0
+data_reloc = 0
+immutable = true
+
+[EKDATA.00]
+path = sys/bin/EKDATA.00
+sha256 = 2e11e7287325a7829a28b7cb510c5605390e57b1953a0b16704b8210c4aced0f
+size = 2780
+alias_of = EKDATA.DLL
+immutable = true

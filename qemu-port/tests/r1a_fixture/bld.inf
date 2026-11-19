@@ -1,0 +1,13 @@
+// R1A_FIXTURE - port-authored R1-A fixture (NOT an upstream test).
+// UNCOMPILED / UNRUN. See README.md.
+//
+// Layout mirrors kerneltest/e32test/group/bld.inf (t_cactw): the MMP is listed
+// under PRJ_TESTMMPFILES and is intended to be built with "-c x86_urel.test".
+
+PRJ_PLATFORMS
+
+BASEDEFAULT
+
+PRJ_TESTMMPFILES
+
+r1a_fixture.mmp

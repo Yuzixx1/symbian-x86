@@ -159,11 +159,12 @@ build/user/PORTFILESRV.E32: build/user/portfilesrv.elf tools/elf2e32.py tools/mk
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
-# S-02: service manager E32 (ordered startup + supervision + shutdown).
-build/user/svcmgr.o: user/svcmgr.cpp user/runtime.h user/ipc.h | build/user
-	$(CXX) $(USER_FLAGS) -Iuser -c $< -o $@
+# S-02: service manager E32 (ordered startup + supervision + shutdown, plus
+# FileServer host mode). Links the EUSER/CServer2 shim and the R1 FS engine.
+build/user/svcmgr.o: user/svcmgr.cpp user/e32base.h user/e32cmn.h user/f32ver.h user/ipc.h user/runtime.h fs/r1_fs_server.h fs/r1_fs_core.h | build/user
+	$(CXX) $(USER_FLAGS) -Iuser -Ifs -c $< -o $@
 
-build/user/svcmgr.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/svcmgr.o user/link.ld
+build/user/svcmgr.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/euser_shim.o build/user/svcmgr.o build/user/malloc.o build/user/r1_fs_core.o build/user/r1_fs_server.o user/link.ld
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/SVCMGR.E32: build/user/svcmgr.elf tools/elf2e32.py tools/mke32.py

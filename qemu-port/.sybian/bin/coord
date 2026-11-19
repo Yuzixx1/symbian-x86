@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""Coordinator CLI for .sybian coordination app.
+
+Usage:
+  python3 .sybian/bin/coord dispatch <card-id> <tier> <owned-path> [owned-path...]
+  python3 .sybian/bin/coord collect
+  python3 .sybian/bin/coord wave <n>
+  python3 .sybian/bin/coord status
+  python3 .sybian/bin/coord ask <question>
+  python3 .sybian/bin/coord docs
+"""
+import json
+import os
+import shutil
+import sys
+from datetime import datetime, timezone
+
+SYBIAN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COORD = os.path.join(SYBIAN, "coordinator")
+WORKERS = os.path.join(SYBIAN, "workers")
+STATE_PATH = os.path.join(COORD, "state.json")
+CARDS_DIR = os.path.join(COORD, "cards")
+WAVES_DIR = os.path.join(COORD, "waves")
+HANDOFFS_DIR = os.path.join(COORD, "handoffs")
+INBOX_DIR = os.path.join(WORKERS, "inbox")
+OUTBOX_DIR = os.path.join(WORKERS, "outbox")
+LOCK_PATH = os.path.join(SYBIAN, "qemu-slot.lock")
+
+REAL_DECISION_KEYWORDS = ("abi", "proof", "hardware", "blocker", "qemu", "lock")
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_state():
+    if not os.path.exists(STATE_PATH):
+        return {"wave": 0, "qemu_lock": None, "cards": {}, "dependencies": {},
+                "exclusivity": {}, "updated_at": None}
+    with open(STATE_PATH) as f:
+        return json.load(f)
+
+
+def save_state(state):
+    state["updated_at"] = now_iso()
+    with open(STATE_PATH, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def cmd_dispatch(args):
+    if len(args) < 3:
+        print("Usage: coord dispatch <card-id> <tier> <owned-path> [owned-path...]")
+        return 1
+    card_id = args[0]
+    tier = args[1]
+    if tier not in ("strong", "weak"):
+        print(f"Error: tier must be 'strong' or 'weak', got '{tier}'")
+        return 1
+    owned_paths = args[2:]
+
+    state = load_state()
+    brief_path = os.path.join(CARDS_DIR, f"{card_id}.json")
+    inbox_path = os.path.join(INBOX_DIR, f"{card_id}.brief.md")
+
+    card = {
+        "id": card_id,
+        "tier": tier,
+        "owned_paths": owned_paths,
+        "dependencies": state["dependencies"].get(card_id, []),
+        "exclusivity": state["exclusivity"].get(card_id, []),
+        "constraints": [
+            "Do not modify proof apps under apps/proof/",
+            "Do not run hardware tests",
+            "Do not change the QEMU lock file"
+        ],
+        "deliverables": list(owned_paths),
+        "effort_estimate": "tbd",
+        "status": "dispatched",
+        "wave": state["wave"],
+        "updated_at": now_iso(),
+    }
+    with open(brief_path, "w") as f:
+        json.dump(card, f, indent=2)
+
+    lines = [
+        f"Card ID: {card_id}",
+        f"Tier: {tier}",
+        f"Owned paths: {', '.join(owned_paths)}",
+        f"Dependencies: {', '.join(card['dependencies']) or '(none)'}",
+        f"Exclusivity: {', '.join(card['exclusivity']) or '(none)'}",
+        "Constraints:",
+    ]
+    for c in card["constraints"]:
+        lines.append(f"- {c}")
+    lines.append("Deliverables:")
+    for d in card["deliverables"]:
+        lines.append(f"- {d}")
+    lines.append(f"Effort estimate: {card['effort_estimate']}")
+    lines.append("")
+    with open(inbox_path, "w") as f:
+        f.write("\n".join(lines))
+
+    state["cards"][card_id] = {
+        "status": "dispatched",
+        "tier": tier,
+        "wave": state["wave"],
+        "owned_paths": owned_paths,
+    }
+    save_state(state)
+
+    print(f"Dispatched {card_id} (tier={tier}, wave={state['wave']})")
+    print(f"  brief: {inbox_path}")
+    print(f"  card:  {brief_path}")
+    return 0
+
+
+def cmd_collect(args=None):
+    state = load_state()
+    if not os.path.isdir(OUTBOX_DIR):
+        print("No outbox directory yet.")
+        return 0
+
+    handoff_files = sorted(
+        f for f in os.listdir(OUTBOX_DIR) if f.endswith(".handoff.md")
+    )
+    if not handoff_files:
+        print("No handoffs in outbox.")
+        return 0
+
+    archive_dir = os.path.join(HANDOFFS_DIR)
+    os.makedirs(archive_dir, exist_ok=True)
+
+    for fname in handoff_files:
+        card_id = fname.replace(".handoff.md", "")
+        src = os.path.join(OUTBOX_DIR, fname)
+        with open(src) as f:
+            content = f.read()
+
+        status = "complete"
+        for line in content.splitlines():
+            if line.lower().startswith("status:"):
+                status = line.split(":", 1)[1].strip().lower()
+                break
+
+        if card_id in state["cards"]:
+            state["cards"][card_id]["status"] = status
+            state["cards"][card_id]["updated_at"] = now_iso()
+
+        dst = os.path.join(archive_dir, fname)
+        shutil.move(src, dst)
+        print(f"Collected {card_id} -> {status} (archived to handoffs/)")
+
+    save_state(state)
+    return 0
+
+
+def cmd_wave(args):
+    if not args:
+        print("Usage: coord wave <n>")
+        return 1
+    try:
+        n = int(args[0])
+    except ValueError:
+        print(f"Error: wave must be an integer, got '{args[0]}'")
+        return 1
+
+    state = load_state()
+    state["wave"] = n
+    save_state(state)
+
+    # Dispatch any cards whose dependencies are all complete and not yet dispatched.
+    dispatched = []
+    for card_id, info in list(state["cards"].items()):
+        if info["status"] == "dispatched":
+            continue
+        deps = state["dependencies"].get(card_id, [])
+        if all(state["cards"].get(d, {}).get("status") in ("complete",)
+               for d in deps):
+            # mark ready-to-dispatch; actually dispatch via writing brief
+            info["status"] = "dispatched"
+            info["wave"] = n
+            card_path = os.path.join(CARDS_DIR, f"{card_id}.json")
+            if os.path.exists(card_path):
+                with open(card_path) as f:
+                    card = json.load(f)
+                card["status"] = "dispatched"
+                card["wave"] = n
+                card["updated_at"] = now_iso()
+                with open(card_path, "w") as f:
+                    json.dump(card, f, indent=2)
+            inbox_path = os.path.join(INBOX_DIR, f"{card_id}.brief.md")
+            if os.path.exists(inbox_path):
+                with open(inbox_path) as f:
+                    existing = f.read()
+                # rewrite status line placeholder not needed; brief already exists
+            dispatched.append(card_id)
+
+    save_state(state)
+    print(f"Wave {n} started.")
+    if dispatched:
+        print("Ready/dispatched cards: " + ", ".join(dispatched))
+    else:
+        print("No new cards ready to dispatch (check dependencies).")
+    return 0
+
+
+def cmd_status(args=None):
+    state = load_state()
+    lock = state.get("qemu_lock")
+    print(f"Wave: {state['wave']}")
+    print(f"QEMU lock holder: {lock or '(none)'}")
+    print("Cards:")
+    if not state["cards"]:
+        print("  (none)")
+    for card_id, info in sorted(state["cards"].items()):
+        print(f"  {card_id}: status={info['status']} tier={info['tier']} "
+              f"wave={info.get('wave')} deps={info.get('dependencies', [])}")
+    return 0
+
+
+def cmd_ask(args):
+    if not args:
+        print("Usage: coord ask <question>")
+        return 1
+    question = " ".join(args)
+    is_real = any(k in question.lower() for k in REAL_DECISION_KEYWORDS)
+    print(f"QUESTION FOR OWNER: {question}")
+    if is_real:
+        print("[Flagged as real decision — ABI / proof-app / hardware / blocker.]")
+    else:
+        print("[Routine question — owner may batch.]")
+    print("(In a live chat, the coordinator skill pings the owner via the question tool.)")
+    return 0
+
+
+def cmd_docs(args=None):
+    state = load_state()
+    lines = ["# Coordination State", ""]
+    lines.append(f"Wave: {state['wave']}")
+    lines.append(f"QEMU lock holder: {state.get('qemu_lock') or '(none)'}")
+    lines.append("")
+    lines.append("## Cards")
+    if not state["cards"]:
+        lines.append("(none)")
+    for card_id, info in sorted(state["cards"].items()):
+        lines.append(f"- {card_id}: {info['status']} (tier={info['tier']}, "
+                     f"wave={info.get('wave')})")
+    lines.append("")
+    lines.append(f"Updated: {state.get('updated_at')}")
+    doc_path = os.path.join(COORD, "planning.md")
+    with open(doc_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Synced planning markdown -> {doc_path}")
+    return 0
+
+
+COMMANDS = {
+    "dispatch": cmd_dispatch,
+    "collect": cmd_collect,
+    "wave": cmd_wave,
+    "status": cmd_status,
+    "ask": cmd_ask,
+    "docs": cmd_docs,
+}
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return 1
+    cmd = argv[1]
+    rest = argv[2:]
+    if cmd not in COMMANDS:
+        print(f"Unknown command: {cmd}")
+        print("Available: " + ", ".join(sorted(COMMANDS)))
+        return 1
+    return COMMANDS[cmd](rest)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
