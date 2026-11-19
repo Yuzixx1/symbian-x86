@@ -172,8 +172,8 @@ def main():
                 before = pos
                 pos = run(vm, pos, 'exits', b'IPCSRV')
                 ring = read_range(before, pos)
-                assert f'id={victim}' in ring, f'cycle {cycle}: victim {victim} not in exits'
-                assert f'id={server}' in ring, f'cycle {cycle}: server {server} not in exits'
+                assert f'id={victim} ' in ring, f'cycle {cycle}: victim {victim} not in exits'
+                assert f'id={server} ' in ring, f'cycle {cycle}: server {server} not in exits'
                 print(f'cycle {cycle}: clients={clients} victim={victim} '
                       f'server={server} recorded in exit ring')
 
