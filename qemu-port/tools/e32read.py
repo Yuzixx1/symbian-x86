@@ -216,7 +216,7 @@ def main() -> int:
         if reason:
             return fail(f"{name} {reason}")
 
-    # pilot import section walk (must agree with E32Validate twin)
+    # import section walk (must agree with E32Validate twin, incl. PE2)
     if imp_off:
         (isize,) = struct.unpack_from("<I", blob, imp_off)
         if isize < 22 or imp_off + 4 + isize > uncompressed:
@@ -224,22 +224,49 @@ def main() -> int:
         sec = imp_off + 4
         (name_off,) = struct.unpack_from("<I", blob, sec)
         (nimp,) = struct.unpack_from("<i", blob, sec + 4)
-        if nimp < 2 or nimp > 4:
-            return fail("pilot serves ordinals 1-4 (EUSER Exit/PutC/CmdLen/+)")
-        if isize < 14 + 4 * nimp:
-            return fail("import section size too small for import count")
+        is_pe2 = (imp_fmt == KImageImpFmt_PE2)
+        if is_pe2:
+            # PE2: the section holds the DLL name only; the IAT lives at the
+            # end of the text section, pre-linked with 1-based ordinals.
+            if not (1 <= nimp <= 16):
+                return fail("PE2 import count out of range")
+            if isize < 8 + 6:
+                return fail("PE2 import section too small for DLL name")
+            if text_size < 0 or text_size + 4 * nimp > code_size:
+                return fail("PE2 IAT outside code text gap")
+            for k in range(nimp):
+                (ordinal,) = struct.unpack_from("<I", blob,
+                                                code_off + text_size + 4 * k)
+                if ordinal == 0 or ordinal > 65535:
+                    return fail("PE2 import ordinal invalid")
+        else:
+            if nimp < 2 or nimp > 4:
+                return fail("pilot serves ordinals 1-4 (EUSER Exit/PutC/CmdLen/+)")
+            if isize < 14 + 4 * nimp:
+                return fail("import section size too small for import count")
+            seen = set()
+            for k in range(nimp):
+                (s,) = struct.unpack_from("<I", blob, sec + 8 + 4 * k)
+                if (s & 3) or not (text_size <= s and s + 4 <= code_size):
+                    return fail("IAT slot outside code text gap")
+                if s in seen:
+                    return fail("IAT slots alias")
+                seen.add(s)
         if name_off + 6 > isize + 4:
             return fail("import dll name outside section")
-        if blob[imp_off + name_off:imp_off + name_off + 6] != b"EUSER\x00":
+        nm_off = imp_off + name_off
+        if is_pe2:
+            # mangled PE2 name, e.g. 'euser{000a0000}[100039e5].dll\0'
+            nlen = 0
+            while (nlen < 64 and nm_off + nlen < uncompressed
+                   and blob[nm_off + nlen]):
+                nlen += 1
+            if (nlen < 4 or nm_off + nlen >= uncompressed
+                    or blob[nm_off + nlen] != 0
+                    or blob[nm_off + nlen - 4:nm_off + nlen] != b".dll"):
+                return fail("PE2 provider DLL name invalid")
+        elif blob[nm_off:nm_off + 6] != b"EUSER\x00":
             return fail("unknown provider DLL (pilot: EUSER only)")
-        seen = set()
-        for k in range(nimp):
-            (s,) = struct.unpack_from("<I", blob, sec + 8 + 4 * k)
-            if (s & 3) or not (text_size <= s and s + 4 <= code_size):
-                return fail("IAT slot outside code text gap")
-            if s in seen:
-                return fail("IAT slots alias")
-            seen.add(s)
 
     # export description tail (f32image.h ValidateExportDescription)
     # packed offsetof(iExportDescSize) = 152; NoHoles tail = 2+1+1 -> 4

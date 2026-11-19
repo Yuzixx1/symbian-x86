@@ -36,6 +36,12 @@ def total_done():
     return Path(LOG).read_text(errors='replace').count(DONE)
 
 
+def done_tail_ids(n):
+    """Instance ids of the last n 'CPSTRESS: done <id>' lines in the log."""
+    text = Path(LOG).read_text(errors='replace')
+    return [int(m) for m in re.findall(r'CPSTRESS: done(\d+) \d+', text)][-n:]
+
+
 def wait_for_done(target, timeout=30):
     until = time.monotonic() + timeout
     while time.monotonic() < until:
@@ -130,16 +136,33 @@ def main():
                 pos, srv = ps_ids(vm, pos, 'IPCSRV')
                 assert len(srv) == 1, f'cycle {cycle}: server ids {srv}'
                 server = srv[0]
+                victim_launch = pos
                 for i in range(1, CLIENTS + 1):
                     pos = run(vm, pos, f'CPSTRESS.E32 {i}', b'CPSTRESS: start')
+                    if i == VICTIM:
+                        victim_launch = pos
                 pos, clients = ps_ids(vm, pos, 'CPSTRESS')
                 assert len(clients) == CLIENTS, f'cycle {cycle}: client ids {clients}'
 
                 # Kill one client mid-test; the others must still complete
                 # every async request (no lost request-semaphore completions).
+                # Prove the victim is still in-flight: it made progress but
+                # has not emitted its completion marker yet.
                 victim = clients[VICTIM - 1]
+                in_flight = read_range(victim_launch, pos)
+                assert f'CPSTRESS: tick{VICTIM} ' in in_flight, (
+                    f'cycle {cycle}: victim made no progress before kill')
+                assert f'CPSTRESS: done{VICTIM} ' not in in_flight, (
+                    f'cycle {cycle}: victim finished before kill (not mid-test)')
                 pos = run(vm, pos, f'kill {victim}', f'killed {victim}'.encode())
                 wait_for_done(done_prior + CLIENTS - 1)
+                # Every surviving client must have drained all its async
+                # requests: a lost request-semaphore completion would hang its
+                # ipc_wait_for and leave it without a 'done' marker.
+                tail = done_tail_ids(CLIENTS - 1)
+                survivors = [i for i in range(1, CLIENTS + 1) if i != VICTIM]
+                assert sorted(tail) == sorted(survivors), (
+                    f'cycle {cycle}: done ids {tail} != survivors {survivors}')
 
                 # Kill the session-owning server; a fresh client must fail to connect.
                 pos = run(vm, pos, f'kill {server}', f'killed {server}'.encode())

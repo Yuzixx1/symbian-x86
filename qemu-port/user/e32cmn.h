@@ -53,7 +53,7 @@ const TInt KErrNotReady      = -18;
 const TInt KErrCorrupt       = -20;
 const TInt KErrAccessDenied  = -21;
 const TInt KErrNotSupported  = -49;
-const TInt KRequestPending   = (TInt)0x80000000u;
+const TInt KRequestPending   = (TInt)0x80000001u;  /* genuine -KMaxTInt; matches runtime.h/ipc.c/e32base.h */
 
 /* Genuine EUSER thread priorities */
 enum TThreadPriority {
