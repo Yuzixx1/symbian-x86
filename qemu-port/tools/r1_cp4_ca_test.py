@@ -36,12 +36,12 @@ EUSER_DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/eus
 DEFAULT_KERNEL = "/home/yuzi/Documents/Sybian REAL/qemu-port/build/kernfull.elf"
 
 # Ordinals the fixture imports from EUSER.DLL (see tools/mke32_ca_test.py).
-# CP4 proof uses DIRECT vtable dispatch: RunL() is reached via the fixture's
-# own vtable, not via CActiveScheduler::Start()/RunIfReady() on this port.
-# 430 ctor, 428 Install, 422 RunIfReady (reserved), 425 Stop, 1091 CActive ctor,
-# 1090 SetActive, 1088 Cancel (reserved), 915 RDebug::Printf (markers),
-# 1953 memcpy (reserved), 424 Add, 617 User::RequestComplete (reserved).
-BIND_ORDS = [430, 428, 422, 425, 1091, 1090, 1088, 915, 1953, 424, 617]
+# CP4 proof uses a GENUINE Start()/Stop() round trip: RunL() is dispatched by
+# the real scheduler via the object vptr, not by direct vtable call.  The wait
+# is the genuine int 0x20 fast exec (WaitForAnyRequest), woken by EExecTimerAfter.
+# 430 ctor, 428 Install, 426 Start, 425 Stop, 1091 CActive ctor,
+# 1090 SetActive, 915 RDebug::Printf (markers), 424 Add.
+BIND_ORDS = [430, 428, 426, 425, 1091, 1090, 915, 424]
 
 # Emitted by the fixture, in order, only if the CP4 round trip succeeds.
 MARKERS = [
