@@ -19,9 +19,11 @@
 #include <kernel/x86/x86.h>
 #include <e32ldr_private.h>
 #include "qemu_variant.h"
+#include "../mmu/pd.h"  // M-03: per-process PD side-table (port-side only)
 
 extern "C" TUint8 qemu_tss[];  // 104B bootstrap TSS (bootcpu_gas.S BSS)
 static TUint8 sTssStack[4096];
+static TUint sSvcLastPid = 0;   // S-02: pid of the most recent E32Run success
 
 // First user thread needs a real TSS: our port never runs the genuine
 // X86::Init1Interrupts (which would LTR + publish X86_TSS_Ptr), so the
@@ -677,10 +679,10 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
         return r;
     if (info.iUid1 != 0x1000007au)
         return KErrNotSupported;  // EXEC must never start a DLL as a process
-    // Both per-process tables must have room: sProcs (CWD) and sExecs
-    // (code-seg reaper). Failing before ProcessCreate avoids untracked
-    // processes and leaked segs.
-    if (!ProcExtAvailable() || !ExecRecAvailable()) return KErrOverflow;
+    // All three per-process tables must have room: sProcs (CWD), sExecs
+    // (code-seg reaper) and the M-03 PD pool. Failing before ProcessCreate
+    // avoids untracked processes and leaked segs.
+    if (!ProcExtAvailable() || !ExecRecAvailable() || !PdAvail()) return KErrOverflow;
     // Resolve DLL imports before creating the process, so a missing
     // export fails fast without a stillborn process left behind.
     TInt dllR = KErrNone;
@@ -774,6 +776,17 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     if (!proc && cmd)
         delete cmd;  // NewProcess failed: ownership never transferred
     KPrintf("e32run: ProcessCreate r=%d run=%x proc=%x\r\n", r, pinfo.iCodeRunAddress, proc);
+    if (r == KErrNone && proc)
+        {
+        sSvcLastPid = (TUint)proc->iId;  // S-02: hand pid back to the launch exec
+        // M-03 step 2: allocate the process page directory before Resume().
+        // Static 4K-aligned pool makes this infallible after the PdAvail()
+        // pre-check; log PD physical so CR3 switching can be verified later.
+        TInt pdR = PdCreate(proc, pinfo.iCodeRunAddress, (TUint)info.iCodeSize,
+                            pinfo.iDataRunAddress, (TUint)(info.iDataSize + info.iBssSize),
+                            0, (TUint)info.iStackSize);
+        KPrintf("e32run: PdCreate r=%d PD=%x\r\n", pdR, PdPhys(proc));
+        }
     if (r == KErrNone)
         {
         TUint8* codeRun = (TUint8*)pinfo.iCodeRunAddress;
@@ -1010,6 +1023,7 @@ TInt E32Reap()
             }
         if (dead)
             {
+            PdDestroy(p);  // M-03: release the PD side-table row
             ProcExtRemove(p);
             sExecs[i].iProc = NULL; sExecs[i].iSeg = NULL;
             sExecs[i].iName[0] = 0;
@@ -1062,3 +1076,103 @@ TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName)
     NKern::ThreadLeaveCS();
     return EFalse;
 }
+
+// --- S-02: service-manager launch / supervision exec handlers ---------------
+// Re-expose E32Run (and its death primitives) to the user-mode svcmgr as a
+// trusted exec. The genuine slow exec table is generated in kernelhwsrv (which
+// is read-only here), so SvcMgrExecInstall() repurposes three test-only slots
+// (268/269/270) at boot. kernelhwsrv source is not touched. Flags=0: the
+// callees enter CS themselves (as the shell's RunImage path does).
+extern const TUint32 EpocSlowExecTable[];
+namespace { TUint8 sSvcImg[256 * 1024]; }
+
+static TInt SvcDesc(TInt aDesc, TBuf8<160>& aOut)
+    {
+    if (!aDesc) return KErrArgument;
+    Kern::KUDesGet(aOut, *(const TDesC8*)aDesc);  // TDesC8: {type|length, ptr}
+    return aOut.Length() ? KErrNone : KErrArgument;
+    }
+
+// exec 268: launch(image-path desc, cmdline desc) -> new pid (>0), or error.
+static TInt SvcMgrLaunchExec(TInt aPath, TInt aCmd)
+    {
+    TBuf8<160> path;
+    TInt r = SvcDesc(aPath, path);
+    if (r != KErrNone) return r;
+    char p[161];
+    TUint n = 0;
+    while (n < (TUint)path.Length() && n < 160) { p[n] = (char)path[n]; ++n; }
+    p[n] = 0;
+    char cmd[161];
+    const char* cmdLine = 0;
+    if (aCmd)
+        {
+        TBuf8<160> c;
+        Kern::KUDesGet(c, *(const TDesC8*)aCmd);
+        if (c.Length())
+            {
+            TUint k = 0;
+            while (k < (TUint)c.Length() && k < 160) { cmd[k] = (char)c[k]; ++k; }
+            cmd[k] = 0;
+            cmdLine = cmd;
+            }
+        }
+    // E32Run allocates TProcessCreateInfo before its own ThreadEnterCS, so
+    // the caller must already hold CS (as the shell's RunImage path does).
+    NKern::ThreadEnterCS();
+    char prev = FatCurLetter();
+    if (!prev) FatUse('C');
+    TUint got = 0;
+    r = FatReadPath(p, sSvcImg, sizeof(sSvcImg), got);
+    if (prev) FatUse(prev);
+    if (r == KErrNone)
+        r = E32Run(sSvcImg, got, p, cmdLine);
+    NKern::ThreadLeaveCS();
+    if (r != KErrNone)
+        { KPrintf("SvcMgr: launch %s r=%d\r\n", p, r); return r; }
+    KPrintf("SvcMgr: launch %s pid=%u\r\n", p, sSvcLastPid);
+    return (TInt)sSvcLastPid;
+    }
+
+// exec 269: kill(pid, 0) -> E32Kill result.
+static TInt SvcMgrKillExec(TInt aPid, TInt)
+    { return E32Kill((TUint)aPid); }
+
+// exec 270: ctl(op, arg) — op 0: dead(pid)?1:0; op 1: E32Reap() count.
+static TInt SvcMgrCtlExec(TInt aOp, TInt aArg)
+    {
+    if (aOp == 0) return E32ProcessDead((TUint)aArg) ? 1 : 0;
+    if (aOp == 1) return E32Reap();
+    return KErrArgument;
+    }
+
+void SvcMgrExecInstall()
+    {
+    TUint32* tab = (TUint32*)EpocSlowExecTable;
+    if (tab[0] < 271u)  // unexpected table size: refuse to patch
+        { KPrintf("SvcMgr: exec table count %u, install skipped\r\n", tab[0]); return; }
+    const TInt slots[3] = {268, 269, 270};
+    TInt (*fns[3])(TInt, TInt) = {&SvcMgrLaunchExec, &SvcMgrKillExec, &SvcMgrCtlExec};
+    for (TInt i = 0; i < 3; ++i)
+        {
+        TInt s = slots[i];
+        tab[3 + 2 * (TUint)s] = 0;  // flags: no claim/preprocess/extra args
+        tab[4 + 2 * (TUint)s] = (TUint32)(TLinAddr)fns[i];
+        }
+    KPrintf("SvcMgr: launch execs installed (268/269/270)\r\n");
+    }
+
+// Boot-time launch of SVCMGR.E32 — mirrors the shell's RunImage load path.
+void SvcMgrBootLaunch()
+    {
+    char prev = FatCurLetter();
+    if (!prev) FatUse('C');
+    TUint got = 0;
+    TInt r = FatReadPath("\\SVCMGR.E32", sSvcImg, sizeof(sSvcImg), got);
+    if (prev) FatUse(prev);
+    if (r != KErrNone)
+        { KPrintf("SvcMgr: SVCMGR.E32 not found r=%d\r\n", r); return; }
+    char name[] = "SVCMGR.E32";
+    r = E32Run(sSvcImg, got, name, 0);
+    KPrintf("SvcMgr: boot launch r=%d pid=%u\r\n", r, sSvcLastPid);
+    }

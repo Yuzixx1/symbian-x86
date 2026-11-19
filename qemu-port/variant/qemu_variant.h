@@ -190,6 +190,9 @@ TInt E32Kill(TUint aId);     // die by container id (never the kernel)
 TInt E32Reap();              // post-mortem code-seg cleanup, returns count
 void E32PrintExits();        // ring of recent exit records (name/id/type/reason)
 TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName);
+// S-02 service manager: trusted launch/supervision execs + boot launch.
+void SvcMgrExecInstall();    // repurpose exec slots 268/269/270 -> launch/kill/ctl
+void SvcMgrBootLaunch();     // load + E32Run \SVCMGR.E32 at boot
 TBool E32ProcessAlive(TUint aId);  // still in the process container?
 TBool E32ProcessDead(TUint aId);   // reaper predicate: husks count as dead
 void VgaTeletype(char aC);

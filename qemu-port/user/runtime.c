@@ -70,6 +70,81 @@ int time_now(void)
 
 unsigned random32(void) { return (unsigned)exec0(11); }
 
+/* ------------------------------------------------------------------ wait/exit
+ * Genuine logon executives. The kernel stores our TRequestStatus pointer in a
+ * TLogon and completes it (with the target's exit reason) from TLogon::CompleteAll
+ * when the last thread of the process dies, or immediately with iExitReason if
+ * the process is already exiting when the logon is posted. */
+int process_open_by_id(unsigned aId)
+{
+    return exec2(QE_EXEC_PROCESS_OPEN_BY_ID, aId, QE_OWNER_PROCESS);
+}
+
+void process_logon(int aHandle, volatile int* aStatus)
+{
+    /* SLOW_EXEC3: ECX=handle, EDX=status, EBX=rendezvous=0.
+       exec4 supplies exactly those four registers (ESI unused). */
+    exec4(QE_EXEC_PROCESS_LOGON, (unsigned)aHandle, (unsigned)aStatus, 0, 0);
+}
+
+int process_logon_cancel(int aHandle, volatile int* aStatus)
+{
+    return exec4(QE_EXEC_PROCESS_LOGON_CANCEL, (unsigned)aHandle,
+                 (unsigned)aStatus, 0, 0);
+}
+
+void thread_logon(int aHandle, volatile int* aStatus)
+{
+    exec4(QE_EXEC_THREAD_LOGON, (unsigned)aHandle, (unsigned)aStatus, 0, 0);
+}
+
+int thread_logon_cancel(int aHandle, volatile int* aStatus)
+{
+    return exec4(QE_EXEC_THREAD_LOGON_CANCEL, (unsigned)aHandle,
+                 (unsigned)aStatus, 0, 0);
+}
+
+int process_wait_exit(unsigned aPid, int* aExitReason, int* aExitType,
+                      int aTimeoutMs)
+{
+    volatile int status = QE_KREQUEST_PENDING;
+    int elapsed = 0;
+    int handle = process_open_by_id(aPid);
+    if (handle < 0)
+        return handle;
+    process_logon(handle, &status);
+    for (;;)
+        {
+        if (status != QE_KREQUEST_PENDING)
+            {
+            /* The completion woke our request semaphore; consume exactly that
+               signal (sleep_ms reposts any wakes that belonged to its timer). */
+            ipc_wait_any();
+            break;
+            }
+        if (aTimeoutMs >= 0 && elapsed >= aTimeoutMs)
+            {
+            process_logon_cancel(handle, &status);
+            if (status != QE_KREQUEST_PENDING)
+                ipc_wait_any();   /* consume KErrCancel signal */
+            exec2(QE_EXEC_HANDLE_CLOSE, (unsigned)handle, 0);
+            return QE_KERR_TIMED_OUT;
+            }
+        int step = 20;
+        if (aTimeoutMs >= 0 && elapsed + step > aTimeoutMs)
+            step = aTimeoutMs - elapsed;
+        if (step <= 0) step = 1;
+        sleep_ms(step);
+        elapsed += step;
+        }
+    if (aExitType)
+        *aExitType = exec2(QE_EXEC_PROCESS_EXIT_TYPE, (unsigned)handle, 0);
+    if (aExitReason)
+        *aExitReason = (int)status;
+    exec2(QE_EXEC_HANDLE_CLOSE, (unsigned)handle, 0);
+    return (int)status;
+}
+
 /* Genuine TChunkCreate (u32std.h): att, force, bottom, top, max, clear. */
 struct ChunkCreate { unsigned att, force_fixed; int initial_bottom, initial_top, max_size; unsigned char clear_byte; };
 #define CHUNK_GLOBAL 0x10u   /* TChunkCreate::EGlobal */

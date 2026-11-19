@@ -7,5 +7,5 @@ SECTIONS
     . = 0x00500000;
     .data : { *(.data .data.*) }
     .bss : { *(.bss .bss.*) *(COMMON) }
-    /DISCARD/ : { *(.comment) *(.note*) *(.eh_frame*) }
+    /DISCARD/ : { *(.comment) *(.note*) *(.eh_frame*) *(.gcc_except_table*) }
 }

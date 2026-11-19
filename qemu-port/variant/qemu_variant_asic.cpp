@@ -113,6 +113,12 @@ void QemuVariantAsic::Init3()
             }
         }
     }
+    // S-02: install trusted service-manager execs and launch SVCMGR.E32 at
+    // boot. The manager then starts F32/portfilesrv and supervises it in order
+    // (docs/r1_service_manager_design_v1.md). FAT is mounted above, so the
+    // image is loadable here just as the shell's RunImage loads images.
+    SvcMgrExecInstall();
+    SvcMgrBootLaunch();
     ShellSpawnFull();         // interactive console as genuine NThread
     }
 
