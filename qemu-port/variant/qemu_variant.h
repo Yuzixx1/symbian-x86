@@ -65,9 +65,15 @@ TBool PciFindClass(unsigned int aClass, unsigned int aSub,
 
 // e1000 (82540EM) polled Ethernet driver (variant/qemu_nic.cpp).
 TInt e1000_init();                                  // boot/hot init; idempotent
-TInt e1000_send(const TUint8* aBuf, TUint aLen);    // KErrNone on success
+TInt e1000_reset();                                 // MAC reset + force link up
+void e1000_read_mac(TUint8* aMac);                  // EEPROM words 0..2
+TInt e1000_init_tx();                               // legacy TX descriptor ring
+TInt e1000_init_rx();                               // legacy RX descriptor ring
+TInt e1000_tx(const TUint8* aBuf, TUint aLen);      // transmit one frame (ARP at bring-up)
+TInt e1000_send(const TUint8* aBuf, TUint aLen);    // alias of e1000_tx
 TInt e1000_recv(TUint8* aBuf, TUint aMax);          // bytes read, or 0
 TBool e1000_link_up();
+TInt e1000_irq();                                   // poll stub: ACK ICR, return bits
 
 // ATA PIO driver (variant/qemu_ata.cpp). Devices 0..3 = pri-master,
 // pri-slave, sec-master, sec-slave. LBA28, polled.
