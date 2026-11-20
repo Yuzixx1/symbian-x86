@@ -502,11 +502,22 @@ zero_next:
     movl 12(%ebx), %ecx             /* memsz - filesz = bss bytes */
     subl 8(%ebx), %ecx
     jbe zero_step
-    cmpl $0x100000, %ecx             /* sanity: BSS < 1M */
+    cmpl $0x4000000, %ecx            /* sanity: BSS < 64M (kernfull .bss ~2M) */
     ja elf_bad
     movl 4(%ebx), %edi              /* vaddr + filesz = bss start */
     addl 8(%ebx), %edi
     xorb %al, %al
+    movl $0, %eax                   /* dword fill value = 0 */
+    shrl $2, %ecx                   /* dword count */
+    jz zero_tail
+zero_dw:
+    movl %eax, %es:(%edi)
+    addl $4, %edi
+    decl %ecx
+    jnz zero_dw
+zero_tail:
+    andl $3, %ecx                   /* remainder bytes */
+    jz zero_step
 zero_byte:
     movb %al, %es:(%edi)
     incl %edi

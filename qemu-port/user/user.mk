@@ -21,6 +21,17 @@ userland: build/user/ca_test.e32
 userland: build/user/HTTPGET.E32
 userland: build/user/NTPC.E32
 userland: build/user/GUISHELL.E32
+userland: build/user/SELFTEST.E32
+
+# End-user OS self-test: one program that exercises EUSER binding, the user
+# heap, RChunk, PortFile file save/read, the IPC server/client round trip and
+# the e1000 netbridge discovery, then prints a single PASS/FAIL verdict.
+build/user/selftest.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/malloc.o build/user/selftest.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=selftest_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/SELFTEST.E32: build/user/selftest.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
 
 # S-02: service manager and the F32 service it supervises at boot.
 .PHONY: svcmgr
@@ -586,5 +597,622 @@ build/user/ps.o: user/ps.c user/runtime.h user/pshost.h | build/user
 build/user/ps.elf: build/user/start.o build/user/runtime.o build/user/ps.o user/link.ld
 	ld -m elf_i386 --emit-relocs --defsym=ps_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 build/user/PS.E32: build/user/ps.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# IFCONFIG E32: IFCONFIG-style network configuration utility. Probes the e1000
+# through the netbridge exec (247) and reports the SLIRP lease (IP/mask/GW/DNS)
+# plus the EEPROM MAC. Genuine PE2 import of EUSER.DLL ordinal 915
+# (RDebug::Printf); IAT slot ifconfig_printf_slot at 0x408000 (textSize).
+userland: build/user/IFCONFIG.E32
+build/user/ifconfig.o: user/ifconfig.c user/runtime.h user/netbridge.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/ifconfig.elf: build/user/start.o build/user/runtime.o build/user/ifconfig.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=ifconfig_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/IFCONFIG.E32: build/user/ifconfig.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ADVANCED NOTEPAD E32 -- multi-file editor with literal search/replace,
+# driven from PortCon (new/open/insert/show/find/replace/save/quit/selftest).
+# File I/O over PortFile IPC (portfilesrv); built-in insert/find/replace/save/
+# open self-test. Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf)
+# for the serial markers; IAT slot notepad_printf_slot at 0x408000 (textSize).
+userland: build/user/NOTEPAD.E32
+build/user/notepad.o: user/notepad.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/notepad.elf: build/user/start.o build/user/runtime.o build/user/notepad.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=notepad_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/NOTEPAD.E32: build/user/notepad.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# TASK MANAGER (TM) E32 -- interactive process killer. Reads the live census
+# from genuine kernel exec 241 (user/pshost.h) and kills a pid via exec 269
+# (SvcMgrKillExec -> E32Kill); PortCon commands: list / kill <pid> / selftest /
+# help / quit. Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf);
+# IAT slot taskmgr_printf_slot at 0x408000 (textSize).
+userland: build/user/TASKMGR.E32
+build/user/taskmgr.o: user/taskmgr.c user/runtime.h user/pshost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/taskmgr.elf: build/user/start.o build/user/runtime.o build/user/taskmgr.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=taskmgr_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/TASKMGR.E32: build/user/taskmgr.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SNAKE E32 -- genuine interactive 16x8 snake game driven from PortCon
+# (w/a/s/d / board / new / quit) with a deterministic food layout, growth and
+# a no-input built-in auto-demo that steers into the wall. Genuine PE2 import
+# of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot snake_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/SNAKE.E32
+build/user/snake.o: user/snake.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/snake.elf: build/user/start.o build/user/runtime.o build/user/snake.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=snake_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SNAKE.E32: build/user/snake.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# UNIT CONVERTER E32 -- interactive fixed-point (scale 1000) length/temperature/
+# mass converter driven from PortCon (len/temp/mass/help/selftest/quit) with a
+# built-in selftest (1000 m -> ft, 100 C -> F = 212, 1 kg -> lb). Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot units_printf_slot
+# at 0x408000 (textSize).
+userland: build/user/UNITS.E32
+build/user/units.o: user/units.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/units.elf: build/user/start.o build/user/runtime.o build/user/units.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=units_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/UNITS.E32: build/user/units.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SCREENSHOT E32: discovers the real VBE framebuffer via GUI slow execs
+# 249/250, paints a 64x64 patch through exec 251 (ring-0 LFB write) and saves
+# the captured raw RGBA bytes to SCREEN.RAW over PortFile IPC. Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# shot_printf_slot at 0x408000 (textSize).
+userland: build/user/SHOT.E32
+build/user/shot.o: user/shot.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/shot.elf: build/user/start.o build/user/runtime.o build/user/shot.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=shot_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SHOT.E32: build/user/shot.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# PASSWORD MANAGER / CREDENTIAL VAULT (PV) E32 -- interactive credential vault
+# driven from PortCon (unlock/lock/add/list/get/save/load/selftest/quit). Records
+# are XOR-obfuscated and persisted as VAULT.DAT over PortFile IPC (portfilesrv);
+# built-in unlock/add/list/save/load/verify self-test. Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers; IAT slot
+# pv_printf_slot at 0x408000 (textSize).
+userland: build/user/PWVAULT.E32
+build/user/pwvault.o: user/pwvault.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/pwvault.elf: build/user/start.o build/user/runtime.o build/user/pwvault.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=pv_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/PWVAULT.E32: build/user/pwvault.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# MORSE CODE tool E32: text -> International Morse (A-Z, 0-9) with encode/play
+# over PortCon plus a built-in SOS selftest. Play calls the AC97 tone exec 240
+# (600 Hz, dot 100 ms / dash 300 ms) with a graceful fallback when unavailable.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# morse_printf_slot at 0x408000 (textSize).
+userland: build/user/MORSE.E32
+build/user/morse.o: user/morse.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/morse.elf: build/user/start.o build/user/runtime.o build/user/morse.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=morse_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/MORSE.E32: build/user/morse.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# END-USER ADDRESS BOOK (AB) E32: interactive add/list/find/save/load/quit over
+# an in-memory (name, phone) book, persisted as ADDR.TXT on FAT via PortFile IPC
+# (portfilesrv), plus a built-in add/save/load/print self-test. Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers; IAT
+# slot addrbook_printf_slot at 0x408000 (textSize).
+userland: build/user/ADDRBOOK.E32
+build/user/addrbook.o: user/addrbook.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/addrbook.elf: build/user/start.o build/user/runtime.o build/user/addrbook.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=addrbook_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ADDRBOOK.E32: build/user/addrbook.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# PRIME NUMBER tool E32: genuine trial-division prime engine driven from PortCon
+# (list <n> / check <num> / primes <lo> <hi> / selftest / help / quit) with a
+# built-in self-test (first 10 primes = 2..29, 97 prime, 1-30 = 10 primes).
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial
+# markers; IAT slot primes_printf_slot at 0x408000 (textSize).
+userland: build/user/PRIMES.E32
+build/user/primes.o: user/primes.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/primes.elf: build/user/start.o build/user/runtime.o build/user/primes.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=primes_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/PRIMES.E32: build/user/primes.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# FORTUNE COOKIE E32 -- end-user app: 16 built-in one-line fortunes selected via
+# the genuine kernel MathRandom executive (exec 11) with a tick-count fallback
+# (exec 5); PortCon commands next/selftest/help/quit, built-in 3-fortune selftest.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial
+# markers; IAT slot fortune_printf_slot at 0x408000 (textSize).
+userland: build/user/FORTUNE.E32
+build/user/fortune.o: user/fortune.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/fortune.elf: build/user/start.o build/user/runtime.o build/user/fortune.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=fortune_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/FORTUNE.E32: build/user/fortune.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ASCII ART generator E32: interactive banner (built-in 5x5 pixel font for
+# A-Z/0-9) and cowsay over PortCon, with a built-in "EKA2" selftest. Genuine
+# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers;
+# IAT slot asciiart_printf_slot at 0x408000 (textSize).
+userland: build/user/ASCIIART.E32
+build/user/asciiart.o: user/asciiart.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/asciiart.elf: build/user/start.o build/user/runtime.o build/user/asciiart.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=asciiart_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ASCIIART.E32: build/user/asciiart.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# STOPWATCH / TIMER E32 -- interactive stopwatch driven from PortCon
+# (start/stop/lap/reset/show/selftest/help/quit), timed off the genuine
+# EExecTickCount executive (slow exec 5, 64 Hz system tick). Built-in selftest
+# starts, busy-waits, records two laps and stops with a nonzero elapsed time.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial
+# markers; IAT slot stopwatch_printf_slot at 0x408000 (textSize).
+userland: build/user/STOPWATCH.E32
+build/user/stopwatch.o: user/stopwatch.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/stopwatch.elf: build/user/start.o build/user/runtime.o build/user/stopwatch.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=stopwatch_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/STOPWATCH.E32: build/user/stopwatch.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# TIC-TAC-TOE E32 -- genuine interactive 3x3 game driven from PortCon
+# (new / move r c / board / selftest / quit). Human X vs a simple CPU O that
+# prefers the centre then takes the first free cell; the built-in selftest
+# plays a full game to a scripted win. Genuine PE2 import of EUSER.DLL ordinal
+# 915 (RDebug::Printf); IAT slot tictactoe_printf_slot at 0x408000 (textSize).
+userland: build/user/TICTACTOE.E32
+build/user/tictactoe.o: user/tictactoe.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/tictactoe.elf: build/user/start.o build/user/runtime.o build/user/tictactoe.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=tictactoe_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/TICTACTOE.E32: build/user/tictactoe.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# HANGMAN E32 -- genuine interactive word game driven from PortCon
+# (new / guess <letter> / board / selftest / quit).  Words come from a built-in
+# dictionary chosen with the genuine kernel MathRandom executive (exec 11) with
+# a system-clock fallback; six wrong guesses are allowed.  Built-in selftest
+# plays a winning game on the known word KERNEL.  Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot hangman_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/HANGMAN.E32
+build/user/hangman.o: user/hangman.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/hangman.elf: build/user/start.o build/user/runtime.o build/user/hangman.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=hangman_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/HANGMAN.E32: build/user/hangman.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# WORD SEARCH (E32) -- genuine interactive 10x10 word-find puzzle driven from
+# PortCon (board / find <word> / words / selftest / quit).  A fixed grid hides
+# five horizontal/vertical words; the built-in selftest finds all five.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# wordsearch_printf_slot at 0x408000 (textSize).
+userland: build/user/WORDSEARCH.E32
+build/user/wordsearch.o: user/wordsearch.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/wordsearch.elf: build/user/start.o build/user/runtime.o build/user/wordsearch.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=wordsearch_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WORDSEARCH.E32: build/user/wordsearch.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SUDOKU E32 -- end-user 9x9 sudoku game/validator driven from PortCon
+# (board / set <r> <c> <1-9> / check / solve / selftest / quit) with a built-in
+# classic puzzle, duplicate row/column/box detection and a completed solution
+# grid.  Built-in selftest checks the prefilled puzzle, places r1c3=4, checks
+# again and solves.  Genuine PE2 import of EUSER.DLL ordinal 915
+# (RDebug::Printf); IAT slot sudoku_printf_slot at 0x408000 (textSize).
+userland: build/user/SUDOKU.E32
+build/user/sudoku.o: user/sudoku.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/sudoku.elf: build/user/start.o build/user/runtime.o build/user/sudoku.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=sudoku_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SUDOKU.E32: build/user/sudoku.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# CURRENCY CONVERTER E32 -- interactive fixed-point (scale 1000) currency
+# converter with a static exchange-rate table relative to USD. PortCon commands
+# conv <amount> <from> <to> / rates / help / selftest / quit, with a built-in
+# selftest (100 USD->EUR, 100 EUR->USD round trip, 1000 JPY->USD). Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot currency_printf_slot
+# at 0x408000 (textSize).
+userland: build/user/CURRENCY.E32
+build/user/currency.o: user/currency.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/currency.elf: build/user/start.o build/user/runtime.o build/user/currency.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=currency_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/CURRENCY.E32: build/user/currency.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SOLAR SYSTEM fact viewer E32 -- interactive end-user educational app with a
+# built-in table of 8 planets (diameter / distance from Sun / day / moons) driven
+# from PortCon (planets / info <name> / selftest / help / quit).  The built-in
+# selftest prints the Earth and Jupiter fact rows. Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot solar_printf_slot at 0x408000.
+userland: build/user/SOLAR.E32
+build/user/solar.o: user/solar.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/solar.elf: build/user/start.o build/user/runtime.o build/user/solar.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=solar_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SOLAR.E32: build/user/solar.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# DICE ROLLER / RANDOM tool E32 -- end-user app driven from PortCon
+# (roll <NdN> / flip / pick <a,b,c,...> / selftest / help / quit). Randomness
+# comes from the genuine kernel MathRandom executive (exec 11) with an
+# EExecTickCount fallback (exec 5), reduced modulo faces/choices. Built-in
+# selftest rolls 2d6, flips a coin and picks from a list. Genuine PE2 import
+# of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers; IAT slot
+# dice_printf_slot at 0x408000 (textSize).
+userland: build/user/DICE.E32
+build/user/dice.o: user/dice.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/dice.elf: build/user/start.o build/user/runtime.o build/user/dice.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=dice_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DICE.E32: build/user/dice.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# BATTLESHIP E32 -- genuine interactive 8x8 game driven from PortCon
+# (new / fire r c / board / selftest / quit).  Three fixed length-3 ships,
+# deterministic CPU return fire, and a built-in selftest that sinks the whole
+# fleet for a WIN.  Genuine PE2 import of EUSER.DLL ordinal 915
+# (RDebug::Printf); IAT slot battle_printf_slot at 0x408000 (textSize).
+userland: build/user/BATTLE.E32
+build/user/battle.o: user/battle.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/battle.elf: build/user/start.o build/user/runtime.o build/user/battle.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=battle_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BATTLE.E32: build/user/battle.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# END-USER RECIPE BOOK (RB) E32 -- five built-in recipes (name, ingredients,
+# steps) driven from PortCon (list / show <name> / save / load / selftest /
+# help / quit).  Names + ingredients persist as RECIPES.TXT on FAT via PortFile
+# IPC (portfilesrv); built-in save/load/verify self-test. Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers; IAT slot
+# recipes_printf_slot at 0x408000 (textSize).
+userland: build/user/RECIPES.E32
+build/user/recipes.o: user/recipes.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/recipes.elf: build/user/start.o build/user/runtime.o build/user/recipes.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=recipes_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/RECIPES.E32: build/user/recipes.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# MOVIE DATABASE E32 -- end-user viewer over a built-in table of eight classic
+# films (title, year, director, genre); PortCon commands list / info <title-
+# substring> / genre <name> / selftest / help / quit. The built-in selftest
+# lists all eight entries and queries the Sci-Fi genre. Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot movies_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/MOVIES.E32
+build/user/movies.o: user/movies.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/movies.elf: build/user/start.o build/user/runtime.o build/user/movies.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=movies_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/MOVIES.E32: build/user/movies.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# PERIODIC TABLE viewer E32 -- interactive end-user educational app with a
+# built-in table of the first 20 elements (symbol / name / Z / atomic mass)
+# plus an iron fact row, driven from PortCon (list / info <symbol> / selftest /
+# help / quit).  The built-in selftest prints the H, C, O and Fe fact rows.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# periodic_printf_slot at 0x408000 (textSize).
+userland: build/user/PERIODIC.E32
+build/user/periodic.o: user/periodic.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/periodic.elf: build/user/start.o build/user/runtime.o build/user/periodic.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=periodic_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/PERIODIC.E32: build/user/periodic.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ZODIAC / HOROSCOPE viewer E32 -- end-user app with a built-in table of the 12
+# western signs (name / dates / element) and a deterministic daily horoscope:
+# a fixed seed mixed with the sign name through an LCG selects one of eight
+# one-line readings. PortCon commands sign <name> / list / horoscope <name> /
+# selftest / help / quit; the built-in selftest prints the Aries row + reading.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# zodiac_printf_slot at 0x408000 (textSize).
+userland: build/user/ZODIAC.E32
+build/user/zodiac.o: user/zodiac.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/zodiac.elf: build/user/start.o build/user/runtime.o build/user/zodiac.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=zodiac_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ZODIAC.E32: build/user/zodiac.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# OCEAN / GEOGRAPHY fact viewer E32 -- interactive end-user educational app with
+# a built-in table of 5 oceans (surface area / max depth) and 5 highest mountains
+# (height / range), driven from PortCon (oceans / mountains / info <name> /
+# selftest / help / quit). The built-in selftest prints the Pacific ocean and
+# Everest fact rows. Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf);
+# IAT slot ocean_printf_slot at 0x408000 (textSize).
+userland: build/user/OCEAN.E32
+build/user/ocean.o: user/ocean.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/ocean.elf: build/user/start.o build/user/runtime.o build/user/ocean.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=ocean_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/OCEAN.E32: build/user/ocean.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# FLIGHT SIMULATOR / altitude tracker E32 -- interactive aircraft state
+# (climb / descend / throttle / turn / status / autopilot / selftest / help /
+# quit) with a deterministic 5-tick autopilot and a built-in selftest.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# flight_printf_slot at 0x408000 (textSize).
+userland: build/user/FLIGHT.E32
+build/user/flight.o: user/flight.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/flight.elf: build/user/start.o build/user/runtime.o build/user/flight.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=flight_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/FLIGHT.E32: build/user/flight.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# BLACKJACK E32 -- genuine interactive card game driven from PortCon
+# (new / hit / stand / board / selftest / quit).  A fixed-seed LCG shuffles a
+# single 52-card deck; Aces count as 1/11 and faces as 10.  The built-in
+# selftest plays one full scripted hand (new/hit/stand) ending in a WIN.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# blackjack_printf_slot at 0x408000 (textSize).
+userland: build/user/BLACKJACK.E32
+build/user/blackjack.o: user/blackjack.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/blackjack.elf: build/user/start.o build/user/runtime.o build/user/blackjack.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=blackjack_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BLACKJACK.E32: build/user/blackjack.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# MUSIC SCALES E32 -- end-user educational app with a built-in equal-temperament
+# note table (C4..B4, A4=440Hz) driven from PortCon: scale <root> prints the
+# major-scale note names + frequencies, play <root> sounds the seven notes for
+# 150 ms each via the AC97 tone exec 240, plus a built-in C-major selftest.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# music_printf_slot at 0x408000 (textSize).
+userland: build/user/MUSIC.E32
+build/user/music.o: user/music.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/music.elf: build/user/start.o build/user/runtime.o build/user/music.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=music_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/MUSIC.E32: build/user/music.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# CHESS E32 -- end-user chess opening moves viewer with the built-in 8x8
+# starting position, driven from PortCon (board / moves <square> / opening
+# <name> / help / selftest / quit).  `moves` lists pseudo-legal destinations
+# and `opening` prints the Italian Game / Sicilian Defense / French Defense
+# lines.  Built-in selftest renders the board, e2 pawn moves and Italian Game.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for serial
+# markers; IAT slot chess_printf_slot at 0x408000 (textSize).
+userland: build/user/CHESS.E32
+build/user/chess.o: user/chess.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/chess.elf: build/user/start.o build/user/runtime.o build/user/chess.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=chess_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/CHESS.E32: build/user/chess.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ASTRONOMY / deep-sky fact viewer E32 -- interactive end-user educational app
+# with a built-in table of 6 deep-sky objects (name / type / distance in light
+# years / constellation), driven from PortCon (list / info <name> / selftest /
+# help / quit).  The built-in selftest prints the Andromeda Galaxy and Polaris
+# fact rows.  Markers use ord 915 (RDebug::Printf); IAT slot astro_printf_slot
+# at 0x408000 (textSize).
+userland: build/user/ASTRO.E32
+build/user/astro.o: user/astro.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/astro.elf: build/user/start.o build/user/runtime.o build/user/astro.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=astro_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ASTRO.E32: build/user/astro.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# TRIVIA QUIZ E32 -- genuine interactive multiple-choice trivia game driven
+# from PortCon (start / answer <n> / score / selftest / quit) over six built-in
+# questions.  Built-in selftest answers all six correctly for a 6/6 score.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial
+# markers; IAT slot quiz_printf_slot at 0x408000 (textSize).
+userland: build/user/QUIZ.E32
+build/user/quiz.o: user/quiz.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/quiz.elf: build/user/start.o build/user/runtime.o build/user/quiz.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=quiz_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/QUIZ.E32: build/user/quiz.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SYSTEM MONITOR E32 -- end-user system monitor: live process census via
+# genuine kernel exec 241 (user/pshost.h, op0 base / op1 refresh), ticks via
+# exec 5, simulated CPU load from tick deltas over a busy-wait, and simulated
+# memory usage from the census. PortCon commands: sample / selftest / help /
+# quit; the built-in selftest samples twice. Genuine PE2 import of EUSER.DLL
+# ordinal 915 (RDebug::Printf) for the serial markers; IAT slot
+# monitor_printf_slot at 0x408000 (textSize).
+userland: build/user/MONITOR.E32
+build/user/monitor.o: user/monitor.c user/runtime.h user/pshost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/monitor.elf: build/user/start.o build/user/runtime.o build/user/monitor.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=monitor_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/MONITOR.E32: build/user/monitor.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# HANOI E32 -- end-user Tower of Hanoi puzzle: 4 disks / 3 pegs (A/B/C) solved
+# by genuine recursion (solve [1-4] / board / help / selftest / quit) with each
+# move applied to an in-memory peg state.  Built-in selftest solves 3 disks in
+# 7 moves and renders the final peg state (all disks on C).  Genuine PE2 import
+# of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot hanoi_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/HANOI.E32
+build/user/hanoi.o: user/hanoi.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/hanoi.elf: build/user/start.o build/user/runtime.o build/user/hanoi.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=hanoi_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/HANOI.E32: build/user/hanoi.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# END-USER WORD COUNT (WC) E32 -- counts lines, whitespace-delimited words and
+# characters of a FAT text file via PortFile IPC (portfilesrv), driven from
+# PortCon (wc <file> / selftest / help / quit), with a built-in count of the
+# embedded string "Hello world\nSecond line" (2 lines, 4 words, 23 chars).
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial
+# markers; IAT slot wc_printf_slot at 0x408000 (textSize).
+userland: build/user/WC.E32
+build/user/wc.o: user/wc.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/wc.elf: build/user/start.o build/user/runtime.o build/user/wc.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=wc_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WC.E32: build/user/wc.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# TETRIS E32 -- genuine interactive 10x12 falling-block game driven from
+# PortCon (new / left / right / drop / board / selftest / quit) with one
+# deterministic 1x1 square and a built-in three-piece selftest. Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf) for the serial markers;
+# IAT slot tetris_printf_slot at 0x408000 (textSize).
+userland: build/user/TETRIS.E32
+build/user/tetris.o: user/tetris.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/tetris.elf: build/user/start.o build/user/runtime.o build/user/tetris.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=tetris_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/TETRIS.E32: build/user/tetris.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# MAZE E32 -- end-user deterministic 9x9 maze generator/solver driven from
+# PortCon (gen / show / solve / help / selftest / quit). A fixed-seed DFS carves
+# a perfect maze; BFS marks the route from (1,1) to (7,7) with '*' and reports
+# its length. Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf)
+# for the serial markers; IAT slot maze_printf_slot at 0x408000 (textSize).
+userland: build/user/MAZE.E32
+build/user/maze.o: user/maze.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/maze.elf: build/user/start.o build/user/runtime.o build/user/maze.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=maze_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/MAZE.E32: build/user/maze.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# PACMAN / maze muncher E32 -- genuine interactive end-user game driven from
+# PortCon (new / w a s d / board / selftest / quit).  An 11x9 maze of dots ('.')
+# and walls ('#') with a pac character ('@') that eats a dot for 10 points on
+# every step.  The built-in selftest performs three scripted east moves that
+# eat three dots (score=30, dots left=38).  Genuine PE2 import of EUSER.DLL
+# ordinal 915 (RDebug::Printf); IAT slot pacman_printf_slot at 0x408000.
+userland: build/user/PACMAN.E32
+build/user/pacman.o: user/pacman.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/pacman.elf: build/user/start.o build/user/runtime.o build/user/pacman.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=pacman_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/PACMAN.E32: build/user/pacman.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# CODEBREAKER / MASTERMIND E32 -- end-user game driven from PortCon
+# (new / guess <4-letter-code> / show / selftest / quit).  The computer picks a
+# 4-colour secret from the RGBYGP palette (repeats allowed); eight guesses with
+# black (right place+colour) / white (right colour, wrong place) feedback.  The
+# secret stays hidden in normal play; the built-in selftest reveals a known
+# code and solves it in three guesses through WIN.  Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot codebreak_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/CODEBREAK.E32
+build/user/codebreak.o: user/codebreak.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/codebreak.elf: build/user/start.o build/user/runtime.o build/user/codebreak.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=codebreak_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/CODEBREAK.E32: build/user/codebreak.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# WORLD TIMEZONE clock E32 -- interactive end-user world clock driven from
+# PortCon (list / now <city> / selftest / help / quit) over a built-in table of
+# 8 cities with fixed UTC offsets in minutes (Mumbai's half-hour +5:30 is
+# exact).  Local HH:MM is derived from the genuine EExecTimeNow executive
+# (exec 68) UTC time-of-day plus the city offset.  The built-in selftest prints
+# the London, Tokyo and Mumbai times.  Genuine PE2 import of EUSER.DLL ordinal
+# 915 (RDebug::Printf); IAT slot worldtime_printf_slot at 0x408000 (textSize).
+userland: build/user/WORLDTIME.E32
+build/user/worldtime.o: user/worldtime.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/worldtime.elf: build/user/start.o build/user/runtime.o build/user/worldtime.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=worldtime_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WORLDTIME.E32: build/user/worldtime.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# CONNECT-4 (E32) -- genuine interactive 6x7 game driven from PortCon
+# (new / drop <col> / board / selftest / quit). Human X drops pieces into a
+# column; a simple CPU O always plays the first column with a free cell.
+# The built-in selftest suspends the CPU and stacks four X's in column 0 for
+# a deterministic WIN. Genuine PE2 import of EUSER.DLL ordinal 915
+# (RDebug::Printf); IAT slot connect4_printf_slot at 0x408000 (textSize).
+userland: build/user/CONNECT4.E32
+build/user/connect4.o: user/connect4.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/connect4.elf: build/user/start.o build/user/runtime.o build/user/connect4.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=connect4_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/CONNECT4.E32: build/user/connect4.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SNAKE 2.0 E32 -- genuine interactive 12x8 snake with increasing difficulty
+# (one level per 5 foods, faster auto-demo) and scoring (10 points per food),
+# driven from PortCon (new / w a s d / board / selftest / quit).  The built-in
+# selftest auto-steers through three foods and into the wall for a scripted
+# GAMEOVER.  Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT
+# slot snake2_printf_slot at 0x408000 (textSize).
+userland: build/user/SNAKE2.E32
+build/user/snake2.o: user/snake2.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/snake2.elf: build/user/start.o build/user/runtime.o build/user/snake2.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=snake2_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SNAKE2.E32: build/user/snake2.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet

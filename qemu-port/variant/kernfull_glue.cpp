@@ -91,9 +91,11 @@ extern "C" void HwInit0()
     {
     QemuUart::Init();
 
-    // M-03 step 1: enable paging with the flat 32x4M identity map before the
-    // kernel heap/ROM are touched, then install the #PF and CR3-switch hooks.
-    QemuUart::Puts("QEMU-HwInit0: M-03 building flat 4G identity map...\r\n");
+    // OS-CORE: enable real 4K paging (4K PD + 32 shared 4K PTs covering the
+    // low 128 MiB, 4M fallback PDEs for high MMIO) before the kernel heap/ROM
+    // are touched, then lock kernel pages to U/S=0 and install the #PF + CR3
+    // switch hooks.
+    QemuUart::Puts("QEMU-HwInit0: building 4K PD/PT identity map...\r\n");
     Mmu_BuildIdentityMap();
     TUint cr0 = Mmu_Enable();
     QemuUart::Puts("QEMU-HwInit0: paging ");
