@@ -1,53 +1,68 @@
-# R1 NIC design v1 — D-06 findings (read-only)
+# R1 NIC design v1 — D-06 findings (read-only investigation)
 
-Read-only investigation; only this doc is created. `docs/full_os_checklist.md` (brief §9)
-does NOT exist in this checkout (referenced only in r1_abi_contract_v0.md); D-06 is defined
-in PROJECT_GOAL.md:62 and project_roadmap.md:231 as "D-06 -> N-01..N-04 NIC -> stack ->
-sockets -> apps", after console/FS. kernelhwsrv/ untouched; no make/QEMU run.
+Scope: read-only investigation. `kernelhwsrv/` frozen; no build/QEMU run. Only
+this doc is written. The implementation described in §2 was already present in
+the checkout from prior work and is NOT modified by this investigation.
+(The requested path `qemu-port/kernelhwsrv/.../ckernel.cia` does not exist: the
+real file is at workspace root `kernelhwsrv/kernel/eka/kernel/x86/ckernel.cia`.)
 
 ## 1. NIC hardware QEMU presents
-- Smoke test `tools/r1_qemu_smoke.py:144-154` boots `-M q35 -m 128` with **no explicit
-  `-netdev`/`-nic`/`-device` NIC**. QEMU's default applies: one **Intel e1000** PCI NIC
-  (class 02.00 ethernet, PCI 8086:10xx) on user-mode/SLIRP networking. README.md:404 confirms
-  `pci` scan sees "e1000". virtio-net / pcnet / rtl8139 appear only if added explicitly.
-- `variant/qemu_pci.cpp` already finds it: `PciFindClass(0x02,0x00,...)`, `PciRead32`/`PciWrite32`
-  (0xCF8/0xCFC), `PciList()` classifies class 02 as "ethernet"/"network" (:69). No consumer of
-  the network class exists.
+- Guest boots `qemu-system-i386 -M q35 -m 128 ... -netdev user,id=n0
+  -device e1000,netdev=n0` (`tools/r1_qemu_smoke.py:144-156`). Earlier checkout
+  relied on QEMU's default NIC; now explicit and deterministic (SLIRP user mode).
+- Guest NIC = Intel **82540EM e1000**, PCI class 02.00 ethernet, PCI 8086:100E,
+  BAR0 = 32-bit MMIO. `README.md:404` `pci` scan lists "e1000". virtio-net,
+  pcnet and rtl8139 appear only if explicitly requested — none are present.
+- `variant/qemu_pci.cpp`: `PciRead32/PciWrite32` via 0xCF8/0xCFC,
+  `PciFindClass(0x02,0x00,...)`, `PciList()` prints class 02 as "ethernet"/
+  "network" (:69). No other consumer of the network class existed before D-06.
 
-## 2. NIC driver code: NONE
-- Grep across qemu-port (cpp/c/h/S/py/md): only source hit is the "ethernet" string in
-  qemu_pci.cpp:69. No e1000/virtio/pcnet driver, no MAC/ARP/IPv4/ICMP/TCP/UDP, no RX/TX rings,
-  no packet buffers, no socket API. PROJECT_GOAL.md:43-44 marks NIC drivers + TCP/IP "Not started".
-  build/export/exec_enum.h has zero network execs; no ESOCK/INET DLL or network EUSER ordinals.
-- scheduler (`kernelhwsrv/.../csched.cpp`) has no network-related code.
+## 2. NIC driver code — PRESENT (prior work, already wired)
+- `variant/qemu_nic.cpp` (339 lines): polled e1000 driver — PCI vendor/device
+  probe (8086:100E), BAR0 MMIO + MEM|bus-master, global reset (CTRL.RST), SLU,
+  EERD EEPROM read (words 0..2) for MAC, RAL/RAH, 8-entry legacy TX/RX rings
+  (2048-byte buffers, identity-mapped DMA), `e1000_tx/send/recv`,
+  `e1000_link_up`, `e1000_irq` (ICR-ACK poll stub), and a
+  `__attribute__((constructor))` boot hook.
+- `qemu_variant.h:66-76` declares the full `e1000_*` API.
+- `Makefile:232-233` builds `build/qemu_nic.o`; `Makefile:274` lists it in
+  `KERNFULL_OBJS` (alongside qemu_pci/ata/ahci objects).
+- `tools/r1_qemu_smoke.py:148-149` passes `-netdev user,id=n0` and
+  `-device e1000,netdev=n0`.
+- Boot hook runs via `HwInit0`'s `__init_array` walk
+  (`kernfull_glue.cpp:119-120`) after paging + Asic creation.
+- Gaps: no `nic` shell command (`kern_shell.cpp` has pci/ata/usb only) and no
+  in-tree callers of `e1000_send`/`e1000_recv` — TX/RX is not yet exercised.
 
-## 3. Interrupt infrastructure (usable, needs one gap filled)
-- i8259 PIC remapped to 0x20/0x28 (qemu_assp.cpp:51-58); 16-slot `Interrupt::Bind/Unbind/
-  Enable/Disable/Clear/SetPriority` (qemu_variant_int.cpp:46-104); 8259 ISR-driven
-  `X86IrqDispatcher` + EOI (:110-145). Only IRQ0(tick)/1(kbd)/4(COM1) bound (:217-223).
-- GAP: legacy PCI INTA#->IRQ routing (PCI config 0x3C interrupt line/pin) is NOT wired. e1000
-  supports INTx and MSI/MSI-X; INTx uses this line, MSI-X needs APIC (not set up). Start with INTx.
+## 3. Interrupt infrastructure (usable, one gap)
+- i8259 remapped to 0x20/0x28; `Interrupt::Bind/Unbind/Enable/Disable/Clear/
+  SetPriority` (`qemu_variant_int.cpp:46-104`); ISR-driven `X86IrqDispatcher`
+  reads the in-service register, calls the bound `TIsr`, sends EOI (:110-145).
+  Only IRQ0 (tick), IRQ1 (kbd), IRQ4 (COM1) are bound (:217-223).
+- GAP: legacy PCI INTA# routing (config 0x3C line/pin) is NOT wired. e1000
+  supports INTx and MSI/MSI-X; MSI-X needs APIC (not set up). NIC is polled now;
+  `e1000_irq()` is a stub. Next: read 0x3C, `Interrupt::Bind(irq, NicIsr)`,
+  enable, ACK ICR in ISR and post a DFC for RX.
 
-## 4. Device-driver templates & init
-- qemu_ata.cpp (PIO, polled), qemu_ahci.cpp (BAR5 + MEM|bus-master at :248-254), qemu_xhci.cpp
-  (BAR0 + MEM|BM at :138-142), qemu_usb.cpp / qemu_usb_ohci.cpp — all **polled**, no IRQ wiring.
-  Good polled-bring-up base; BAR mapping pattern is reusable for e1000 MMIO.
-- MMU is identity-mapped 0-128 MiB (r1_mmu_design_v1.md:10-11), so virtual==physical for DMA
-  buffers. ckernel.cia is pure asm thread/exception glue — no device probe. Probing is driven by
-  `Asic::Init1/Init3` (qemu_variant_asic.cpp) + shell commands (`pci`,`ata`,`usb`; README §14).
-- Makefile: variant/*.cpp -> build/*.o -> KERNFULL_OBJS (Makefile:220-273). Add qemu_nic.o there
-  plus a `nic` shell command.
+## 4. Driver pattern / early init
+- qemu_ata/ahci/xhci/usb are all polled: BAR map + MEM|bus-master, no IRQ.
+  `qemu_ahci.cpp:248-254` is the BAR5 pattern e1000 mirrors with BAR0.
+- Identity map 0..128 MiB => virtual == physical for DMA buffers.
+- `ckernel.cia` (genuine, workspace root) is pure asm thread/exception glue —
+  no device probing. Probing is variant-owned (`Asic::Init1/3` + shell commands).
+  kernelhwsrv/ was not touched.
 
-## 5. Concrete next steps (N-01 = D-06 NIC)
-1. Add explicit `-netdev user,id=n0 -device e1000,netdev=n0` to r1_qemu_smoke.py for a
-   deterministic guest-visible NIC with host backend.
-2. New `variant/qemu_nic.cpp`: `PciFindClass(0x02,0x00)`, read vendor/device + BAR0 (MMIO),
-   set command reg MEM|bus-master; claim the NIC (never edit kernelhwsrv/).
-3. e1000 init: MMIO BAR, device reset, MAC address, RX/TX descriptor rings (DMA buffers in
-   identity-mapped RAM), enable receiver. Add `nic` shell command for probe/status.
-4. Polled bring-up first: TX/RX a single crafted ARP frame (matches existing polled ATA/AHCI
-   style), prove link/packet flow before interrupts.
-5. Then wire INTx: read PCI 0x3C interrupt line, `Interrupt::Bind(irq, NicIsr, ctx)`, `Enable`;
-   ISR acknowledges e1000 interrupt cause and posts a DFC for RX processing.
-6. Above NIC: ARP/IPv4/ICMP echo (N-02), UDP/TCP + ESOCK-like socket server (N-03), apps +
-   QEMU packet regression tests (N-04). Keep kernelhwsrv/ frozen; gate each step QEMU-ready.
+## 5. QEMU command line (does it pass -netdev?)
+- Yes. `r1_qemu_smoke.py:144-156`: `-M q35 -m 128`, `-netdev user,id=n0`,
+  `-device e1000,netdev=n0`, `-display none -serial stdio -kernel <elf>`,
+  ich9-ahci + ide-hd disk. User-mode SLIRP, no explicit host port forwards.
+
+## 6. Concrete next steps
+1. Add a `nic` shell command (probe/MAC/link/status) + a crafted ARP request
+   using `e1000_send`/`e1000_recv`; prove polled TX/RX against QEMU SLIRP.
+2. Wire INTx: read PCI 0x3C, `Interrupt::Bind`, `Enable`; ISR ACKs ICR and
+   posts an RX DFC. Defer MSI-X until APIC init exists.
+3. Then stack (N-02..N-04): ARP/IPv4/ICMP, UDP/TCP + `!SocketServer` IPC
+   (`docs/r1_net_design_v2.md`), DNS/DHCP (`r1_dns_design_v1.md`), user apps
+   and QEMU packet regression tests.
+4. Keep kernelhwsrv/ frozen; gate every step on a QEMU smoke run.
