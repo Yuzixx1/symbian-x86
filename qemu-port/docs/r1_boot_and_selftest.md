@@ -1,25 +1,29 @@
-# Booting the EKA2 PC OS and running the self-test
+# Booting the EKA2 PC OS (GRUB) and running the self-test
 
 ## Prerequisites
-`qemu-system-i386`, `python3`, `mkfs.fat`/`mcopy`/`mdir` (mtools), `pycdlib`.
+`qemu-system-i386`, `python3`, `mkfs.fat`/`mcopy`/`mdir` (mtools), `pycdlib`, and GRUB 2.12 tools (`grub-mkrescue`/`xorriso`) for the primary ISO.
 
-## The three ISOs in `build/`
-- `symbian-pc-full.iso` — full `kernfull` kernel, all drivers (e1000, virtio-*, AC97, VBE, PS/2, USB, AHCI); boots to interactive `EKA2>` shell + runs user E32s.
+## PRIMARY ISO: `build/symbian-grub.iso`
+GRUB 2.12 El Torito image. It auto-selects "Symbian EKA2 full kernel (genuine)" after a ~10s GRUB countdown, then boots the full `kernfull` kernel to the interactive `EKA2>` shell (user E32s load from there). Exact QEMU command:
+```
+qemu-system-i386 -M q35 -m 128 -display none -serial stdio -no-reboot -cdrom build/symbian-grub.iso -boot d -netdev user,id=n0 -device e1000,netdev=n0
+```
+Note the ~10s GRUB countdown before autoboot.
+
+## Secondary / alternate ISOs in `build/`
+- `symbian-pc-full.iso` — full `kernfull` kernel via the custom bootsect El Torito (all drivers), boots to `EKA2>`.
 - `symbian-pc.iso` — bridge kernel (multiboot), minimal console.
-- `symbian-grub.iso` — GRUB El Torito variant (pre-existing).
+- `symbian-grub-bios.iso` — GRUB BIOS variant of the GRUB image.
 
-## Boot each from CD (full kernel: type `portfilesrv` at `EKA2>` before user E32s load)
-```
-qemu-system-i386 -cdrom build/symbian-pc-full.iso -m 128 -display none -serial stdio -no-reboot -boot d
-qemu-system-i386 -cdrom build/symbian-pc.iso -m 128 -display none -serial stdio -no-reboot -boot d
-qemu-system-i386 -cdrom build/symbian-grub.iso -m 128 -display none -serial stdio -no-reboot -boot d
-```
+## Build
+- Primary GRUB ISO: `make isogrub`
+- User apps / E32s: `make userland`
 
-## Run the single self-test
-All-in-one (build + ISO + smoke + cp4 + stress + selftest): `python3 tools/r1_os_selfcheck.py`
-OR manual: build userland, stage `SELFTEST.E32` + `EUSER.DLL` on the FAT disk, boot the ISO, type `portfilesrv` then `selftest`, look for `ST: RESULT PASS`.
+## One-command test
+`python3 tools/r1_os_selfcheck.py` — builds, makes the ISO, and runs smoke + cp4 + stress + selftest.
 
-## What a pass looks like
+## Single self-test (manual)
+Stage `SELFTEST.E32` + `EUSER.DLL` on the FAT disk, boot the primary ISO, then at `EKA2>` run `portfilesrv` (optional) then `selftest`. A pass looks like:
 ```
 ST: SELFTEST START - EKA2 PC OS core services
 ST: euser OK
@@ -34,4 +38,4 @@ ST: RESULT PASS - all core services operational
 
 ## Notes
 - `kernelhwsrv/` untouched (READ-ONLY).
-- Committed as `08f4a76`, pushed to `https://github.com/Yuzixx1/symbian-x86.git` (`main`).
+- Committed and pushed to `https://github.com/Yuzixx1/symbian-x86.git` (`main`).

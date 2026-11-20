@@ -4,7 +4,7 @@
 Runs, in order and with no shell wrappers of its own:
 
   1. make build/kernfull.elf userland   (fail fast if this breaks)
-  2. make isofull                       (builds build/symbian-pc-full.iso)
+  2. make isogrub                       (builds build/symbian-grub.iso)
   3. python3 tools/r1_qemu_smoke.py
   4. python3 tools/r1_cp4_ca_test.py
   5. python3 tools/r1_cp4_ca_stress_test.py
@@ -30,7 +30,7 @@ BANNER = "EKA2 PC OS — single-command selfcheck"
 # (name, argv, timeout_seconds, fail_fast)
 STEPS = [
     ("build", ["make", "build/kernfull.elf", "userland"], 120, True),
-    ("isofull", ["make", "isofull"], 120, False),
+    ("isogrub", ["make", "isogrub"], 120, False),
     ("qemu_smoke", ["python3", "tools/r1_qemu_smoke.py"], 70, False),
     ("cp4_ca", ["python3", "tools/r1_cp4_ca_test.py"], 70, False),
     ("cp4_stress", ["python3", "tools/r1_cp4_ca_stress_test.py"], 90, False),
@@ -99,7 +99,7 @@ def run_step(name, cmd, timeout):
     if timed_out:
         return False, f"timed out after {timeout}s; tail: {tail(out)}", elapsed
 
-    if name in ("build", "isofull"):
+    if name in ("build", "isogrub"):
         ok = rc == 0
         reason = ("exit 0" if ok else f"exit {rc}; tail: {tail(out)}")
     else:
