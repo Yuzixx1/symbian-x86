@@ -215,6 +215,7 @@ int app_main(void)
     int server, session = 0, running = 1;
     u16 id = 0x4e53u;
 
+    print("NETSTACK: boot (DebugPrint exec)");
     marker("NETSTACK: EUSER ord915 printf online");
     self_test();
 

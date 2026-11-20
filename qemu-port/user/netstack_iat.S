@@ -13,7 +13,7 @@ net_euser_printf:
        Tail-call the bound EUSER RDebug::Printf; our caller's return address
        and argument remain in place on the stack. */
     mov $net_rdebug_printf_slot, %eax
-    jmp *%eax
+    jmp *(%eax)
     .size net_euser_printf, .-net_euser_printf
 
     /* Placed last in .text by user/link_netstack.ld.  The absolute address is

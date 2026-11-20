@@ -91,6 +91,14 @@ void PdDestroy(DProcess* aProc)
         if (sProcs[i].iProc != aProc)
             continue;
         TProcPd& r = sProcs[i];
+        // Zero the page unless it is still live in CR3 (E32Reap can run with a
+        // dying process's PD loaded — emptying it there would fault instantly).
+        if (r.iPdPhys && PdCurrent() != r.iPdPhys)
+            {
+            TUint32* pd = (TUint32*)r.iPdPhys;
+            for (TUint n = 0; n < KPdEntries; ++n)
+                pd[n] = 0;   // free the PD page: invalidate every PDE
+            }
         r.iProc = 0;
         r.iPdPhys = 0;
         r.iCodeRun = r.iCodeLen = 0;
@@ -202,4 +210,10 @@ void PdMapUser(DProcess* aProc, TUint aVaddr, TUint aPhys, TUint aSize)
                     (TUint)aProc, aVaddr, aPhys, aSize);
             return;
             }
+    }
+
+void PdMapData(DProcess* aProc, TUint aVaddr, TUint aPhys, TUint aSize)
+    {
+    // User data pages share the same U/S=1 flat-PDE treatment as code.
+    PdMapUser(aProc, aVaddr, aPhys, aSize);
     }

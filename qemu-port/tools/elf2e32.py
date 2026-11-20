@@ -91,30 +91,48 @@ def pack(blob, euser_import_ord=0):
 
     header = bytearray(build_args_e32(0x10000001, 0x10000002, 0x10000002)[:156])
     code = contents(text)
+    if euser_import_ord:
+        if len(code) > IAT_OFF:
+            raise ValueError(f'code {len(code)} exceeds IAT offset {IAT_OFF:#x}')
+        code = bytearray(code)
+        code.extend(b'\x00' * (IAT_OFF - len(code)))
+        code.extend(struct.pack('<I', euser_import_ord))  # PE2 IAT: 1-based ord
+        code = bytes(code)
     initialized = contents(data) if data[5] else b''
     cr = reloc_section(relocations[ti])
     dr = reloc_section(relocations[di])
     data_off = 156 + len(code)
     cr_off = data_off + len(initialized)
     dr_off = cr_off + len(cr)
+    imp_off = dr_off + len(dr) if euser_import_ord else 0
+    imp = b''
     struct.pack_into('<6I', header, 48, len(code), len(initialized), 4096, 1048576, 8192, bss_size)
     struct.pack_into('<I', header, 72, entry - text[3])
-    struct.pack_into('<I', header, 84, 0)  # no DLL dependencies
-    struct.pack_into('<I', header, 96, len(code))
+    struct.pack_into('<I', header, 84, 0)  # no DLL dependencies by default
+    if euser_import_ord:
+        isize = 8 + ((len(EUSER_PE2_DLL) + 3) & ~3)
+        sec = struct.pack('<II', 12, 1) + EUSER_PE2_DLL
+        sec += b'\x00' * (isize - len(sec))
+        imp = struct.pack('<I', isize) + sec
+        struct.pack_into('<I', header, 44, K_IMAGE_HDR_FMT_V | K_IMAGE_IMP_FMT_PE2)
+        struct.pack_into('<I', header, 84, 1)  # one DLL dependency (EUSER)
+    struct.pack_into('<I', header, 96, IAT_OFF if euser_import_ord else len(code))
     struct.pack_into('<5I', header, 100, 156, data_off if initialized else 0,
-                     0, cr_off if cr else 0, dr_off if dr else 0)
+                     imp_off, cr_off if cr else 0, dr_off if dr else 0)
     struct.pack_into('<I', header, 20, KImageCrcInitialiser)
     struct.pack_into('<I', header, 20, crc32_symbian(header))
-    return bytes(header) + code + initialized + cr + dr
+    return bytes(header) + code + initialized + cr + dr + imp
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input')
     parser.add_argument('output')
+    parser.add_argument('--euser-import', type=int, default=0, metavar='ORD',
+                        help='emit a PE2 EUSER.DLL import for this 1-based ordinal')
     args = parser.parse_args()
     try:
-        result = pack(Path(args.input).read_bytes())
+        result = pack(Path(args.input).read_bytes(), args.euser_import)
     except (ValueError, KeyError, IndexError, struct.error) as error:
         parser.error(str(error))
     Path(args.output).write_bytes(result)

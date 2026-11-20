@@ -52,12 +52,12 @@ CODE_OFF = HEADER_SIZE
 
 IAT_OFF = TEXTSIZE                      # 0x200
 STR_OFF = 0x220
-STR_STEP = 0x40
+STR_STEP = 0x30
 PKT4_OFF = 0x360                        # 20-byte IPv4 header
 PKT6_OFF = 0x380                        # 40-byte IPv6 header
 PKTICMP_OFF = 0x3A0                     # 16-byte ICMP echo
 RESULT_OFF = 0x3C0                      # 16-byte IPC result block
-CKSUM_OFF = 0x180                       # checksum routine
+CKSUM_OFF = 0x1C0                       # checksum routine
 
 
 def slot_off(k):
@@ -114,11 +114,11 @@ b.printf(0)                           # EUSER ordinal imports bound
 # Build an IPv4 header (version/IHL=4/5, total len 20, id=1,
 # checksum field zero, src 10.0.0.1 -> dst 10.0.0.2).
 b.put_abs(0xBF, PKT4_OFF)            # mov edi, pkt4
-b.put(b"\xc7\x07" + struct.pack("<I", 0x45000014))
-b.put(b"\xc7\x47\x04" + struct.pack("<I", 0x00010000))
+b.put(b"\xc7\x07" + struct.pack("<I", 0x14000045))  # ver/IHL=0x45, total len=20
+b.put(b"\xc7\x47\x04" + struct.pack("<I", 0x00000100))  # id=1 (network order)
 b.put(b"\xc7\x47\x08" + struct.pack("<I", 0x00000000))  # checksum = 0
-b.put(b"\xc7\x47\x0c" + struct.pack("<I", 0x0A000001))
-b.put(b"\xc7\x47\x10" + struct.pack("<I", 0x0A000002))
+b.put(b"\xc7\x47\x0c" + struct.pack("<I", 0x0100000A))  # src 10.0.0.1
+b.put(b"\xc7\x47\x10" + struct.pack("<I", 0x0200000A))  # dst 10.0.0.2
 
 # cksum(pkt4, 10 words) -> [ebp-4]
 b.put(b"\x6a\x0a")                   # push 10 (word count)
@@ -131,45 +131,35 @@ b.put(b"\x89\x45\xfc")               # mov [ebp-4],eax
 # Store checksum into header, recompute -> must be 0xffff.
 b.put(b"\x8b\x45\xfc")               # mov eax,[ebp-4]
 b.put_abs(0xBF, PKT4_OFF + 8)        # mov edi, &checksum field
-b.put(b"\x89\x07")                   # mov [edi],eax
+b.put(b"\x66\x89\x07")               # mov word [edi],ax (16-bit: do not clobber src IP bytes)
 b.put(b"\x6a\x0a")                   # push 10
 b.put_abs(0xBF, PKT4_OFF)            # mov edi, pkt4
 b.put(b"\x57")                       # push edi
 b.call_local(CKSUM_OFF)
 b.put(b"\x83\xc4\x08")               # add esp,8
-b.put(b"\x66\x3d\xff\xff")           # cmp ax,0xffff
-b.put(b"\x75\x05")                   # jne ipv4_fail (+5)
+b.put(b"\x66\x85\xc0")               # test ax,ax (folded sum+cksum == 0xffff => 0)
+j_ipv4_bad = b.pos
+b.put(b"\x75\x00")                   # jne ipv4_fail (patched)
 b.printf(1)                           # IPv4 checksum verified
-b.put(b"\xeb\x06")                   # jmp ipv6_test (+6)
-# ipv4_fail:
-b.put(b"\x90")                       # nop (label)
-b.put(b"\xeb\x00")                   # jmp ipv6_test (patched below)
-ipv4_fail_jmp = b.pos - 1
-b.printf(1)                           # (unreachable label filler for padding)
+ipv4_fail = b.pos
+b.code[j_ipv4_bad + 1] = ipv4_fail - (j_ipv4_bad + 2)
 
 # ---- IPv6 header test ------------------------------------------------------
-ipv6_test = b.pos
-b.code[ipv4_fail_jmp] = ipv6_test - (ipv4_fail_jmp + 1)
 b.put_abs(0xBF, PKT6_OFF)            # mov edi, pkt6
 b.put(b"\xc7\x07" + struct.pack("<I", 0x60000000))  # version=6
 b.put(b"\xc7\x47\x04" + struct.pack("<I", 0x00080000))  # icmp6 next hdr
 b.put(b"\x8b\x07")                   # mov eax,[edi]
 b.put(b"\xc1\xe8\x1c")               # shr eax,28
 b.put(b"\x83\xf8\x06")               # cmp eax,6
-b.put(b"\x75\x05")                   # jne v6_fail (+5)
+j_v6_bad = b.pos
+b.put(b"\x75\x00")                   # jne v6_fail (patched)
 b.printf(2)                           # IPv6 version=6 ok
-b.put(b"\xeb\x06")                   # jmp icmp_test (+6)
-# v6_fail:
-b.put(b"\x90")
-b.put(b"\xeb\x00")
-v6_fail_jmp = b.pos - 1
-b.printf(2)
+v6_fail = b.pos
+b.code[j_v6_bad + 1] = v6_fail - (j_v6_bad + 2)
 
 # ---- ICMP echo request -> echo reply ---------------------------------------
-icmp_test = b.pos
-b.code[v6_fail_jmp] = icmp_test - (v6_fail_jmp + 1)
 b.put_abs(0xBF, PKTICMP_OFF)         # mov edi, icmp
-b.put(b"\xc7\x07" + struct.pack("<I", 0x00000800))  # type=8, code=0
+b.put(b"\xc7\x07" + struct.pack("<I", 0x00000008))  # type=8, code=0 (byte 0)
 b.put(b"\xc7\x47\x04" + struct.pack("<I", 0x00010001))  # id=1, seq=1
 b.put(b"\xc7\x47\x08" + struct.pack("<I", 0x00000000))  # checksum=0
 b.put(b"\xc7\x47\x0c" + struct.pack("<I", 0xDEADBEEF))  # payload
@@ -180,8 +170,8 @@ b.call_local(CKSUM_OFF)
 b.put(b"\x83\xc4\x08")               # add esp,8
 b.put(b"\x89\x45\xf8")               # mov [ebp-8],eax
 b.put(b"\x66\x85\xc0")               # test ax,ax
-b.put(b"\x74\x1e")                   # jz icmp_fail (+0x1e, patched)
-icmp_fail_jz = b.pos - 1
+j_icmp_bad1 = b.pos
+b.put(b"\x74\x00")                   # jz icmp_fail (patched)
 # write checksum into ICMP field
 b.put(b"\x8b\x45\xf8")               # mov eax,[ebp-8]
 b.put_abs(0xBF, PKTICMP_OFF + 8)     # mov edi, &checksum
@@ -195,30 +185,22 @@ b.put(b"\x57")                       # push edi
 b.call_local(CKSUM_OFF)
 b.put(b"\x83\xc4\x08")               # add esp,8
 b.put(b"\x66\x85\xc0")               # test ax,ax
-b.put(b"\x74\x05")                   # jz icmp_fail (+5)
+j_icmp_bad2 = b.pos
+b.put(b"\x74\x00")                   # jz icmp_fail (patched)
 b.printf(3)                           # ICMP echo reply built
-b.put(b"\xeb\x06")                   # jmp ipc_export (+6)
-# icmp_fail:
-b.put(b"\x90")
-b.put(b"\xeb\x00")
-icmp_fail_jmp = b.pos - 1
-b.printf(3)
+icmp_fail = b.pos
+for jp in (j_icmp_bad1, j_icmp_bad2):
+    b.code[jp + 1] = icmp_fail - (jp + 2)
 
 # ---- IPC result export -----------------------------------------------------
-ipc_export = b.pos
-b.code[icmp_fail_jmp] = ipc_export - (icmp_fail_jmp + 1)
 b.put_abs(0xBF, RESULT_OFF)          # mov edi, result block
 b.put(b"\xc7\x07" + struct.pack("<I", 1))  # ipv4_ok
 b.put(b"\xc7\x47\x04" + struct.pack("<I", 1))  # ipv6_ok
 b.put(b"\xc7\x47\x08" + struct.pack("<I", 1))  # icmp_ok
 b.put(b"\x8b\x45\xfc")               # mov eax,[ebp-4]
-b.put(b"\xc7\x47\x0c\x00\x00\x00\x00")
 b.put(b"\x89\x47\x0c")               # result.ipv4_checksum = eax
 b.printf(4)                           # results exported via IPC
 b.printf(5)                           # clean exit
-
-# Fix the first ICMP fail jump (its displacement changed after layout).
-b.code[icmp_fail_jz] = ipc_export - (icmp_fail_jz + 1)
 
 # exit: ThreadKill(KCurrentThreadHandle, EExitKill, 0, NULL) via SLOW_EXEC.
 b.put(b"\x6a\x00")                   # push NULL category (arg4)
@@ -251,7 +233,7 @@ ck_loop = b.pos
 b.put(b"\x0f\xb7\x1e")               # movzx ebx,word [esi]
 b.put(b"\x01\xda")                   # add edx,ebx
 b.put(b"\x83\xc6\x02")               # add esi,2
-b.put(b"\xe2" + bytes([(ck_loop - (b.pos + 1)) & 0xFF]))  # loop ck_loop
+b.put(b"\xe2" + bytes([(ck_loop - (b.pos + 2)) & 0xFF]))  # loop ck_loop
 b.put(b"\x89\xd0")                   # mov eax,edx
 b.put(b"\xc1\xe8\x10")               # shr eax,16
 b.put(b"\x81\xe2\xff\xff\x00\x00")   # and edx,0xffff
@@ -272,7 +254,8 @@ assert MAIN_END <= CKSUM_OFF
 # ---- IAT + strings + data --------------------------------------------------
 b.pad_to(IAT_OFF)
 for k, (ordinal, _name) in enumerate(IMPORTS):
-    struct.pack_into("<I", b.code, slot_off(k), ordinal)
+    assert b.pos == slot_off(k)
+    b.put(struct.pack("<I", ordinal))
 
 STRINGS = [
     b"netstack: EUSER ordinal imports bound\r\n",
@@ -363,9 +346,15 @@ file_data += struct.pack("<I", ISIZE) + bytes(imp_section)
 file_data += struct.pack("<2I", RELOC_SIZE, reloc_count) + bytes(reloc_blocks)
 
 out = "/tmp/opencode/netstack.E32"
-for i, a in enumerate(sys.argv):
-    if a == "--output" and i + 1 < len(sys.argv):
-        out = sys.argv[i + 1]
+args = sys.argv[1:]
+# The make rule passes the (unused) ELF prerequisite followed by the output
+# path.  The last positional argument is the .E32 to write.
+positional = [a for a in args if not a.startswith("--")]
+if positional:
+    out = positional[-1]
+for i, a in enumerate(args):
+    if a == "--output" and i + 1 < len(args):
+        out = args[i + 1]
 with open(out, "wb") as f:
     f.write(file_data)
 

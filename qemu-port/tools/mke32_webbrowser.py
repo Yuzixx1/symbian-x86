@@ -168,9 +168,22 @@ b.label("flush_done")
 b.call("flush")                             # emit trailing run
 b.printf(7)                                 # "WEB: page rendered OK"
 b.printf(8)                                 # "WEB: browser exit"
-b.put(b"\x31\xc0")                          # xor eax,eax
-b.put(b"\xc9")                              # leave
-b.put(b"\xc3")                              # ret
+# Clean exit: ThreadKill(KCurrentThreadHandle, EExitKill, 0, NULL) via the
+# genuine SLOW_EXEC dispatcher (`int 0x21`).  A bare `ret` here would pop a
+# garbage return address and fault with #UD after the last marker.
+b.put(b"\x6a\x00")                          # push NULL category (arg4)
+b.put(b"\x6a\x00")                          # push reason 0 (arg3)
+b.put(b"\x6a\x00")                          # push EExitKill=0 (arg2)
+b.put(b"\x68\x01\x80\xff\xff")              # push KCurrentThreadHandle (arg1)
+b.put(b"\x6a\x00")                          # push filler ret slot
+b.put(b"\xb8\x73\x00\x00\x00")              # mov eax,115 (EExecThreadKill)
+b.put(b"\x53")                              # push ebx
+b.put(b"\x56")                              # push esi
+b.put(b"\x8b\x4c\x24\x0c")                  # mov ecx,[esp+12] arg1
+b.put(b"\x8b\x54\x24\x10")                  # mov edx,[esp+16] arg2
+b.put(b"\x8b\x5c\x24\x14")                  # mov ebx,[esp+20] arg3
+b.put(b"\x8b\x74\x24\x18")                  # mov esi,[esp+24] arg4
+b.put(b"\xcd\x21")                          # int 0x21 (does not return)
 
 b.label("flush")
 b.put(b"\xc6\x07\x00")                      # mov byte [edi],0

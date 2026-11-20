@@ -4,9 +4,11 @@
  * Dual build (mirrors the existing CActive fixture, user/ca_test.cpp):
  *   * Static: user/ca_test.c -> build/user/ca_test.elf -> ca_test_static.e32
  *     (elf2e32.py, import-free).  Markers use runtime.c's DebugPrint exec.
- *   * PE2:    tools/mke32_webbrowser.py -> build/user/ca_test.e32.  That image
- *     imports the genuine EUSER.DLL and emits the SAME markers through EUSER
- *     ordinal 915 = RDebug::Printf(char const*, ...).
+ *   * PE2:    tools/mke32_webbrowser.py -> build/user/ca_test.e32.  This is the
+ *     delivered E32: it LINKS AGAINST EUSER.DLL (one PE2 import, ordinal 915 =
+ *     RDebug::Printf(char const*, ...)) and emits every marker below through
+ *     that IAT slot.  ca_test_iat.S provides the matching stub so this same C
+ *     source can also emit via ord 915 when built with -DWEB_USE_EUSER.
  *
  * The browser is deliberately small and deterministic. DNS (RFC 1035 A
  * lookup) and TCP/HTTP go through the planned !SocketServer IPC service;
@@ -15,6 +17,17 @@
  */
 #include "runtime.h"
 #include "ipc.h"
+
+/* EUSER.DLL binding.  The PE2 image imports ordinal 915 = RDebug::Printf; the
+ * loader patches the IAT slot in ca_test_iat.S with the real export address
+ * before the process is resumed.  A plain string (no % specifiers) is safe. */
+extern void web_euser_printf(const char* text);
+
+/* Symbian error codes (e32cmn.h is C++-only, so mirror the few we use). */
+#define KErrNone          0
+#define KErrNotFound     (-1)
+#define KErrNotSupported (-49)
+#define KErrCorrupt      (-20)
 
 /* Marker text (no trailing LF: RDebug::Printf supplies it, print() needs it).
  * Keep in sync with tools/mke32_webbrowser.py STRINGS. */
@@ -38,8 +51,24 @@ static const char kPage[] =
 
 static void mark(const char* s)
 {
-    print(s);
+#ifdef WEB_USE_EUSER
+    web_euser_printf(s);          /* genuine EUSER.DLL ordinal 915 */
+#else
+    print(s);                     /* static build: DebugPrint executive */
     print("\n");
+#endif
+}
+
+/* Compose "prefix + text + suffix" so composite lines also go through mark(). */
+static void mark_line(const char* prefix, const char* text, const char* suffix)
+{
+    char line[64];
+    unsigned n = 0, i;
+    for (i = 0; prefix[i]; ++i) line[n++] = prefix[i];
+    for (i = 0; text[i]; ++i) line[n++] = text[i];
+    for (i = 0; suffix[i]; ++i) line[n++] = suffix[i];
+    line[n] = 0;
+    mark(line);
 }
 
 /* ------------------------------------------------------------- tiny string */
@@ -238,8 +267,8 @@ int app_main(void)
     }
 
     ip4text(ip, text);
-    print(MK_DNSA); print(text); print("\n");
-    print(MK_TCP); print(text); print(":80\n");
+    mark_line(MK_DNSA, text, "");
+    mark_line(MK_TCP, text, ":80");
     mark(MK_GET);
     mark(MK_HTTP);
 

@@ -9,6 +9,8 @@ userland: build/user/SVCMGR.E32
 userland: build/user/WAITFOR.E32
 userland: build/user/KILLPROC.E32
 userland: build/user/NETSTACK.E32
+userland: build/user/DNSRES.E32
+userland: build/user/TEXTEDIT.E32
 userland: build/user/ca_test.e32
 
 # S-02: service manager and the F32 service it supervises at boot.
@@ -31,12 +33,46 @@ build/user/KILLPROC.E32: build/user/killproc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
-# I-07: compiled userland CActive/CActiveScheduler fixture (genuine-ABI shim).
-build/user/ca_test.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/euser_shim.o build/user/ca_test.o user/link.ld
+# End-user text editor: line-oriented editing over an in-memory buffer, file
+# open/save via PortFile IPC (portfilesrv), and a genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf) for its serial-console markers.
+build/user/textedit.elf: build/user/start.o build/user/runtime.o build/user/textedit.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=euser_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/TEXTEDIT.E32: build/user/textedit.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# R1 DNS resolver E32: RFC1035 UDP/53 client + DnsResolverServer IPC service.
+# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) carries the markers;
+# the IAT slot is the absolute symbol dns_printf_slot at 0x408000 (textSize).
+build/user/dnsresolv.o: user/dnsresolv.c user/runtime.h user/ipc.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+
+build/user/dnsresolv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/dnsresolv.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=dns_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/DNSRES.E32: build/user/dnsresolv.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# R1 web-browser fixture: user/ca_test.c is the text-mode browser (DNS A lookup,
+# TCP/HTTP via !SocketServer, HTML tag-strip renderer).  Built two ways:
+#   ca_test_static.e32 -- compiled/import-free proof via elf2e32.py.
+#   ca_test.e32        -- genuine PE2 image importing EUSER.DLL ordinal 915
+#                         (RDebug::Printf), the fixture used by the QEMU test.
+build/user/ca_test.o: user/ca_test.c user/runtime.h user/ipc.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+
+build/user/ca_test.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/malloc.o build/user/euser_shim.o build/user/ca_test.o user/link.ld
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
-build/user/ca_test.e32: build/user/ca_test.elf tools/elf2e32.py tools/mke32.py
+build/user/ca_test_static.e32: build/user/ca_test.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+build/user/ca_test.e32: tools/mke32_webbrowser.py tools/mke32.py
+	python3 tools/mke32_webbrowser.py --output $@
 	python3 tools/e32read.py $@ --quiet
 
 build/user/ipc.o: user/ipc.h
@@ -66,8 +102,8 @@ build/user/netstack_iat.o: user/netstack_iat.S | build/user
 build/user/netstack.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/netstack_iat.o build/user/netstack.o user/link_netstack.ld
 	ld -m elf_i386 --emit-relocs -T user/link_netstack.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
-build/user/NETSTACK.E32: build/user/netstack.elf tools/elf2e32.py tools/mke32.py tools/mke32_netstack.py
-	python3 tools/mke32_netstack.py $< $@
+build/user/NETSTACK.E32: tools/mke32_netstack.py tools/mke32.py
+	python3 tools/mke32_netstack.py --output $@
 	python3 tools/e32read.py $@ --quiet
 
 # P-08: long-lived concurrent IPC stress client.

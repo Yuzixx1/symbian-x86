@@ -24,6 +24,7 @@ void  PdInit();            // early boot: init pool, install Vec14 + switch hook
 void  PdSwitch(TUint aPdPhys);  // naked: mov cr3, eax (caller-saved EAX)
 TUint PdCurrent();         // read CR3
 void  PdMapUser(DProcess* aProc, TUint aVaddr, TUint aPhys, TUint aSize);
+void  PdMapData(DProcess* aProc, TUint aVaddr, TUint aPhys, TUint aSize);
                             // record/map a user page range U/S=1 (kernel U/S=0
                             // is deferred: flat 4M PDE map keeps ring-3 live)
 
