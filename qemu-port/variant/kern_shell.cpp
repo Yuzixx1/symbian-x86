@@ -237,6 +237,7 @@ static const TCommandHelp kHelp[] =
     {"ps", "PS", "List processes and IDs."},
     {"threads", "THREADS", "List kernel threads."},
     {"pci", "PCI", "List PCI devices."},
+    {"nic", "NIC [ARP [count]]", "Show e1000 link/MAC; NIC ARP sends ARP requests and waits for replies."},
     {"ide", "IDE", "List ATA/AHCI disks and FAT32 partitions."},
     {"ahci", "AHCI", "Show SATA controller details."},
     {"usb", "USB [POLL]", "Probe HID keyboards; POLL displays one debug report."},
@@ -553,6 +554,56 @@ static void RunImage(const char* aName, const char* aTail)
     VolRestore(prev);
     }
 
+// D-06 NIC bring-up test: build a 42-byte Ethernet/ARP "who-has 10.0.2.2"
+// request, post it with e1000_tx(), then poll e1000_recv() for QEMU SLIRP's
+// ARP reply. Repeats aCount times to prove sustained TX/RX (the RX tail fix).
+static void NicArpTest(TInt aCount)
+    {
+    TUint8 mac[6];
+    e1000_read_mac(mac);
+    TUint8 frame[64];
+    memset(frame, 0, sizeof(frame));
+    for (TInt i = 0; i < 6; ++i)
+        { frame[i] = 0xFF; frame[6 + i] = mac[i]; }
+    frame[12] = 0x08; frame[13] = 0x06;             // EtherType ARP
+    frame[14] = 0x00; frame[15] = 0x01;             // ARP hardware type Ethernet
+    frame[16] = 0x08; frame[17] = 0x00;             // ARP protocol type IPv4
+    frame[18] = 6; frame[19] = 4;                   // hardware/protocol lengths
+    frame[20] = 0x00; frame[21] = 0x01;             // ARP operation: request
+    for (TInt i = 0; i < 6; ++i)
+        frame[22 + i] = mac[i];                      // sender hardware address
+    frame[28] = 10; frame[29] = 0; frame[30] = 2; frame[31] = 15;  // 10.0.2.15
+    frame[38] = 10; frame[39] = 0; frame[40] = 2; frame[41] = 2;   // 10.0.2.2
+
+    TInt passed = 0;
+    for (TInt attempt = 0; attempt < aCount; ++attempt)
+        {
+        TInt tr = e1000_tx(frame, 42);
+        KPrintf("nic arp: try %d tx=%d (%s)\r\n", attempt + 1, tr,
+            tr == KErrNone ? "OK" : "FAIL");
+        if (tr != KErrNone)
+            continue;
+        TUint8 rx[256];
+        for (TInt poll = 0; poll < 400; ++poll)
+            {
+            NKern::Sleep(10);                        // 10ms tick; ~4s max
+            TInt n = e1000_recv(rx, sizeof(rx));
+            if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 &&
+                rx[20] == 0x00 && rx[21] == 0x02)    // ARP reply
+                {
+                KPrintf("nic arp: try %d RX reply len=%d sha=%02x:%02x:%02x:%02x:%02x:%02x spa=%u.%u.%u.%u tpa=%u.%u.%u.%u\r\n",
+                    attempt + 1, n, rx[22], rx[23], rx[24], rx[25],
+                    rx[26], rx[27], rx[28], rx[29], rx[30], rx[31],
+                    rx[38], rx[39], rx[40], rx[41]);
+                ++passed;
+                break;
+                }
+            }
+        }
+    KPrintf("nic arp: RESULT %s (%d/%d ARP replies)\r\n",
+        passed == aCount ? "PASS" : "FAIL", passed, aCount);
+    }
+
 static void Exec()
     {
     sLine[sLen] = 0;
@@ -671,6 +722,27 @@ static void Exec()
     else if (StrEq(cmd, "pci"))
         {
         PciList();
+        }
+    else if (StrEq(cmd, "nic"))
+        {
+        TInt r = e1000_init();                       // idempotent boot init
+        if (r != KErrNone)
+            { KPrintf("nic: e1000_init failed %d\r\n", r); }
+        else
+            {
+            TUint8 mac[6];
+            e1000_read_mac(mac);
+            KPrintf("nic: e1000 MAC=%02x:%02x:%02x:%02x:%02x:%02x link=%d\r\n",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                (TInt)e1000_link_up());
+            if (argc > 1 && StrEq(argv[1], "arp"))
+                {
+                TInt count = 3;
+                if (argc > 2 && argv[2][0] >= '1' && argv[2][0] <= '9')
+                    count = argv[2][0] - '0';
+                NicArpTest(count);
+                }
+            }
         }
     else if (StrEq(cmd, "threads"))
         {

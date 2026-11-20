@@ -12,7 +12,13 @@ from pathlib import Path
 from mke32 import build_args_e32, crc32_symbian, KImageCrcInitialiser
 
 
-def pack(blob):
+IAT_OFF = 0x8000          # textSize: IAT slot lives at codeBase+IAT_OFF (0x408000)
+K_IMAGE_HDR_FMT_V = 0x02000000
+K_IMAGE_IMP_FMT_PE2 = 0x20000000
+EUSER_PE2_DLL = b'euser{000a0000}[100039e5].dll\0'
+
+
+def pack(blob, euser_import_ord=0):
     if blob[:7] != b'\x7fELF\x01\x01\x01':
         raise ValueError('expected little-endian ELF32')
     hdr = struct.unpack_from('<HHIIIIIHHHHHH', blob, 16)
@@ -58,6 +64,11 @@ def pack(blob):
             offset = address - target[3]
             if not 0 <= offset <= target[5] - 4:
                 raise ValueError('relocation outside target section')
+            if euser_import_ord and symbol[5] == 0xfff1:  # SHN_ABS: PE2 IAT slot
+                if typ != 1 or not (0x400000 <= symbol[1] < 0x410000):
+                    raise ValueError('unsupported absolute relocation')
+                relocations[s[7]].append((offset, 1))  # TEXT-region fixup
+                continue
             if typ == 2 and region == regions[s[7]]:
                 continue  # PC-relative references within one allocation survive.
             if typ != 1 or region is None:

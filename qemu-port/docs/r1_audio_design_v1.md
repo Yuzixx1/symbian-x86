@@ -1,19 +1,9 @@
 # R1 Audio design v1 — findings (read-only)
-Read-only; only this doc created. kernelhwsrv/ untouched; no make/QEMU run.
-- **QEMU HW**: smoke cmd `tools/r1_qemu_smoke.py:144-156` boots `-M q35 -m 128`, e1000 + ich9-ahci,
-  but **no `-audiodev`, no sound device** — no audio today. q35 supports AC97 (`-device AC97`, 04.01),
-  Intel HDA (`-device intel-hda` + `hda-duplex`, 04.03), SB16. `qemu_pci.cpp` `PciFindClass(0x04,sub)`
-  sees "multimedia" (:71), no consumer. ckernel.cia is pure asm thread/exception glue — no device
-  probe; discovery is variant code via Asic::Init1/Init3 + shell.
-- **Driver**: NONE in qemu-port (grep finds only HAL config `values.hda`); no soundsc.pdd linked, no
-  audio decls in qemu_variant.h. Genuine shared-chunk PDD *stub* in kernelhwsrv/bsptemplate/.../
-  template_variant/{specific/soundsc_tx.cpp,soundsc_rx.cpp,inc/soundsc_plat.h}, marked "Delete old
-  sound driver" — not functional, not built.
-- **Interrupts**: 8259 at 0x30+, 16-slot `Interrupt::Bind/Enable` + `X86IrqDispatcher`
-  (qemu_variant_int.cpp:46-145), only IRQ0/1/4 bound (:217-223); PCI INTx (cfg 0x3C) not wired, MSI
-  needs APIC (absent). Polled I/O matches ATA/AHCI/NIC/xHCI/USB; identity RAM suits DMA.
-- **Next**: (1) add `-audiodev none,id=a0 -device AC97,audiodev=a0` (or intel-hda + hda-duplex) to
-  smoke cmd, verify `pci` class 04; (2) new `variant/qemu_audio.cpp`: PciFindClass(0x04,...), BAR +
-  MEM|bus-master, AC97 mixer/HDA CORB-RIRB probe, AudioInit/Play/Info in qemu_variant.h; (3) polled
-  PCM first; (4) wire INTx -> Bind + ISR ACK + DFC; (5) Makefile rule + qemu_audio.o in KERNFULL_OBJS
-  (:220-274) + `audio` shell cmd; (6) optional soundsc PDD port. kernelhwsrv/ frozen.
+Read-only; only this doc (re)created. No source edits, no make/QEMU. Note `kernelhwsrv/` is a sibling of `qemu-port/`, not inside it.
+- **QEMU HW**: `tools/r1_qemu_smoke.py:144-156` boots `-M q35 -m 128` with e1000 + ich9-ahci, **no `-audiodev`/sound device** — no audio today. q35 can expose AC97 (`-device AC97`, PCI 04.01), Intel HDA (`-device intel-hda` + `hda-duplex`, 04.03), SB16. `qemu_pci.cpp` `PciFindClass(0x04,sub)` (:36-61) and `PciList` (:83) already label class 04 "multimedia" (:71) but no code consumes it.
+- **Kernel discovery**: `kernelhwsrv/kernel/eka/kernel/x86/ckernel.cia` is pure asm thread/exception glue (`DThread::EpocThreadFunction`, `TExcTrap`, `TPagingExcTrap`) — **no device probing**. All enumeration is port variant code: `Asic::Init1/Init3` (`qemu_variant_asic.cpp:75-123`) + the shell; `qemu_kernel.cpp` only does UART/BootInfo/ROM/MMU then calls genuine `KernelMain()`.
+- **Driver**: NONE in qemu-port (grep finds only HAL `values.hda` config). Frozen `kernelhwsrv/` has generic shared-chunk sound LDD (`kernel/eka/drivers/soundsc/soundldd.cpp`) + unimplemented template PDDs (`bsptemplate/.../template_variant/{specific/soundsc_tx.cpp,soundsc_rx.cpp,inc/soundsc_plat.h}`, all "TO DO"); neither is built or linked into `KERNFULL_OBJS`. No audio decls in `qemu_variant.h`, no `audio` shell command.
+- **Driver pattern**: `qemu_ahci.cpp` uses `<x86.h>/<e32err.h>/<kernel/kern_priv.h>` + `qemu_variant.h`, `PciFindClass(0x01,0x06)`, BAR+MEM|bus-master, polled MMIO, lazy `AhciInit()`; no `E32Init` (e1000 uses `__attribute__((constructor))` -> `HwInit0` `__init_array` walk at `kernfull_glue.cpp:119`). Build rule `:229`, object in `KERNFULL_OBJS:274`; shell dispatch `kern_shell.cpp:958-960` (`ahci` -> `AhciInfo()`). No driver init is called from `qemu_kernel.cpp`.
+- **Process/thread**: genuine `DProcess::Create` (`sprocess.cpp:127`), `DProcess::NewThread` (:622), `ExecHandler::ProcessCreate` (`scodeseg.cpp:1676`) and `DThread::Create/DoCreate` (`sthread.cpp:949/568`) are unchanged; user E32 launch uses the port's `E32Run` reaper, so an audio server would be a new E32 image or a kernel DThread.
+- **Interrupts**: 8259 remapped to 0x30+, 16-slot `Interrupt::Bind/Enable/Clear` + `X86IrqDispatcher` (`qemu_variant_int.cpp:46-145,217-223`); only IRQ0(tick)/1(PS2)/4(COM1) bound. PCI INTx (cfg 0x3C) unbound, no APIC/MSI. Polled I/O (ATA/AHCI/NIC/xHCI/USB) + identity-mapped RAM suits DMA; start polled.
+- **Next**: (1) add `-audiodev none,id=a0 -device AC97,audiodev=a0` (or intel-hda + hda-duplex) to smoke cmd, confirm `pci` class 04; (2) new `variant/qemu_audio.cpp`: PciFindClass(0x04,...), BAR+MEM|bus-master, AC97 mixer/BAR or HDA CORB-RIRB probe, `AudioInit/Play/Info` in `qemu_variant.h`; (3) polled PCM + KPrintf/Info first; (4) later wire PCI INTx via Bind + ISR ACK + DFC; (5) Makefile rule + `qemu_audio.o` in `KERNFULL_OBJS` (:274) + shell `audio` cmd; (6) optional soundsc PDD port. `kernelhwsrv/` frozen.

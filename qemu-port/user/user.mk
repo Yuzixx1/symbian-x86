@@ -8,6 +8,7 @@ userland: build/user/PORTFILESRV.E32
 userland: build/user/SVCMGR.E32
 userland: build/user/WAITFOR.E32
 userland: build/user/KILLPROC.E32
+userland: build/user/NETSTACK.E32
 userland: build/user/ca_test.e32
 
 # S-02: service manager and the F32 service it supervises at boot.
@@ -40,6 +41,7 @@ build/user/ca_test.e32: build/user/ca_test.elf tools/elf2e32.py tools/mke32.py
 
 build/user/ipc.o: user/ipc.h
 build/user/ipcsrv.o build/user/ipccli.o build/user/cpstress.o: user/ipc.h
+build/user/netstack.o: user/ipc.h
 
 build/user/ipcsrv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/ipcsrv.o user/link.ld
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
@@ -53,6 +55,19 @@ build/user/IPCSRV.E32: build/user/ipcsrv.elf tools/elf2e32.py tools/mke32.py
 
 build/user/IPCCLI.E32: build/user/ipccli.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+# TCP/IP stack E32 (IPv4/IPv6 + ICMP echo) linked against EUSER.DLL through a
+# PE2 import of ordinal 915 (RDebug::Printf markers). The IAT trampoline lives
+# at the end of the text run via user/link_netstack.ld.
+build/user/netstack_iat.o: user/netstack_iat.S | build/user
+	$(CC) -m32 -c $< -o $@
+
+build/user/netstack.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/netstack_iat.o build/user/netstack.o user/link_netstack.ld
+	ld -m elf_i386 --emit-relocs -T user/link_netstack.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/NETSTACK.E32: build/user/netstack.elf tools/elf2e32.py tools/mke32.py tools/mke32_netstack.py
+	python3 tools/mke32_netstack.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
 # P-08: long-lived concurrent IPC stress client.

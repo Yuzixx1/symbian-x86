@@ -303,12 +303,17 @@ TInt e1000_recv(TUint8* aBuf, TUint aMax)
     for (TUint i = 0; i < len; ++i)
         aBuf[i] = gRxBuf[gRxNext][i];
 
-    // Recycle the descriptor and hand it back to the hardware.
-    d.iAddr = (TUint64)(TUint32)gRxBuf[gRxNext];
+    // Recycle the descriptor and hand it back to the hardware. QEMU's e1000
+    // treats RDT as an exclusive tail: RDH == RDT means "no RX buffers", so
+    // the value written must be the index of the descriptor we just consumed
+    // (not the next cursor). Writing the next cursor would stall RX after the
+    // first packet.
+    TUint consumed = gRxNext;
+    d.iAddr = (TUint64)(TUint32)gRxBuf[consumed];
     d.iLength = 0; d.iCsum = 0; d.iStatus = 0; d.iErrors = 0; d.iSpecial = 0;
-    gRxNext = (gRxNext + 1) % kNumDesc;
+    gRxNext = (consumed + 1) % kNumDesc;
     Barrier();
-    Wr32(kRdt, gRxNext);
+    Wr32(kRdt, consumed);
     return (TInt)len;
     }
 
