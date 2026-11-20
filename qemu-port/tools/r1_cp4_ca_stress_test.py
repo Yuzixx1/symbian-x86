@@ -24,6 +24,7 @@ CLIENTS = 4          # simultaneous request-issuing processes (3-5)
 CYCLES = 3           # repeated cycles
 VICTIM = 2           # which client instance is killed mid-test
 DONE = 'CPSTRESS: done'
+CPSTRESS_CYCLES = 100  # user/cpstress.c CYCLES: each client's full async drain
 
 FAIL_MARKERS = (
     'CPSTRESS: connect failed', 'CPSTRESS: connect2 failed',
@@ -44,6 +45,13 @@ def done_tail_ids(n):
     """Instance ids of the last n 'CPSTRESS: done <id>' lines in the log."""
     text = Path(LOG).read_text(errors='replace')
     return [int(m) for m in re.findall(r'CPSTRESS: done(\d+) \d+', text)][-n:]
+
+
+def done_tail_pairs(n):
+    """(id, completed-cycles) of the last n 'CPSTRESS: done <id> <n>' lines."""
+    text = Path(LOG).read_text(errors='replace')
+    return [(int(a), int(b)) for a, b in
+            re.findall(r'CPSTRESS: done(\d+) (\d+)', text)][-n:]
 
 
 def wait_for_done(target, timeout=30):
@@ -185,6 +193,12 @@ def main():
                 survivors = [i for i in range(1, CLIENTS + 1) if i != VICTIM]
                 assert sorted(tail) == sorted(survivors), (
                     f'cycle {cycle}: done ids {tail} != survivors {survivors}')
+                # Full arrival count per client proves every async request's
+                # semaphore completion was received (a lost completion would
+                # hang ipc_wait_for and leave the drain count below CYCLES).
+                pairs = done_tail_pairs(CLIENTS - 1)
+                assert all(value == CPSTRESS_CYCLES for _, value in pairs), (
+                    f'cycle {cycle}: incomplete async drains {pairs}')
 
                 # Kill the session-owning server; a fresh client must fail to connect.
                 pos = run(vm, pos, f'kill {server}', f'killed {server}'.encode())
@@ -204,6 +218,8 @@ def main():
             target = total_done() + 1
             pos = run(vm, pos, 'CPSTRESS.E32 99', b'CPSTRESS: start99')
             wait_for_done(target)
+            assert done_tail_pairs(1) == [(99, CPSTRESS_CYCLES)], (
+                f'recovery client 99 did not drain all {CPSTRESS_CYCLES} requests')
             pos = run(vm, pos, 'IPCCLI.E32 stop', b'stop acknowledged')
 
             # Leak checks: reap dead image segs, then compare to baseline.

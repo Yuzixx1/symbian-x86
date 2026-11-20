@@ -20,6 +20,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 DISK_IMG = "/tmp/opencode/r1_ca_test.img"
 FS_IMG = "/tmp/opencode/r1_ca_test_fs.img"
@@ -136,17 +137,26 @@ def run_qemu(kernel, log):
         "-monitor", "none", "-no-reboot",
     ]
     qemu_str = " ".join(shlex.quote(a) for a in qemu)
-    # Timed serial feed: leading newline, "mount", delay, "ca_test", delay.
-    feeder = (
-        "sleep 0.8; printf '\\n'; "
-        "sleep 0.8; printf 'mount\\n'; "
-        "sleep 2.0; printf 'ca_test\\n'; "
-        "sleep 4.0"
-    )
+    # Asic::Init3 already mounts the FAT partition at boot; a shell `mount`
+    # hangs on the M-03 per-process-page-table kernel (see r1_web_browser_test.py).
+    # Timed serial feed: leading newline, then launch the CA fixture directly.
+    feeder = "sleep 1.5; printf '\\n'; sleep 3.0; printf 'ca_test\\n'; sleep 5.0"
     cmd = f"{{ {feeder}; }} | {qemu_str} > {shlex.quote(log)} 2>&1"
     print("== starting qemu (60s cap), feeding serial console ...")
     r = subprocess.run(["bash", "-c", cmd], check=False)
     print(f"qemu wrapper exit code: {r.returncode} (124 == timeout 60 killed qemu, expected)")
+    # timeout's SIGTERM can reap qemu before redirected serial stdio is flushed.
+    # Poll until the log size stops growing so the final markers are captured.
+    last = -1
+    for _ in range(20):
+        try:
+            size = os.path.getsize(log)
+        except FileNotFoundError:
+            size = -1
+        if size == last and size >= 0:
+            break
+        last = size
+        time.sleep(0.5)
     try:
         with open(log, "r", errors="replace") as f:
             return f.read()

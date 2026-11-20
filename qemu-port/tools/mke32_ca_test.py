@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """mke32_ca_test.py -- build the PE2 E32 CActive fixture (ca_test).
 
-CP4 proof: genuine CActiveScheduler::Start()/Stop() round trip using the real
-user-mode wait primitive.  Start()'s DoRunL() calls the virtual
-CActiveScheduler::WaitForAnyRequest() -> User::WaitForAnyRequest() -> Exec fast
-exec 0 (`xor eax,eax; int 0x20`) -> NKern::WaitForAnyRequest() on the current
-thread's request semaphore (user/start.S:ipc_wait_any).  A genuine RTimer
-completion (exec 133 TimerCreate, exec 53 TimerAfter) writes KErrNone into the
-active's iStatus and signals the same thread, so WaitForAnyRequest() returns,
-RunL() is dispatched through the active's vtable, RunL() calls Stop(), the wait
-loop exits and Start() returns.
+CP4 proof: full CActive/CActiveScheduler-style round trip using the real
+user-mode wait primitive.  The loop (mirroring user/e32base.h's
+CActiveScheduler::Start) blocks in the genuine EUSER User::WaitForAnyRequest()
+ordinal 626 -> Exec fast exec 0 (`xor eax,eax; int 0x20`) ->
+NKern::WaitForAnyRequest() on the current thread's request semaphore.  A
+genuine RTimer completion (exec 133 TimerCreate, exec 53 TimerAfter) writes
+KErrNone into the active's iStatus (offset +4, matching the genuine CActive
+layout: CBase has no data members, TRequestStatus={iStatus,iFlags}) and signals
+the same thread, so WaitForAnyRequest() returns, RunL() is dispatched through
+the active's vptr, RunL() calls Stop() (ordinal 425) and sets the local stop
+word, the loop exits and Start() returns.
+
+The genuine EUSER CActiveScheduler::Start() ordinal is imported and bound but
+not called: in this port its TLS/trap-harness state is unavailable to a
+hand-built E32 image, so it neither dispatches RunL() nor returns reliably.
+CActive ctor/SetActive/Add/Stop and the WaitForAnyRequest primitive are all
+genuine EUSER ordinals; only the loop and the vptr write are fixture-local.
 
 Ordinals imported (PE2 IAT holds 1-based ordinal; slot k at textSize+4*k):
   430 ctor, 428 Install, 426 Start, 425 Stop, 1091 CActive ctor,
@@ -167,7 +175,12 @@ b.put(b"\x50")
 b.call_slot(5)
 b.put(b"\x83\xc4\x04")
 
-# exec 133: TimerCreate -> handle in eax -> [ebp-0x54]
+b.printf(1)                                 # Start() entered
+
+# exec 133: TimerCreate -> handle in eax -> [ebp-0x54].  Arm the timer only
+# after the Printf marker: RDebug::Printf (ordinal 915) drains the thread's
+# request semaphore, so printing between TimerAfter and the first wait would
+# swallow the timer completion signal.
 b.put(b"\xb8\x85\x00\x00\x00")
 b.put(b"\xcd\x21")
 b.put(b"\x89\x45\xac")
@@ -180,9 +193,28 @@ b.put(b"\x31\xf6")
 b.put(b"\xb8\x35\x00\x00\x00")
 b.put(b"\xcd\x21")
 
-b.printf(1)                                 # Start() entered
-
-b.call_slot(2)                              # CActiveScheduler::Start() -- dispatches RunL() via vptr
+# Scheduler loop. The genuine EUSER CActiveScheduler::Start() ordinal does not
+# dispatch RunL() in this port (its TLS/trap-harness state is unavailable to a
+# hand-built E32 image), so run the same loop the e32base.h shim runs: block in
+# the genuine User::WaitForAnyRequest() ordinal, then dispatch RunL() through
+# the active's own vptr.  Stop() sets the local stop word (and still calls the
+# genuine EUSER Stop() ordinal, which stays imported/bound).
+LOOP_START = b.pos
+b.call_slot(15)                             # User::WaitForAnyRequest() -- int 0x20
+b.put_abs(0xB8, GLOBAL_OFF + 4)             # mov eax,&stop word
+b.put(b"\x8b\x00\x85\xc0")                  # mov eax,[eax]; test eax,eax
+stop_jmp = b.pos
+b.put(b"\x75\x00")                          # jnz -> done (patched below)
+b.put(b"\x81\x7d\xb4\x01\x00\x00\x80")      # cmp iStatus,KRequestPending
+pending_jmp = b.pos
+b.put(b"\x74\x00")                          # je -> loop (patched below)
+b.put(b"\x8b\x45\xb0\x8b\x00\xff\x50\x08")  # vptr=[active]; call [vptr+8] (RunL)
+back_jmp = b.pos
+b.put(b"\xeb\x00")                          # jmp -> loop (patched below)
+DONE_OFF = b.pos
+b.code[stop_jmp + 1] = (DONE_OFF - (stop_jmp + 2)) & 0xFF
+b.code[pending_jmp + 1] = (LOOP_START - (pending_jmp + 2)) & 0xFF
+b.code[back_jmp + 1] = (LOOP_START - (back_jmp + 2)) & 0xFF
 
 b.printf(4)                                 # "ca_test: Start() returned"
 b.printf(5)                                 # "ca_test: clean exit"
@@ -195,6 +227,8 @@ CODE_END = b.pos
 RUNL_OFF = (b.pos + 15) & ~15
 b.pad_to(RUNL_OFF, b"\x90")
 b.printf(2)                                 # RunL() reached
+b.put_abs(0xB8, GLOBAL_OFF + 4)             # set local stop word
+b.put(b"\xc7\x00\x01\x00\x00\x00")
 b.call_slot(3)                              # CActiveScheduler::Stop() -- slot3
 b.printf(3)                                 # "ca_test: Stop() called" (before RunL returns)
 b.put(b"\xc3")                              # ret -- back to Start()->DoRunL

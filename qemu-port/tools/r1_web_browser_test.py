@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 DISK_IMG = "/tmp/opencode/r1_web_browser.img"
 FS_IMG = "/tmp/opencode/r1_web_browser_fs.img"
@@ -99,6 +100,9 @@ def run_qemu(log):
     cmd = f"{{ {feeder}; }} | {' '.join(shlex.quote(a) for a in qemu)} > {shlex.quote(log)} 2>&1"
     r = subprocess.run(["bash", "-c", cmd], check=False)
     print(f"qemu wrapper exit {r.returncode} (124 == timeout, expected)")
+    # timeout's SIGTERM can reap qemu before its redirected serial stdio is
+    # fully flushed; give the file a moment so marker checks are deterministic.
+    time.sleep(1.0)
     try:
         with open(log, errors="replace") as f:
             return f.read()

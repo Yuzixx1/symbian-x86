@@ -77,7 +77,10 @@ static u16 checksum(const void* data, unsigned length, u32 sum)
         }
     if (length) sum += (u32)bytes[0] << 8;
     while (sum >> 16) sum = (sum & 0xffffu) + (sum >> 16);
-    return (u16)~sum;
+    /* The sum uses big-endian words; store the result byte-swapped so the
+       little-endian u16 field holds the correct network-order checksum. */
+    sum = ~sum & 0xffffu;
+    return (u16)((sum << 8) | (sum >> 8));
 }
 
 static void fill_payload(u32* payload, u32 seq)
@@ -176,8 +179,11 @@ static u32 ping6(const u8* destination, u16 id, u16 seq)
     pseudo_sum = 0;
     for (i = 0; i < 16; i += 2)
         {
-        pseudo_sum += ((u32)ip->src[i] << 8) | ip->dst[i + 1];
-        pseudo_sum += ((u32)ip->dst[i] << 8) | ip->src[i + 1];
+        /* The reply reverses src/dst, so the pseudo-header must swap both
+           complete 16-bit words -- never mix address bytes across the two
+           endpoints (that would produce a checksum for a different packet). */
+        pseudo_sum += ((u32)ip->dst[i] << 8) | ip->dst[i + 1];
+        pseudo_sum += ((u32)ip->src[i] << 8) | ip->src[i + 1];
         }
     pseudo_sum += sizeof(struct icmpv6_echo) + 58u;
     icmp->checksum = checksum(icmp, sizeof(struct icmpv6_echo), pseudo_sum);

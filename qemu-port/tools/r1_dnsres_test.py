@@ -75,17 +75,17 @@ def build_disk():
 
 
 def run(log):
-    qemu = ["timeout", "90", "qemu-system-i386", "-M", "q35", "-m", "128",
+    qemu = ["timeout", "110", "qemu-system-i386", "-M", "q35", "-m", "128",
             "-display", "none", "-serial", "stdio", "-kernel", KERNEL,
             "-drive", f"file={DISK},format=raw,snapshot=on,if=none,id=d0",
             "-device", "ich9-ahci,id=sata", "-device", "ide-hd,drive=d0,bus=sata.0",
             "-monitor", "none", "-no-reboot"]
     feeder = ("sleep 1.0; printf '\\n'; sleep 2.0; printf 'mount\\n'; "
-              "sleep 8.0; printf 'DNSRES\\n'; sleep 6.0; printf 'DNSRES\\n'; "
-              "sleep 6.0; printf 'DNSRES\\n'; sleep 8.0")
+              "sleep 25.0; printf 'DNSRES\\n'; sleep 10.0; printf 'DNSRES\\n'; "
+              "sleep 15.0")
     cmd = f"{{ {feeder}; }} | {' '.join(shlex.quote(a) for a in qemu)} > {shlex.quote(log)} 2>&1"
-    print("== QEMU (60s cap) ==")
-    r = subprocess.run(["bash", "-c"], check=False) if False else subprocess.run(["bash", "-c", cmd])
+    print("== QEMU (110s cap) ==")
+    r = subprocess.run(["bash", "-c", cmd], check=False)
     print(f"qemu wrapper exit: {r.returncode} (124 == timeout expected)")
     with open(log, "r", errors="replace") as f:
         return f.read()

@@ -102,8 +102,8 @@ build/user/netstack_iat.o: user/netstack_iat.S | build/user
 build/user/netstack.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/netstack_iat.o build/user/netstack.o user/link_netstack.ld
 	ld -m elf_i386 --emit-relocs -T user/link_netstack.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
-build/user/NETSTACK.E32: tools/mke32_netstack.py tools/mke32.py
-	python3 tools/mke32_netstack.py --output $@
+build/user/NETSTACK.E32: build/user/netstack.elf tools/mke32_netstack_elf.py tools/mke32.py
+	python3 tools/mke32_netstack_elf.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
 # P-08: long-lived concurrent IPC stress client.
