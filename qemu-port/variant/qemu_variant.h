@@ -63,6 +63,12 @@ void PciWrite32(unsigned int aBus, unsigned int aDev,
 TBool PciFindClass(unsigned int aClass, unsigned int aSub,
                    unsigned int* aBus, unsigned int* aDev, unsigned int* aFn);
 
+// e1000 (82540EM) polled Ethernet driver (variant/qemu_nic.cpp).
+TInt e1000_init();                                  // boot/hot init; idempotent
+TInt e1000_send(const TUint8* aBuf, TUint aLen);    // KErrNone on success
+TInt e1000_recv(TUint8* aBuf, TUint aMax);          // bytes read, or 0
+TBool e1000_link_up();
+
 // ATA PIO driver (variant/qemu_ata.cpp). Devices 0..3 = pri-master,
 // pri-slave, sec-master, sec-slave. LBA28, polled.
 TInt AtaInit();

@@ -1,48 +1,9 @@
-# R1 Networking Design v1 — N-01..N-04 (read-only investigation)
+# R1 TCP/IP Design v1 — N-01..N-04 (read-only investigation; only this doc written)
 
-Done criteria — §11 "Networking (TODO)" of docs/full_os_checklist.md (deleted in
-dabf70b; text recovered from git 1e67072): N-01 NIC bring-up + RX/TX + link
-status; N-02 Symbian TCP/IP stack port + ESOCK (RSocketServ/RSocket); N-03
-DHCP/DNS/address config; N-04 end-to-end tests (ping, DHCP lease, TCP echo,
-socket API). "IPC work is same-machine only and does not imply networking."
-D-06 NIC driver blocks all networking.
-
-Current state: no networking code exists.
-- grep of user/, variant/, services/, tools/: only hits are host-side Python
-  AF_UNIX QEMU-monitor sockets in test_*.py and the "ethernet" PCI class string
-  (variant/qemu_pci.cpp:69). No guest NIC driver, stack, socket server,
-  DHCP/DNS or networking applications. R4 not started.
-- exec_enum.h has zero network executives; EUSER.DLL (~2503 ordinals) is base
-  EUSER only; the port's veneers are ordinals 1/2 (variant/e32load.cpp:46-66).
-  No ESOCK.DLL / INET DLL anywhere in repo or sdk/.
-- tools/r1_qemu_smoke.py:144-154 boots -M q35 with no -netdev/-nic/-device NIC,
-  so there is no guest-visible link, RX/TX path or NIC IRQ.
-
-What EUSER/ordinals exist for networking: none. E32 DLL exports are ordinal-
-only and genuine network APIs live in ESOCK/INET (absent here). A socket API
-must be a NEW IPC service, not an EUSER ordinal.
-
-IPC mechanisms (user <-> kernel/services): user/ipc.c + ipc.h bridge over
-genuine execs — server create 126, receive/cancel 34/35, accept 36, complete
-65, session connect 128, send 77/37, close 106, TPtr copy 167/169; request-
-semaphore wait via int 0x20 (user/start.S:10-14); exec0/2/4 = int 0x21
-(start.S:16-65). Kernel EKA2 primitives exist: DProcess::Create
-(sprocess.cpp:127), DThread::Create (sthread.cpp:949), ExecHandler::ThreadCreate
-(sexec.cpp:1919); E32Run (e32load.cpp:672) creates/loads/resumes user processes;
-named global chunks, timers, msg queues and svcmgr execs 268/269/270 available.
-Gap: no NIC device object, NIC interrupt handler, buffer pools or socket session
-multiplexing.
-
-Concrete next steps:
-1. D-06/N-01: add -netdev user,id=n0 -device e1000,netdev=n0 to the smoke test;
-   PCI scan (PciFindClass 02,00) + e1000 MMIO TX/RX descriptor rings as a kernel
-   ISR/DFC in a NEW variant/ file; wire PCI INTx (config 0x3C) via Interrupt::
-   Bind (storage/USB are polled templates); poll one ARP frame first, then IRQ.
-2. N-02: small freestanding IPv4/ARP/ICMP/UDP/TCP stack in a user service —
-   kernel DFC -> global named chunk -> user stack task, reusing timers and
-   ipc_wait_for for async I/O (zero-copy RX/TX via shared chunk).
-3. N-03: ESOCK-like IPC server (function numbers, SIpcCopyInfo descriptor
-   slots) exposing socket/bind/listen/connect/send/recv plus DHCP/DNS clients.
-4. N-04: QEMU regressions (ping, DHCP lease, TCP echo, socket API) in
-   tools/test_*.py + a sample networking application.
-5. Keep kernelhwsrv/ frozen; gate each step as QEMU-ready per roadmap vocabulary.
+**Facts:** kernelhwsrv/ lives at workspace root, not under qemu-port/. user/ipc.c bridges genuine execs: server 126, receive 34/35, accept 36, complete 65, connect 128, call 77/37, close 106, copy/len 169/167; exec0/2/4 = int 0x21, request wait = int 0x20. E32Run (variant/e32load.cpp:692) -> Kern::ProcessCreate -> DProcess::Create (sprocess.cpp:127) -> initial DThread (sthread.cpp:949/568); Resume (sprocess.cpp:513) enters ring-3 via x86/ckernel.cia EpocThreadFunction (iretd); x86/csched.cia switches via TheScheduler.iCurrentThread/iNThread. ckernel.cia is asm glue only — device discovery is PCI scan (qemu_pci.cpp) + e1000_init() constructor (qemu_nic.cpp:145, HwInit0 init_array), driven by Asic::Init3. qemu_nic.cpp ALREADY provides polled e1000 (8086:100E) BAR0 MMIO, EEPROM MAC, 8x2KB TX/RX rings, e1000_send/recv/link_up and is in KERNFULL_OBJS (Makefile:274). Gaps: smoke test boots no explicit -nic; no IRQ/DFC, no stack or socket service.
+**Architecture / EUSER:** netstack.E32 + socket apps are import-free user E32s (elf2e32.py: dllRefs=0) linked with runtime.c/ipc.c/euser_shim.cpp calling execs. EUSER.DLL (bx86gcc/euseru.def: 2503 ordinals) has NO socket/host/inet/DNS/DHCP exports — sockets are a NEW `!SocketServer` CServer2 IPC service, NOT new EUSER ordinals. Existing useful ordinals: RChunk 902-913, RSessionBase 1547-1550/1991-1992, WaitForRequest 604, After 645, memcpy 1953; port veneers only 1=Exit,2=PutC,3=CmdLen. svcmgr.cpp:247-255 already reserves !NetStack/!DnsResolver launch slots.
+**Layers:** e1000 kernel driver (N-01) -> named global chunk RX/TX rings -> netstack user task: ARP, IPv4, ICMP, UDP, TCP (N-02) -> `!SocketServer` IPC (socket/bind/listen/connect/send/recv/close as ipc_call function numbers; fd = subsession; payload via ipc_read8/ipc_write8 slots) -> user apps (N-04).
+**Packet flow:** NIC DMA -> e1000_recv into chunk ring -> netstack polls chunk_base -> ARP cache -> IPv4 checksum/TTL -> demux by (proto,src/dst IP,ports) -> per-socket RX queue -> ipc_write8 + request signal completes pending client recv. TX: client ipc_write8 builds Ethernet/IP/TCP in chunk -> e1000_send posts TX descriptor; polled first, then PCI INTx -> Interrupt::Bind -> DFC (cf. r1_nic_design_v1.md).
+**DNS (N-03):** UDP client inside netstack, server from DHCP opt 6 or static 8.8.8.8. Query: 12B header (ID=random32()&0xffff, RD=0x0100, QD=1), QNAME labels+0, QTYPE=A(1), QCLASS=IN(1); match ID/QR/RCODE, skip CNAME, cache first A RDATA with TTL, 2s timeout + retry; exposed as socket API call (r1_dns_design_v1.md).
+**DHCP (N-03):** UDP 68(client)->67(server); DORA: DISCOVER from 0.0.0.0:68 to 255.255.255.255:67 (MAC+xid) -> OFFER -> REQUEST -> ACK; install IP/mask/gateway/DNS(6)/lease(51); T1/T2 renewal via exec 133 timers; ARP-probe before use.
+**N-04:** add explicit `-netdev user,id=n0 -device e1000,netdev=n0` to smoke test; QEMU regressions for ARP, ping, DHCP lease, DNS lookup, TCP echo. Keep kernelhwsrv/ frozen; no exec-table patches needed.

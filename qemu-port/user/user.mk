@@ -10,6 +10,10 @@ userland: build/user/WAITFOR.E32
 userland: build/user/KILLPROC.E32
 userland: build/user/ca_test.e32
 
+# S-02: service manager and the F32 service it supervises at boot.
+.PHONY: svcmgr
+svcmgr: build/user/SVCMGR.E32 build/user/PORTFILESRV.E32
+
 # P-06: user-mode blocking wait via the genuine ProcessLogon executive (123).
 build/user/waitfor.elf: build/user/start.o build/user/runtime.o build/user/waitfor.o user/link.ld
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)

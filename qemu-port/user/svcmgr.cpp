@@ -1,17 +1,18 @@
 /*
- * svcmgr.cpp — S-02: service manager (ordered startup + supervision + shutdown)
- * that also owns the "!FileServer" global name.
+ * svcmgr.cpp — S-02: service manager (ordered startup + supervision + shutdown).
  *
- * Two modes, selected by the process command line (svc_launch passes one):
- *   - no args : orchestrator. Boots the ordered service table, waits for each
- *               service's global name, supervises children (restart on death
- *               with bounded backoff), shuts down in reverse on fatal error.
- *   - "fs"    : FileServer host. Constructs the R1 filesystem backend, registers
- *               as the FS owner thread, FileServer::NewL + Publish("!FileServer")
- *               and blocks forever in CServer2::Start's IPC receive loop.
+ * Boot service order is a static table:
+ *   - EUSER.DLL   : already resident (E32LoadDll binds its exports); no process
+ *                   to launch, kept first to document the dependency order.
+ *   - portfilesrv : launched as a managed child; publishes "!FileServer".
+ *   - future IPC services (DNS resolver, network stack, console, loader) are
+ *     placeholders in the table, enabled as their images land.
  *
- * The manager launches itself with "fs" as service 0, so the FileServer is
- * published before any other service and PortFile is retired from the table.
+ * The orchestrator waits on each service's global name via ipc_connect(),
+ * supervises children (restart on death with bounded backoff) and shuts down
+ * in reverse on a fatal error. The optional "fs" command-line mode remains a
+ * standalone FileServer host for bring-up; the boot path does not use it.
+ *
  * Launch/kill/ctl execs (268/269/270) are installed by
  * variant/e32load.cpp::SvcMgrExecInstall at boot; kernelhwsrv/ is untouched.
  *
@@ -240,14 +241,17 @@ static int svc_kill(int pid)   { return exec2(ESvcKill, (unsigned)pid, 0); }
 static int svc_dead(int pid)   { return exec2(ESvcCtl, (unsigned)ESvcCtlDead, (unsigned)pid); }
 static int svc_reap(void)      { return exec2(ESvcCtl, (unsigned)ESvcCtlReap, 0); }
 
-/* Storage/FAT mount is already done by Asic::Init3. Service 0 is this image in
-   "fs" mode (owns F32); console/loader are stubbed until H-02/L-06 land. */
+/* Storage/FAT mount is already done by Asic::Init3, and EUSER.DLL is resident
+   (E32LoadDll). A null path marks a prerequisite that needs no launch. */
 struct Service { const char* path; const char* cmd; const char* name; const char* depends; };
 static const Service kServices[] =
     {
-    { "\\SVCMGR.E32", "fs", "!FileServer", 0 },  /* storage -> F32 (manager-owned) */
-    /* { "\\CONSOLE.E32", 0, "!ConsoleServer", "!FileServer" },  H-02 */
-    /* { "\\LOADER.E32",  0, "!Loader",        "!ConsoleServer" }, L-06 */
+    { 0, 0, 0, 0 },  /* EUSER.DLL: already running, documents boot order */
+    { "\\PORTFILESRV.E32", 0, "!FileServer", 0 },  /* F32 / R1 file server */
+    /* { "\\CONSOLE.E32",  0, "!ConsoleServer", "!FileServer" },  H-02 */
+    /* { "\\LOADER.E32",   0, "!Loader",        "!ConsoleServer" }, L-06 */
+    /* { "\\DNSSRV.E32",   0, "!DnsResolver",   "!FileServer" },  future */
+    /* { "\\NETSRV.E32",   0, "!NetStack",      "!FileServer" },  future */
     };
 enum { KServiceCount = (int)(sizeof(kServices) / sizeof(kServices[0])) };
 
@@ -288,6 +292,8 @@ static int run_orchestrator(void)
     for (int i = 0; i < KServiceCount; ++i)
         {
         const Service& s = kServices[i];
+        if (!s.path)  /* already-resident prerequisite (EUSER.DLL) */
+            { print("SVCMGR: prerequisite already running"); continue; }
         int pid = svc_launch(s.path, s.cmd);
         if (pid <= 0) { print("SVCMGR: launch failed"); shutdown_services(); return -1; }
         sPid[i] = pid;

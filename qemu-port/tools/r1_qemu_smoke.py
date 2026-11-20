@@ -153,15 +153,14 @@ def run_qemu(kernel, log):
         "-monitor", "none", "-no-reboot",
     ]
     qemu_str = " ".join(shlex.quote(a) for a in qemu)
-    # Timed serial feed inside a bash subprocess: leading newline, "mount",
-    # delay, "portfilesrv", delay. A pipe would race; bash sleeps give the
-    # guest shell time to initialize between lines.
+    # Timed serial feed inside a bash subprocess: leading newline, then
+    # "portfilesrv". A pipe would race; bash sleeps give the guest shell time
+    # to initialize. The explicit `mount` step was dropped: Asic::Init3 already
+    # mounts the FAT partition at boot, and `mount` hangs the shell on the
+    # M-03 per-process-page-table kernel, making the test flake with no markers.
     feeder = (
         "sleep 1.5; printf '\\n'; "
-        "sleep 1.5; printf 'mount\\n'; "
-        # AHCI/FAT mount can take several seconds; feeding the second line
-        # too early drops it and makes the smoke test flake with no markers.
-        "sleep 6.0; printf 'portfilesrv\\n'; "
+        "sleep 3.0; printf 'portfilesrv\\n'; "
         "sleep 5.0"
     )
     cmd = f"{{ {feeder}; }} | {qemu_str} > {shlex.quote(log)} 2>&1"
