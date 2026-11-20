@@ -76,10 +76,84 @@ namespace
             }
         MoveCursor();
         }
+
+    // The display boot hook puts the VGA into Bochs VBE 1024x768x32, so the
+    // 0xB8000 text cells are no longer scanned out. Mirror the same teletype
+    // into the LFB with the existing 5x7 stroke font so the shell is visible
+    // on screen as well as on COM1. GUI programs still own the LFB via the
+    // display HAL; their output simply coexists with (or overwrites) text.
+    const TUint kFxCellW = 8, kFxCellH = 16;
+    TUint gFbW = 0, gFbH = 0, gFxCol = 0, gFxRow = 0, gFxRows = 0;
+    TBool gFxReady = EFalse;
+
+    void FbEnsure()
+        {
+        if (gFxReady)
+            return;
+        TUint w = 0, h = 0, b = 0;
+        display_geometry(w, h, b);
+        if (!w || !h)
+            return;
+        gFbW = w; gFbH = h;
+        gFxRows = h / kFxCellH;
+        if (gFxRows > kRows)
+            gFxRows = kRows;
+        gFxReady = ETrue;
+        }
+
+    void FbCellClear(TUint aCol, TUint aRow)
+        { display_rect(aCol * kFxCellW, aRow * kFxCellH,
+                       kFxCellW, kFxCellH, 0u); }
+
+    void FbScroll()
+        {
+        volatile unsigned char* fb =
+            (volatile unsigned char*)display_lfb();
+        TUint pitch = gFbW * 4;
+        if (!fb || !pitch)
+            return;
+        for (TUint y = kFxCellH; y < gFbH; ++y)
+            {
+            volatile TUint32* dst = (volatile TUint32*)(fb + (y - kFxCellH) * pitch);
+            volatile TUint32* src = (volatile TUint32*)(fb + y * pitch);
+            for (TUint i = 0; i < pitch / 4; ++i)
+                dst[i] = src[i];
+            }
+        display_rect(0, gFbH - kFxCellH, gFbW, kFxCellH, 0u);
+        }
+
+    void FbPutC(char aC)
+        {
+        FbEnsure();
+        if (!gFxReady)
+            return;
+        if (aC == '\n')
+            {
+            gFxCol = 0;
+            if (++gFxRow >= gFxRows)
+                { gFxRow = gFxRows - 1; FbScroll(); }
+            return;
+            }
+        if (aC == '\r') { gFxCol = 0; return; }
+        if (aC == '\b')
+            {
+            if (gFxCol)
+                { --gFxCol; FbCellClear(gFxCol, gFxRow); }
+            return;
+            }
+        if (gFxCol >= kCols || gFxRow >= gFxRows)
+            return;
+        FbCellClear(gFxCol, gFxRow);
+        display_putc(gFxCol * kFxCellW, gFxRow * kFxCellH,
+                     aC, 0x00C0C0C0u, 0u);
+        if (++gFxCol >= kCols)
+            FbPutC('\n');
+        }
     }
 
 void VgaTeletype(char aC)
     {
+    FbPutC(aC);  // LFB mirror for VBE graphics mode; COM1 handled by caller
     if (aC == '\n') { NewLine(); return; }
     if (aC == '\r') { sCol = 0; MoveCursor(); return; }
     if (aC == '\b')
@@ -106,6 +180,13 @@ static void VgaInit()
     sCol = 0;
     sRow = 0;
     MoveCursor();
+    FbEnsure();
+    if (gFxReady)
+        {
+        display_clear(0u);
+        gFxCol = 0;
+        gFxRow = 0;
+        }
     }
 
 // ------------------------------------------------------------- keyboard ring

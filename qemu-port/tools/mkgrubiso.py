@@ -54,11 +54,109 @@ def run(cmd):
     subprocess.run(cmd, check=True)
 
 
+# -------------------------------------------------------- end-user programs
+# The kernel's shell runs E32 images off a mounted FAT32 volume. Bundle a
+# curated set (the end-user sample apps; the sub-30K E32s are test/debug
+# harnesses) on a ready-to-mount FAT32 disk inside the ISO. Built exactly the
+# way the r1_* test harnesses stage their disks: mkfs.fat + mcopy, MBR at LBA
+# 0 with the FAT32 partition at LBA 2048.
+USER_DIR = os.path.join(BUILD, "user")
+EUSER_DLL = os.path.join(QPORT, "EUSER.DLL")
+PROGRAMS_IMG_NAME = "programs.img"
+E32_MIN_SIZE = 30000
+DISK_MB, FS_MB, PART_LBA = 32, 16, 2048
+
+
+def curated_programs(work):
+    """End-user E32s + support files, as (source path, FAT name) pairs.
+
+    Names are 8.3 where possible; longer ones get mtools' LFN aliases, which
+    the guest's FAT driver resolves (confirmed: APPLAUNCH.E32 shows in DIR).
+    """
+    if not os.path.isdir(USER_DIR):
+        return []
+    out = []
+    for name in sorted(os.listdir(USER_DIR)):
+        if not name.upper().endswith(".E32"):
+            continue
+        src = os.path.join(USER_DIR, name)
+        if os.path.getsize(src) < E32_MIN_SIZE:
+            continue
+        out.append((src, name.upper()))
+    if os.path.exists(EUSER_DLL):
+        out.append((EUSER_DLL, "EUSER.DLL"))
+    notes = os.path.join(work, "NOTES.TXT")
+    with open(notes, "w") as f:
+        f.write("Symbian EKA2 end-user programs\r\n"
+                "================================\r\n"
+                "This is the FAT32 image embedded in the bootable GRUB ISO as\r\n"
+                "/PROGRAMS.IMG. Mount it in the EKA2 shell with MOUNT (or it is\r\n"
+                "mounted at boot), then DIR / CD / run a program by name, e.g.:\r\n"
+                "  MOUNT\r\n  DIR\r\n  CALC\r\n"
+                "EUSER.DLL must stay next to the E32 images.\r\n")
+    readme = os.path.join(work, "README.TXT")
+    with open(readme, "w") as f:
+        f.write("Boot with tools/boot_grub.sh to expose this image to QEMU.\r\n")
+    out.append((notes, "NOTES.TXT"))
+    out.append((readme, "README.TXT"))
+    return out
+
+
+def build_programs_image(work):
+    """Return (path to a 32MB MBR+FAT32 disk, staged file names); (None, []) on skip."""
+    for tool in ("mkfs.fat", "mcopy", "mdir"):
+        if not shutil.which(tool):
+            print(f"PROGRAMS-IMG: skipped ({tool} missing)")
+            return None, []
+    files = curated_programs(work)
+    if not files:
+        print("PROGRAMS-IMG: skipped (no user E32s built; run make userland)")
+        return None, []
+    fs = os.path.join(work, "programs-fs.img")
+    disk = os.path.join(work, PROGRAMS_IMG_NAME)
+    for p in (fs, disk):
+        if os.path.exists(p):
+            os.remove(p)
+    fs_secs = FS_MB * 1024 * 1024 // 512
+    with open(fs, "wb") as f:
+        f.truncate(fs_secs * 512)
+    run(["mkfs.fat", "-F", "32", fs])
+    for src, name in files:
+        run(["mcopy", "-i", fs, "-o", src, "::" + name])
+    with open(fs, "rb") as f:
+        payload = f.read()
+    with open(disk, "wb") as f:
+        f.truncate(DISK_MB * 1024 * 1024)
+        entry = (bytes([0x80, 0, 2, 0, 0x0C, 0, 2, 0])
+                 + PART_LBA.to_bytes(4, "little") + fs_secs.to_bytes(4, "little"))
+        mbr = bytearray(512)
+        mbr[446:462] = entry
+        mbr[510], mbr[511] = 0x55, 0xAA
+        f.seek(0)
+        f.write(mbr)
+        f.seek(PART_LBA * 512)
+        f.write(payload)
+    listing = subprocess.run(["mdir", "-i", f"{disk}@@{PART_LBA}S", "::"],
+                             check=True, capture_output=True, text=True).stdout
+    names = [n for _, n in files]
+    norm = "".join(listing.lower().replace(".", "").replace("-", "").split())
+    for want in names:
+        if "".join(want.lower().replace(".", "").split()) not in norm:
+            sys.exit(f"PROGRAMS-IMG: mdir missing {want}")
+    shutil.copyfile(disk, os.path.join(BUILD, PROGRAMS_IMG_NAME))
+    print(f"PROGRAMS-IMG-OK: {disk} ({len(names)} files, {os.path.getsize(disk)} bytes)")
+    return disk, names
+
+
 BIOS_CFG = """serial --unit=0 --speed=115200
 terminal_input serial console
 terminal_output serial console
 set timeout=10
 set default=0
+# End-user E32 programs are on this ISO as /PROGRAMS.IMG (FAT32, MBR at 0).
+# GRUB cannot hand a file inside the ISO to the guest as a block device; boot
+# with tools/boot_grub.sh, which extracts it and attaches it as a virtual disk.
+# In the shell: MOUNT, DIR, then type a program name (e.g. CALC).
 menuentry "Symbian EKA2 full kernel (genuine)" {
     set gfxpayload=text
     echo Booting full kernel...
@@ -76,6 +174,7 @@ menuentry "Symbian EKA2 nanokernel" {
 
 EFI_CFG = """set timeout=10
 set default=0
+# /PROGRAMS.IMG on this ISO holds the end-user E32s (see tools/boot_grub.sh).
 menuentry "Symbian EKA2 full kernel (genuine)" {
     echo Booting full kernel...
     multiboot /boot/kernfull.elf
@@ -139,6 +238,8 @@ def main():
                       4, efi_img, partitioned=False)
     shutil.copyfile(efi_img, os.path.join(iso_root, "boot", "grub", "efiboot.img"))
 
+    programs_img, staged = build_programs_image(work)
+
     def write_iso():
         iso = PyCdlib()
         iso.new(interchange_level=3, sys_ident="LINUX", vol_ident="SYMBIAN_GRUB",
@@ -159,6 +260,9 @@ def main():
                          f"/BOOT/GRUB/I386PC/{name.upper()};1", rr_name=name)
         iso.add_file(os.path.join(iso_root, "boot", "grub", "efiboot.img"),
                      "/BOOT/GRUB/EFIBOOT.IMG;1", rr_name="efiboot.img")
+        if programs_img:
+            iso.add_file(programs_img, "/PROGRAMS.IMG;1",
+                         rr_name=PROGRAMS_IMG_NAME)
         iso.add_eltorito("/BOOT/GRUB/BOOT.IMG;1")
         if not bios_only:
             iso.add_eltorito("/BOOT/GRUB/EFIBOOT.IMG;1", platform_id=0xef, efi=True)
@@ -176,6 +280,9 @@ def main():
     if lba2 != lba:
         sys.exit("GRUB ISO layout unstable, aborting")
     print(f"GRUB-ISO-OK: {out} ({os.path.getsize(out)} bytes)")
+    if staged:
+        print(f"GRUB-ISO-PROGRAMS: /PROGRAMS.IMG with {len(staged)} files "
+              f"({', '.join(n for n in staged if n.endswith(('.TXT', '.DLL')))})")
 
 
 if __name__ == "__main__":

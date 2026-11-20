@@ -911,8 +911,11 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     return r;
     }
 
-// Kill a user process by container id (shell `kill`). Refuses the kernel
-// and the shell's own process (pointer comparison, not numeric id).
+// Kill a user process by container id (shell `kill`, exec 269). Refuse the
+// kernel process and the caller's own process by object identity (pointer
+// comparison, not numeric id). exec 269 is reachable from ring 3 (KILLPROC),
+// so a user process passing the kernel's pid must not be able to Die() ekern:
+// the self-only check used to let that through and fault the kernel.
 // Locking mirrors OpenById (sexec.cpp): Open under the container lock,
 // release it, then Die (container+process nesting faults otherwise).
 TInt E32Kill(TUint aId)
@@ -929,7 +932,7 @@ TInt E32Kill(TUint aId)
             { found = p; break; }
         }
     TInt r = KErrNotFound;
-    if (found && found == self)
+    if (found && (found == self || found == K::TheKernelProcess))
         {
         r = KErrAccessDenied;
         c->Signal();
