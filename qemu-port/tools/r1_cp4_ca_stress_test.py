@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """P-08 concurrency stress: multiple simultaneous IPC client processes doing
-async requests against one server, a mid-test kill, over repeated cycles.
-Checks: no lost request-semaphore completions, no Exc/fault, exit-ring record
-per death, and zero leaked channels/segs (vs. a post-mount baseline).
+async requests against one server, one PEER PROCESS killing another mid-test,
+over repeated cycles. Checks: no lost request-semaphore completions, no
+Exc/fault, exit-ring record per death, and zero leaked channels/segs (vs. a
+post-mount baseline).
 """
 import re
 import subprocess
@@ -108,7 +109,7 @@ def main():
                    stdout=subprocess.DEVNULL)
     subprocess.run(['python3', 'tools/mkdisk.py', 'seeded', test_cli.DISK, '64'],
                    check=True, stdout=subprocess.DEVNULL)
-    for name in ('IPCSRV', 'IPCCLI', 'CPSTRESS'):
+    for name in ('IPCSRV', 'IPCCLI', 'CPSTRESS', 'KILLPROC'):
         subprocess.run(['mcopy', '-o', '-i', test_cli.DISK + '@@2048S',
                         f'build/user/{name}.E32', f'::{name}.E32'], check=True)
 
@@ -144,17 +145,18 @@ def main():
                 pos, clients = ps_ids(vm, pos, 'CPSTRESS')
                 assert len(clients) == CLIENTS, f'cycle {cycle}: client ids {clients}'
 
-                # Kill one client mid-test; the others must still complete
-                # every async request (no lost request-semaphore completions).
-                # Prove the victim is still in-flight: it made progress but
-                # has not emitted its completion marker yet.
+                # One user PROCESS kills another mid-test (peer kill via the
+                # genuine ProcessOpenById/ProcessKill executives, not the shell
+                # KILL command); the survivors must still complete every async
+                # request (no lost request-semaphore completions). Prove the
+                # victim is still in-flight: progress but no completion marker.
                 victim = clients[VICTIM - 1]
                 in_flight = read_range(victim_launch, pos)
                 assert f'CPSTRESS: tick{VICTIM} ' in in_flight, (
                     f'cycle {cycle}: victim made no progress before kill')
                 assert f'CPSTRESS: done{VICTIM} ' not in in_flight, (
                     f'cycle {cycle}: victim finished before kill (not mid-test)')
-                pos = run(vm, pos, f'kill {victim}', f'killed {victim}'.encode())
+                pos = run(vm, pos, f'KILLPROC.E32 {victim}', b'KILLPROC: killed')
                 wait_for_done(done_prior + CLIENTS - 1)
                 # Every surviving client must have drained all its async
                 # requests: a lost request-semaphore completion would hang its

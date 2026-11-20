@@ -156,6 +156,13 @@ def run_qemu(kernel, log):
 
 def check_markers(text):
     results = {m: (m in text) for m in MARKERS}
+    # Presence alone is not enough: the six markers must appear in the order
+    # that proves the genuine Start()/Stop() round trip through the scheduler.
+    pos = [text.find(m) for m in MARKERS]
+    results["marker order (Install->Start->RunL->Stop->returned->exit)"] = (
+        all(p >= 0 for p in pos)
+        and all(pos[i] < pos[i + 1] for i in range(len(pos) - 1))
+    )
     bind_lines = [ln for ln in text.splitlines() if "e32run: bind slot" in ln]
     for ordn in BIND_ORDS:
         key = f"e32run: bind slot ... ord {ordn}"

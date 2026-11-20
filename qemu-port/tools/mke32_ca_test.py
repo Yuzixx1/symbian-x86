@@ -184,9 +184,8 @@ b.printf(1)                                 # Start() entered
 
 b.call_slot(2)                              # CActiveScheduler::Start() -- dispatches RunL() via vptr
 
-b.printf(5)                                 # "ca_test: Stop() called" (from RunL())
 b.printf(4)                                 # "ca_test: Start() returned"
-b.printf(3)                                 # "ca_test: clean exit"
+b.printf(5)                                 # "ca_test: clean exit"
 b.put(b"\x31\xc0")
 b.put(b"\xc9")
 b.put(b"\xc3")
@@ -197,7 +196,7 @@ RUNL_OFF = (b.pos + 15) & ~15
 b.pad_to(RUNL_OFF, b"\x90")
 b.printf(2)                                 # RunL() reached
 b.call_slot(3)                              # CActiveScheduler::Stop() -- slot3
-b.printf(5)                                 # "ca_test: Stop() called"
+b.printf(3)                                 # "ca_test: Stop() called" (before RunL returns)
 b.put(b"\xc3")                              # ret -- back to Start()->DoRunL
 RUNL_END = b.pos
 

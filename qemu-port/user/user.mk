@@ -7,6 +7,7 @@ userland: build/user/IPCSRV.E32 build/user/IPCCLI.E32 build/user/CPSTRESS.E32 bu
 userland: build/user/PORTFILESRV.E32
 userland: build/user/SVCMGR.E32
 userland: build/user/WAITFOR.E32
+userland: build/user/KILLPROC.E32
 userland: build/user/ca_test.e32
 
 # P-06: user-mode blocking wait via the genuine ProcessLogon executive (123).
@@ -14,6 +15,14 @@ build/user/waitfor.elf: build/user/start.o build/user/runtime.o build/user/waitf
 	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/WAITFOR.E32: build/user/waitfor.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@
+	python3 tools/e32read.py $@ --quiet
+
+# P-08: peer killer fixture — a user process kills another by container id.
+build/user/killproc.elf: build/user/start.o build/user/runtime.o build/user/killproc.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/KILLPROC.E32: build/user/killproc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
