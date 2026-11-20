@@ -918,6 +918,13 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
 // the self-only check used to let that through and fault the kernel.
 // Locking mirrors OpenById (sexec.cpp): Open under the container lock,
 // release it, then Die (container+process nesting faults otherwise).
+TUint E32LastPid()
+    {
+    // sSvcLastPid is written inside E32Run before it returns, so the shell
+    // can capture the pid of the child it just launched (Ctrl+C abort).
+    return sSvcLastPid;
+    }
+
 TInt E32Kill(TUint aId)
     {
     NKern::ThreadEnterCS();

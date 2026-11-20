@@ -205,8 +205,16 @@ static void VgaInit()
 static volatile unsigned char sRing[256];
 static volatile TUint sHead = 0, sTail = 0;
 
+// Ctrl+C abort (Linux-style ^C): byte 0x03 (ETX) is swallowed at every input
+// source and only raises this flag. The shell checks it while a child runs —
+// including while a program holds the console lease — kills the foreground
+// E32 process and returns to the prompt. No signal machinery in the guest.
+static volatile TBool sAbortPending = EFalse;
+static TUint sForegroundPid = 0;
+
 extern "C" void QemuKbdPush(char aC)
     {
+    if ((unsigned char)aC == 0x03) { sAbortPending = ETrue; return; }
     TUint next = (sHead + 1) & 255u;
     if (next == sTail) return;
     sRing[sHead] = (unsigned char)aC;
@@ -220,6 +228,7 @@ static volatile TUint sUHead = 0, sUTail = 0;
 
 extern "C" void QemuKbdPushUsb(char aC)
     {
+    if ((unsigned char)aC == 0x03) { sAbortPending = ETrue; return; }
     TUint next = (sUHead + 1) & 255u;
     if (next == sUTail) return;
     sURing[sUHead] = (unsigned char)aC;
@@ -245,7 +254,9 @@ static int KbdPoll()
 static int SerialPoll()
     {
     if (!(In8(0x3FD) & 0x01)) return -1;
-    return (int)In8(0x3F8);
+    int c = (int)In8(0x3F8);
+    if (c == 0x03) { sAbortPending = ETrue; return -1; }  // ^C fallback path
+    return c;
     }
 
 // Shared input stream for the PortCon console service (variant/usercon.cpp).
@@ -320,6 +331,7 @@ static const TCommandHelp kHelp[] =
     {"format", "FORMAT device yes", "DESTROYS the whole specified disk and creates one FAT32 partition."},
     {"args", "ARGS id", "Show a process's command line (see PS for IDs)."},
     {"kill", "KILL id", "Terminate a user process; use PS to find its ID."},
+    {"abort", "ABORT (or CTRL C, !)", "Kill the current foreground program (same as typing ^C on the console) and return to the prompt."},
     {"reap", "REAP", "Release dead user-image code segments."},
     {"exits", "EXITS", "Show recent user-process exit records (survives reaping)."},
     {"wait", "WAIT id [seconds]", "Block until a process dies (default 30s, max 300s), then report its exit."},
@@ -363,7 +375,7 @@ static void PrintHelp(const char* aName)
         KPrintf("EKA2 DOS-style command shell  (HELP command for details)\r\n");
         KPrintf("Files:    DIR  CD  TYPE  WRITE  COPY  REN  DEL  MKDIR  RMDIR  CLS\r\n");
         KPrintf("Drives:   MOUNT  VOL  DRIVE  X:  FORMAT\r\n");
-        KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  REAP  EXITS  WAIT  REBOOT\r\n");
+        KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  ABORT  REAP  EXITS  WAIT  REBOOT\r\n");
         KPrintf("Programs: type a file name to run it, e.g. HELLO.E32 or HELLO args\r\n");
         KPrintf("Hardware: PCI  DISPLAY  MOUSE  IDE  AHCI  VBLK  RNG  AUDIO  USB  EHCI  XHCI  XHCIPORTS  NIC  VNET\r\n");
         KPrintf("Paths: X:name selects a mounted drive; quote names containing spaces.\r\n");
@@ -607,6 +619,42 @@ static TBool ParseTime(const char* aText, TInt& aHour, TInt& aMin, TInt& aSec)
     return (aHour <= 23 && aMin <= 59 && aSec <= 59) ? ETrue : EFalse;
     }
 
+// Ctrl+C / ABORT: kill the foreground E32 child (if any) and come back to
+// the prompt. Reclaiming the console lease unconditionally is safe: the
+// victim is being killed and can no longer consume input.
+static void AbortForeground()
+    {
+    sAbortPending = EFalse;
+    TUint pid = sForegroundPid;
+    sForegroundPid = 0;
+    if (pid)
+        {
+        TInt r = E32Kill(pid);
+        if (r == KErrNone)
+            KPrintf("\r\naborted pid=%u\r\n", pid);
+        else
+            KPrintf("\r\naborted (kill %u: %s)\r\n", pid, ErrName(r));
+        }
+    else
+        KPrintf("\r\naborted\r\n");
+    if (ConInputLeased())
+        ConForceRelease();
+    sLen = 0;
+    }
+
+// Called from the shell's input loop: only acts when an input source has
+// raised the ^C flag. The lease branch calls this before halting so a
+// program that owns the console cannot hide the request from the shell.
+// The typed ABORT command reprompts via the main loop instead.
+static void CheckAbort()
+    {
+    if (sAbortPending)
+        {
+        AbortForeground();
+        FatPrompt();
+        }
+    }
+
 // Run an E32 image as a user process. DOS-style: the name is tried as
 // given, then with ".E32" appended when it has no extension. aTail (the raw
 // words after the name) becomes the process command line.
@@ -678,7 +726,10 @@ static void RunImage(const char* aName, const char* aTail)
         KPrintf("reaped %d dead user image(s)\r\n", reaped);
     TInt rr = E32Run(eBuf, got, inner, aTail);
     if (rr == KErrNone)
-        KPrintf("%s started (user process)\r\n", aName);
+        {
+        sForegroundPid = E32LastPid();
+        KPrintf("%s started (user process, pid=%u)\r\n", aName, sForegroundPid);
+        }
     else
         KPrintf("%s (%s)\r\n", aName, ErrName(rr));
     VolRestore(prev);
@@ -1527,6 +1578,12 @@ static void Exec()
                 KPrintf("kill: %s\r\n", ErrName(r));
             }
         }
+    else if (StrEq(cmd, "abort") || StrEq(cmd, "ctrlc") || Same(cmd, "!"))
+        {
+        // Portable fallback for hosts where QEMU serial swallows byte 0x03:
+        // kill the foreground child directly (see also ^C on the console).
+        AbortForeground();
+        }
     else if (StrEq(cmd, "gboot"))
         {
         TInt r = R1GCommand(argc == 2 ? argv[1] : "help");
@@ -1647,6 +1704,11 @@ static void ShellMain(TAny* /*aPtr*/)
     FatPrompt();
     for (;;)
         {
+        // Ctrl+C is latched by the input ISR/poll even while a program owns
+        // the console, so check it at the top of every iteration before
+        // deciding whether to sleep. A ^C kills the foreground child and
+        // returns us to the prompt regardless of who holds the lease.
+        CheckAbort();
         // While a user program leases console input, the shell must not
         // touch the stream (it would steal program keystrokes). A dead
         // owner is reclaimed here so a crash without release cannot wedge

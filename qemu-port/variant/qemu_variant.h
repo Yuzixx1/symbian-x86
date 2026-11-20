@@ -293,6 +293,7 @@ TInt E32Validate(const TUint8* aBuf, TUint aLen, TE32Info& aInfo);
 TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
             const char* aCmdLine = 0);  // shell tail, stored as UTF-16 bytes
 TInt E32Kill(TUint aId);     // die by container id (never the kernel)
+TUint E32LastPid();          // pid of the most recent successful E32Run (Ctrl+C abort)
 TInt E32Reap();              // post-mortem code-seg cleanup, returns count
 void E32PrintExits();        // ring of recent exit records (name/id/type/reason)
 TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName);
