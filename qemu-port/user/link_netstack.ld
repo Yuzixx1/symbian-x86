@@ -1,6 +1,7 @@
 /* Linker script for netstack.E32.  The .iat input section is emitted as its
-   own output section directly after .text; elf2e32_pe2.py turns its length
-   into the PE2 iTextSize and binds ord 915 into slot 0. */
+   own output section directly after .text; mke32_netstack_elf.py turns its
+   length into the PE2 iTextSize.  The six slots bind EUSER ordinals 915, 617,
+   626, 925, 928 and 929 (markers, IPC and timing). */
 OUTPUT_FORMAT(elf32-i386)
 ENTRY(_start)
 SECTIONS

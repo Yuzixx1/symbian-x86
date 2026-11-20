@@ -3,7 +3,14 @@
  * The port's E32 loader supports PE2-style imports: the IAT lives at the end
  * of the text section and each slot initially holds a 1-based EUSER export
  * ordinal.  Before resuming the process the loader replaces the slot with the
- * resolved export address.  Slot 0 here is ordinal 915 == RDebug::Printf.
+ * resolved export address.  Ordinals imported (all from EUSER.DLL's 2503-export
+ * table, see kernelhwsrv/.../bx86gcc/euseru.def):
+ *   slot 0: 915 RDebug::Printf          -> serial-console result markers
+ *   slot 1: 617 User::RequestComplete   -> IPC result export
+ *   slot 2: 626 User::WaitForAnyRequest -> IPC completion wait
+ *   slot 3: 925 RTimer::CreateLocal     -> timing (timer create)
+ *   slot 4: 928 RTimer::After           -> timing (timer after)
+ *   slot 5: 929 RTimer::Cancel          -> timing (timer cancel)
  */
     .section .text,"ax"
     .globl net_euser_printf
@@ -21,6 +28,11 @@ net_euser_printf:
     .section .iat,"a"
     .globl net_rdebug_printf_slot
 net_rdebug_printf_slot:
-    .long 915
+    .long 915                       /* RDebug::Printf        (markers)        */
+    .long 617                       /* User::RequestComplete (IPC result)     */
+    .long 626                       /* User::WaitForAnyRequest (IPC wait)     */
+    .long 925                       /* RTimer::CreateLocal   (timing)         */
+    .long 928                       /* RTimer::After         (timing)         */
+    .long 929                       /* RTimer::Cancel        (timing)         */
 
     .section .note.GNU-stack,"",@progbits

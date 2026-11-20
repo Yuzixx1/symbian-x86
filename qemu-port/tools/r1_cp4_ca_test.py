@@ -5,11 +5,13 @@ Builds a 32 MB raw disk with an MBR (one bootable 0x0C FAT32 partition at
 LBA 2048) and a standalone FAT32 image embedded at byte offset 1048576.
 ca_test (built by tools/mke32_ca_test.py) and EUSER.DLL are staged into the
 FAT image with mtools before it is embedded. QEMU is booted like the
-known-working smoke-test command, the serial console is fed timed input
-(newline, "mount", "ca_test"), and the serial log is checked for the
-expected markers. Exits 0 only if all markers pass. The fixture now also
-binds the genuine EUSER RTimer/CTimer and request ordinals (887, 881, 885,
-925, 928, 929, 617, 626) alongside the scheduler ordinals.
+known-working smoke-test command, the serial console is fed timed input and
+the serial log is checked for the expected markers (the disk auto-mounts at
+boot, so no `mount` command is sent). Exits 0 only if all markers pass and
+in order. The fixture binds the genuine EUSER RTimer/CTimer and request
+ordinals (887, 881, 885, 925, 928, 929, 617, 626) alongside the scheduler
+ordinals, and proves the Start() -> WaitForAnyRequest() -> RunL(vptr) ->
+Stop() -> Start() returns round trip.
 
 Usage:
     python3 r1_cp4_ca_test.py [--kernel KERN] [--no-rebuild-disk] [--log LOG]

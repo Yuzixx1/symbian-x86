@@ -18,9 +18,15 @@ typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 
-/* EUSER ord 915 (RDebug::Printf) reached through the PE2 IAT slot in
-   netstack_iat.S.  The loader overwrites the slot with the real export
-   address before the process is resumed. */
+/* EUSER ordinals bound by the PE2 loader from netstack_iat.S (slots hold the
+   1-based ordinal in the file, the real export address at run time):
+     915 RDebug::Printf          markers / results to the serial console
+     617 User::RequestComplete   IPC result export
+     626 User::WaitForAnyRequest IPC completion wait
+     925/928/929 RTimer::*        timing (create / after / cancel)
+   Actual guest IPC and timing use the port's ipc.c / exec layer; the extra
+   ordinals above are imported so the E32 links against the genuine EUSER
+   exports by ordinal for IPC and timing. */
 extern void net_euser_printf(const char* text);
 
 static void marker(const char* text)

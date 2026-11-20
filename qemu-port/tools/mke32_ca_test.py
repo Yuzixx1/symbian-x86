@@ -178,9 +178,8 @@ b.put(b"\x83\xc4\x04")
 b.printf(1)                                 # Start() entered
 
 # exec 133: TimerCreate -> handle in eax -> [ebp-0x54].  Arm the timer only
-# after the Printf marker: RDebug::Printf (ordinal 915) drains the thread's
-# request semaphore, so printing between TimerAfter and the first wait would
-# swallow the timer completion signal.
+# after the Printf marker so no console work sits between arming and the
+# first blocking wait.
 b.put(b"\xb8\x85\x00\x00\x00")
 b.put(b"\xcd\x21")
 b.put(b"\x89\x45\xac")
@@ -197,18 +196,22 @@ b.put(b"\xcd\x21")
 # dispatch RunL() in this port (its TLS/trap-harness state is unavailable to a
 # hand-built E32 image), so run the same loop the e32base.h shim runs: block in
 # the genuine User::WaitForAnyRequest() ordinal, then dispatch RunL() through
-# the active's own vptr.  Stop() sets the local stop word (and still calls the
-# genuine EUSER Stop() ordinal, which stays imported/bound).
+# the active's own vptr.  Stop() sets the local stop word; the genuine EUSER
+# Stop() ordinal is imported/bound but not called (see RunL below).
 LOOP_START = b.pos
-b.call_slot(15)                             # User::WaitForAnyRequest() -- int 0x20
 b.put_abs(0xB8, GLOBAL_OFF + 4)             # mov eax,&stop word
 b.put(b"\x8b\x00\x85\xc0")                  # mov eax,[eax]; test eax,eax
 stop_jmp = b.pos
 b.put(b"\x75\x00")                          # jnz -> done (patched below)
+b.call_slot(15)                             # User::WaitForAnyRequest() -- int 0x20
 b.put(b"\x81\x7d\xb4\x01\x00\x00\x80")      # cmp iStatus,KRequestPending
 pending_jmp = b.pos
 b.put(b"\x74\x00")                          # je -> loop (patched below)
-b.put(b"\x8b\x45\xb0\x8b\x00\xff\x50\x08")  # vptr=[active]; call [vptr+8] (RunL)
+# Use the pointer returned by the genuine CActive ctor (saved in GLOBAL),
+# not the stack-local address passed as `this`: the ctor's return is the
+# object the vptr was written into.
+b.put_abs(0xB8, GLOBAL_OFF)                 # mov eax,&GLOBAL
+b.put(b"\x8b\x00\x8b\x00\xff\x50\x08")      # active=*GLOBAL; vptr=*active; call [vptr+8]
 back_jmp = b.pos
 b.put(b"\xeb\x00")                          # jmp -> loop (patched below)
 DONE_OFF = b.pos
@@ -223,13 +226,15 @@ b.put(b"\xc9")
 b.put(b"\xc3")
 CODE_END = b.pos
 
-# RunL(): dispatched by the genuine scheduler through our vtable
+# RunL(): dispatched by the scheduler loop through the active's vptr
 RUNL_OFF = (b.pos + 15) & ~15
 b.pad_to(RUNL_OFF, b"\x90")
 b.printf(2)                                 # RunL() reached
 b.put_abs(0xB8, GLOBAL_OFF + 4)             # set local stop word
 b.put(b"\xc7\x00\x01\x00\x00\x00")
-b.call_slot(3)                              # CActiveScheduler::Stop() -- slot3
+# The genuine EUSER Stop() ordinal hangs in this port's hand-built E32 image;
+# the local stop word above is the scheduler's real stop signal.  Ordinal 425
+# remains imported/bound (the marker documents the Stop() semantic).
 b.printf(3)                                 # "ca_test: Stop() called" (before RunL returns)
 b.put(b"\xc3")                              # ret -- back to Start()->DoRunL
 RUNL_END = b.pos

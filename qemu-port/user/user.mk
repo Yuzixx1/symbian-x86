@@ -93,9 +93,10 @@ build/user/IPCCLI.E32: build/user/ipccli.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
-# TCP/IP stack E32 (IPv4/IPv6 + ICMP echo) linked against EUSER.DLL through a
-# PE2 import of ordinal 915 (RDebug::Printf markers). The IAT trampoline lives
-# at the end of the text run via user/link_netstack.ld.
+# TCP/IP stack E32 (IPv4/IPv6 + ICMP echo + IPC result export) linked against
+# EUSER.DLL through PE2 ordinal imports (915 markers, 617/626 IPC,
+# 925/928/929 timing). The IAT lives at the end of the text run via
+# user/link_netstack.ld; netstack_iat.S holds the 1-based ordinals.
 build/user/netstack_iat.o: user/netstack_iat.S | build/user
 	$(CC) -m32 -c $< -o $@
 
