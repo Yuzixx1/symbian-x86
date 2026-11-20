@@ -90,6 +90,8 @@ def build_disk():
 
 def run_qemu(log):
     qemu = ["timeout", "90", "qemu-system-i386", "-M", "q35", "-m", "128",
+            "-netdev", "user,id=n0",
+            "-device", "e1000,netdev=n0",
             "-display", "none", "-serial", "stdio", "-kernel", KERNEL,
             "-drive", f"file={DISK},format=raw,snapshot=on,if=none,id=d0",
             "-device", "ich9-ahci,id=sata",
