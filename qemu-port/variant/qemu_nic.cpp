@@ -132,7 +132,7 @@ TInt e1000_reset()
             break;
     // Force link up and enable address-space decoding.
     Wr32(kCtrl, kCtrlSlu | kCtrlAsde);
-    gLinkUp = (Rd32(kStatus) & kStatusLu) ? ETrue : EFalse;
+    gLinkUp = TBool((Rd32(kStatus) & kStatusLu) != 0);
     return KErrNone;
     }
 
@@ -316,7 +316,7 @@ TBool e1000_link_up()
     {
     if (!gBase && e1000_init() != KErrNone)
         return EFalse;
-    return (Rd32(kStatus) & kStatusLu) ? ETrue : EFalse;
+    return TBool((Rd32(kStatus) & kStatusLu) != 0);
     }
 
 TInt e1000_irq()
@@ -330,7 +330,7 @@ TInt e1000_irq()
     if (icr)
         Wr32(kIcr, icr);
     if (icr & kIcrLsc)
-        gLinkUp = (Rd32(kStatus) & kStatusLu) ? ETrue : EFalse;
+        gLinkUp = TBool((Rd32(kStatus) & kStatusLu) != 0);
     return (TInt)icr;
     }
 

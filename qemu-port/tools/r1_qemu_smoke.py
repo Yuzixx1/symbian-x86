@@ -145,6 +145,8 @@ def run_qemu(kernel, log):
     qemu = [
         "timeout", "50", "qemu-system-i386",
         "-M", "q35", "-m", "128",
+        "-netdev", "user,id=n0",
+        "-device", "e1000,netdev=n0",
         "-display", "none", "-serial", "stdio",
         "-kernel", kernel,
         "-drive", f"file={DISK_IMG},format=raw,snapshot=on,if=none,id=d0",
