@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# boot_grub.sh — boot build/symbian-grub.iso with its bundled /PROGRAMS.IMG
-# attached as a real second disk, so the EKA2 shell can mount it and run the
-# end-user E32 programs. QEMU cannot use a file nested inside an ISO directly
-# as a block device, so the image is extracted from the ISO first.
+# boot_grub.sh — OPTIONAL legacy launcher: boot build/symbian-grub.iso with its
+# bundled /PROGRAMS.IMG attached as a real second disk, so the EKA2 shell can
+# mount it and run end-user E32 programs. No longer required: plain ISO boot
+# (see docs/r1_boot_and_selftest.md) exposes programs at X: automatically,
+# because GRUB now loads PROGRAMS.IMG as a multiboot module and the kernel
+# auto-mounts it. Kept for compatibility; QEMU cannot use a file nested inside
+# an ISO directly as a block device, so the image is extracted from the ISO first.
 #
 # Usage: tools/boot_grub.sh [path/to/iso] [extra QEMU args...]
 # Env:   PROGRAMS_IMG=<path>  override the extraction destination.

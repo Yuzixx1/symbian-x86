@@ -153,15 +153,15 @@ terminal_input serial console
 terminal_output serial console
 set timeout=10
 set default=0
-# End-user E32 programs are on this ISO as /PROGRAMS.IMG (FAT32, MBR at 0).
-# GRUB cannot hand a file inside the ISO to the guest as a block device; boot
-# with tools/boot_grub.sh, which extracts it and attaches it as a virtual disk.
-# In the shell: MOUNT, DIR, then type a program name (e.g. CALC).
+# End-user E32 programs are on this ISO as /programs.img (FAT32, MBR at 0).
+# GRUB loads it as a Multiboot1 module; the kernel maps that RAM range as a
+# read-only block device and mounts it at X: at boot. No extra -drive needed.
+# In the shell: VOL, DIR, then type a program name (e.g. CALC).
 menuentry "Symbian EKA2 full kernel (genuine)" {
     set gfxpayload=text
     echo Booting full kernel...
     multiboot /boot/kernfull.elf
-    echo Multiboot ok, booting...
+@PROGRAMSMOD@    echo Multiboot ok, booting...
     boot
 }
 menuentry "Symbian EKA2 nanokernel" {
@@ -174,11 +174,11 @@ menuentry "Symbian EKA2 nanokernel" {
 
 EFI_CFG = """set timeout=10
 set default=0
-# /PROGRAMS.IMG on this ISO holds the end-user E32s (see tools/boot_grub.sh).
+# /programs.img on this ISO holds the end-user E32s (Multiboot module -> X:).
 menuentry "Symbian EKA2 full kernel (genuine)" {
     echo Booting full kernel...
     multiboot /boot/kernfull.elf
-    boot
+@PROGRAMSMOD@    boot
 }
 menuentry "Symbian EKA2 nanokernel" {
     echo Booting nanokernel...
@@ -186,6 +186,12 @@ menuentry "Symbian EKA2 nanokernel" {
     boot
 }
 """
+
+
+def configs(with_programs):
+    """GRUB cfg text; the module line only when the ISO really has the image."""
+    mod = "    module /programs.img\n" if with_programs else ""
+    return BIOS_CFG.replace("@PROGRAMSMOD@", mod), EFI_CFG.replace("@PROGRAMSMOD@", mod)
 
 
 def main():
@@ -204,8 +210,14 @@ def main():
     iso_root = os.path.join(work, "iso")
     os.makedirs(os.path.join(iso_root, "boot", "grub", "i386-pc"))
 
+    # Stage the programs image before writing grub.cfg: the config only gets
+    # a `module` line when the image really is in the ISO (otherwise GRUB
+    # would abort the menu entry on a missing file).
+    programs_img, staged = build_programs_image(work)
+    bios_cfg, _efi_cfg = configs(bool(programs_img))
+
     with open(os.path.join(iso_root, "boot", "grub", "grub.cfg"), "w") as f:
-        f.write(BIOS_CFG)
+        f.write(bios_cfg)
     for name in os.listdir(GRUB_PC):
         if name.endswith(".mod"):
             shutil.copyfile(os.path.join(GRUB_PC, name),
@@ -237,8 +249,6 @@ def main():
     mkfat.build_fat16([(("EFI", "BOOT", "BOOTX64.EFI"), core)],
                       4, efi_img, partitioned=False)
     shutil.copyfile(efi_img, os.path.join(iso_root, "boot", "grub", "efiboot.img"))
-
-    programs_img, staged = build_programs_image(work)
 
     def write_iso():
         iso = PyCdlib()

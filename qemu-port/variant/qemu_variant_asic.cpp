@@ -117,12 +117,24 @@ void QemuVariantAsic::Init3()
             }
         }
     }
-    // The bundled PROGRAMS.IMG is the same AHCI disk/partition just mounted as
-    // C:. Alias it as X: so end-user programs are reachable from X: as well.
-    // FatMountAlias adds a second letter without changing the active drive, so
-    // C: stays the default (file_save/selftest are unaffected). The shell's
-    // VOL / DRIVE / X: / DIR / TYPE commands read this same volume table.
-    if (FatMountAlias(4, 0, 'X') == KErrNone) {
+    // Plain `qemu -cdrom ... -boot d` has no -drive at all: the end-user
+    // programs arrive as a GRUB Multiboot module, snapshotted into high RAM
+    // as read-only block device 8. Mount that image as X:. When an AHCI disk
+    // IS attached (dev 4 = C:) keep the historical X: alias for the existing
+    // -drive based tests. FatMountAlias adds a letter without stealing the
+    // active drive; on a diskless boot X: becomes the active volume so DIR /
+    // CALC work immediately. VOL / DRIVE / TYPE read the same volume table.
+    if (QemuRamdiskPresent())
+        {
+        const TBool hadActive = FatCurLetter() != 0;
+        if (FatMountAlias(8, 0, 'X') == KErrNone)
+            {
+            if (!hadActive) FatUse('X');
+            const char* marker = "X: mounted (programs from GRUB module)\r\n";
+            while (*marker) QemuUart::PutC(*marker++);
+            }
+        }
+    else if (FatMountAlias(4, 0, 'X') == KErrNone) {
         const char* marker = "X: mounted (programs)\r\n";
         while (*marker) QemuUart::PutC(*marker++);
     }

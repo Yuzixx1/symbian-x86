@@ -11,6 +11,7 @@
 #include <x86.h>
 #include <e32err.h>
 #include "qemu_variant.h"
+#include "bootinfo.h"
 
 #ifdef R1_STORAGE_HOST_TEST
 // Host tests inject register access, never execute port instructions.
@@ -90,6 +91,12 @@ namespace
     AtaDeviceG gDevs[4];
     TInt gProbed = 0;
 
+    // GRUB Multiboot module, snapshotted into high RAM by QemuRamdiskInit().
+    // Exposed to the FAT driver as read-only block device 8 (AHCI is 4..7).
+    TUint8* gRamDisk = 0;
+    TUint32 gRamDiskSectors = 0;
+    const TUint kRamDiskRamTop = 128u * 1024u * 1024u;  // QEMU -m 128
+
     void SwapStr(char* aDst, const unsigned short* aSrc, TInt aWords, TInt aMax)
         {
         TInt k = 0;
@@ -107,6 +114,65 @@ namespace
         aDst[k] = 0;
         }
     }
+
+namespace QemuUart
+    {
+    void PutC(char aC);
+    void Puts(const char* aS);
+    void PutHex(unsigned aV);
+    }
+
+static void RamDiskCopy(TUint8* aDst, const TUint8* aSrc, TUint aLen)
+    {
+    for (TUint i = 0; i < aLen; ++i)
+        aDst[i] = aSrc[i];
+    }
+
+// Called from HwInit0 right after paging is enabled, before the kernel data
+// clear (0x1000000..0x1200000) and before the user-page allocator starts
+// handing out 0x2000000+. GRUB loads its modules low, so snapshot the module
+// into the top of RAM instead of reading it in place: those low pages would
+// otherwise be recycled by the kernel/user heap and corrupt the FAT image.
+void QemuRamdiskInit(TUint aModStart, TUint aModEnd)
+    {
+    if (!aModStart || aModEnd <= aModStart)
+        return;
+    TUint len = aModEnd - aModStart;
+    if (len < 512 || (len & 511u))
+        return;  // modules are 4K-aligned in our Multiboot header
+    TUint ramTop = kRamDiskRamTop;
+    if (BootInfo::memUpperKB)
+        {
+        TUint reported = (BootInfo::memUpperKB << 10) & ~0xFFFu;
+        if (reported && reported < ramTop)
+            ramTop = reported;
+        }
+    TUint dst = ramTop - (len & ~0xFFFu);
+    if (dst < 0x2000000u)
+        return;  // image too large for the available RAM
+    // Defensive: never copy onto ourselves if GRUB happened to load high.
+    if (aModStart < dst + len && aModEnd > dst)
+        {
+        dst = 0x4000000u;
+        if (aModStart < dst + len && aModEnd > dst)
+            return;
+        }
+    RamDiskCopy((TUint8*)dst, (const TUint8*)aModStart, len);
+    gRamDisk = (TUint8*)dst;
+    gRamDiskSectors = (TUint32)(len / 512);
+    QemuUart::Puts("RAMDISK: GRUB module 0x");
+    QemuUart::PutHex(aModStart);
+    QemuUart::Puts("..0x");
+    QemuUart::PutHex(aModEnd);
+    QemuUart::Puts(" -> 0x");
+    QemuUart::PutHex(dst);
+    QemuUart::Puts(" (");
+    QemuUart::PutHex(gRamDiskSectors);
+    QemuUart::Puts(" sectors)\r\n");
+    }
+
+TBool QemuRamdiskPresent() { return (TBool)(gRamDisk != 0); }
+TUint32 QemuRamdiskSectors() { return gRamDiskSectors; }
 
 TInt AtaInit()
     {
@@ -166,11 +232,13 @@ TInt AtaCount()
     for (int d = 0; d < 4; ++d)
         if (gDevs[d].present && !gDevs[d].atapi)
             ++n;
-    return n + AhciCount();  // dev 4..7 = AHCI ports 0..3
+    return n + AhciCount() + (gRamDisk ? 1 : 0);  // 4..7 AHCI, 8 RAM module
     }
 
 TBool AtaPresent(int aDev)
     {
+    if (aDev == 8)
+        return (TBool)(gRamDisk != 0);
     if (aDev >= 4)
         return AhciPresent(aDev - 4);
     if (aDev < 0 || aDev > 3 || !gProbed)
@@ -180,6 +248,8 @@ TBool AtaPresent(int aDev)
 
 TUint32 AtaSectors(int aDev)
     {
+    if (aDev == 8)
+        return gRamDiskSectors;
     if (aDev >= 4)
         return AhciSectors(aDev - 4);
     if (!AtaPresent(aDev))
@@ -189,6 +259,8 @@ TUint32 AtaSectors(int aDev)
 
 const char* AtaModel(int aDev)
     {
+    if (aDev == 8)
+        return gRamDisk ? "GRUB-MODULE RAMDISK" : "(absent)";
     if (aDev >= 4)
         return AhciModel(aDev - 4);
     if (!AtaPresent(aDev))
@@ -198,7 +270,8 @@ const char* AtaModel(int aDev)
 
 TInt AtaFlush(int aDev)
     {
-    if (aDev < 0 || aDev >= 8) return KErrArgument;
+    if (aDev < 0 || aDev > 8) return KErrArgument;
+    if (aDev == 8) return KErrNone;  // read-only RAM disk, nothing to flush
     if (aDev >= 4) return AhciFlush(aDev - 4);
     if (!AtaPresent(aDev)) return KErrNotReady;
     unsigned cmd = kChans[aDev / 2].cmd, ctl = kChans[aDev / 2].ctl;
@@ -224,6 +297,15 @@ TInt AtaFlush(int aDev)
 
 TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf)
     {
+    if (aDev == 8)
+        {
+        if (!gRamDisk || !aBuf || !aCount)
+            return KErrArgument;
+        if (aLba + aCount < aLba || aLba + aCount > gRamDiskSectors)
+            return KErrArgument;
+        RamDiskCopy(aBuf, gRamDisk + (TUint)aLba * 512u, (TUint)aCount * 512u);
+        return KErrNone;
+        }
     if (aDev >= 4)
         return AhciRead(aDev - 4, aLba, aCount, aBuf);
     if (!AtaPresent(aDev) || !aBuf || !aCount)
@@ -261,6 +343,8 @@ TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf)
 
 TInt AtaWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf)
     {
+    if (aDev == 8)
+        return KErrNotSupported;  // RAM image from GRUB is read-only
     if (aDev >= 4)
         return AhciWrite(aDev - 4, aLba, aCount, aBuf);
     if (!AtaPresent(aDev) || !aBuf || !aCount)

@@ -162,6 +162,13 @@ TInt AtaRead(int aDev, TUint32 aLba, TUint aCount, TUint8* aBuf);
 TInt AtaWrite(int aDev, TUint32 aLba, TUint aCount, const TUint8* aBuf);
 TInt AtaFlush(int aDev); // synchronous correct-device cache flush; errors propagate
 
+// GRUB Multiboot module -> RAM-backed read-only block device (dev 8).
+// QemuRamdiskInit snapshots the module into a safe high-RAM buffer during
+// HwInit0 (before the kernel data clear and the user-page allocator claim it).
+void QemuRamdiskInit(TUint aModStart, TUint aModEnd);
+TBool QemuRamdiskPresent();
+TUint32 QemuRamdiskSectors();
+
 // AHCI SATA driver (variant/qemu_ahci.cpp). Ports present as Fat devices
 // 4..7 behind the Ata* dispatch below. DMA, polled.
 TInt AhciInit();

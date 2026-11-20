@@ -10,12 +10,15 @@
 #include <kernel/kern_priv.h>
 #include <kernel/kernel.h>
 #include "qemu_variant.h"
+#include "bootinfo.h"
 #include "../mmu/pd.h"
 
 // M-03: the full Kern image does not link qemu_kernel.o (bridge-only), so the
 // boot identity map / paging enable must happen here, before any heap use.
 extern "C" void Mmu_BuildIdentityMap(void);
 extern "C" TUint Mmu_Enable(void);
+// boot/ported/bootmain_gas.S saved EBX (the Multiboot info pointer) here.
+extern "C" TUint reset_saved_info;
 
 namespace QemuUart
     {
@@ -101,6 +104,13 @@ extern "C" void HwInit0()
     QemuUart::Puts("QEMU-HwInit0: paging ");
     QemuUart::Puts(cr0 & 0x80000000u ? "ON" : "FAILED");
     QemuUart::Puts("\r\n");
+
+    // GRUB -> Multiboot modules. Capture the MBI and snapshot module 0 into a
+    // high-RAM read-only block device before the boot-time memclr below and
+    // the user-page allocator can recycle the low pages GRUB used for it.
+    BootInfo::Capture(reset_saved_info);
+    QemuRamdiskInit(BootInfo::modStart, BootInfo::modEnd);
+
     PdInit();
 
     QemuRomInit();

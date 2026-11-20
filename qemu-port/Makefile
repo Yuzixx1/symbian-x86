@@ -226,6 +226,11 @@ build/qemu_pci.o: variant/qemu_pci.cpp | build
 build/qemu_ata.o: variant/qemu_ata.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_ata.cpp -o $@
 
+# Multiboot info (incl. module list) for the full Kern image. Compiled with
+# KERN_FLAGS like the rest of the image; build/bootinfo.o serves the nano ELF.
+build/kernfull_bootinfo.o: variant/bootinfo.cpp variant/bootinfo.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/bootinfo.cpp -o $@
+
 build/qemu_ahci.o: variant/qemu_ahci.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_ahci.cpp -o $@
 
@@ -304,7 +309,7 @@ build/usercon.o: variant/usercon.cpp variant/qemu_variant.h | build
 
 # Full Kern image: genuine nanokernel (knk) + genuine kernel (kern) + variant.
 # Scratch link first; promoted to boot target once it survives ResetEntry.
-KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o build/mmu_gas.o build/qemu_assp.o build/kernfull_glue.o build/qemu_variant_rom.o build/qemu_variant_asic.o build/qemu_variant_int.o build/qemu_pci.o build/qemu_ata.o build/qemu_ahci.o build/qemu_nic.o build/qemu_virtio_net.o build/qemu_virtio_blk.o build/qemu_virtio_rng.o build/qemu_display.o build/qemu_mouse.o build/qemu_netbridge.o build/qemu_gui_exec.o build/qemu_audio.o build/qemu_audio_exec.o build/qemu_ps_exec.o build/qemu_xhci.o build/fat32.o build/e32load.o build/pd.o build/qemu_usb.o build/qemu_usb_ohci.o build/qemu_usb_ehci.o build/kern_shell.o $(KNK_OBJS) $(KERN_OBJS_1) $(KERN_OBJS_2) $(KERN_OBJS_3) $(KERN_OBJS_4)
+KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o build/mmu_gas.o build/qemu_assp.o build/kernfull_glue.o build/kernfull_bootinfo.o build/qemu_variant_rom.o build/qemu_variant_asic.o build/qemu_variant_int.o build/qemu_pci.o build/qemu_ata.o build/qemu_ahci.o build/qemu_nic.o build/qemu_virtio_net.o build/qemu_virtio_blk.o build/qemu_virtio_rng.o build/qemu_display.o build/qemu_mouse.o build/qemu_netbridge.o build/qemu_gui_exec.o build/qemu_audio.o build/qemu_audio_exec.o build/qemu_ps_exec.o build/qemu_xhci.o build/fat32.o build/e32load.o build/pd.o build/qemu_usb.o build/qemu_usb_ohci.o build/qemu_usb_ehci.o build/kern_shell.o $(KNK_OBJS) $(KERN_OBJS_1) $(KERN_OBJS_2) $(KERN_OBJS_3) $(KERN_OBJS_4)
 
 KERNFULL_OBJS += build/userfiles.o build/usercon.o
 

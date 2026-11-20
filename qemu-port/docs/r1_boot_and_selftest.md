@@ -10,6 +10,9 @@ qemu-system-i386 -M q35 -m 128 -vga std -serial stdio -no-reboot -cdrom build/sy
 ```
 A QEMU window appears showing the EKA2 VGA console; `-serial stdio` keeps logs working. The interactive shell is mirrored to the VGA text console (0xB8000) and COM1 serial — you see `EKA2>` on screen. Graphics programs (GUISHELL, SAVER) switch to VBE 1024x768x32 via the `DISPLAY` command. Note the ~10s GRUB countdown before autoboot.
 
+## Running programs (bundled in the ISO)
+GRUB loads `PROGRAMS.IMG` as a multiboot module; the kernel auto-mounts it at `X:`. After boot, type `X:` then `DIR` then a program name (e.g. `CALC`), or run it directly as `X:CALC` (also `HELLO`, `SNAKE`). No extra `-drive` or launcher needed.
+
 ## Secondary / alternate ISOs in `build/`
 - `symbian-pc-full.iso` — full `kernfull` kernel via the custom bootsect El Torito (all drivers), boots to `EKA2>`.
 - `symbian-pc.iso` — bridge kernel (multiboot), minimal console.

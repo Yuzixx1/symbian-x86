@@ -633,14 +633,43 @@ static void RunImage(const char* aName, const char* aTail)
     TInt r = KErrNotFound;
     char prev = 0;
     const char* inner = 0;
-    for (int c = 0; c < nCand; ++c)
+    for (int c = 0; c < nCand && r != KErrNone; ++c)
         {
-        char pv = 0;
-        const char* in = VolPrefix(cand[c], &pv);
-        if (!in || !in[0]) { VolRestore(pv); continue; }
-        TInt rr = FatReadPath(in, eBuf, sizeof(eBuf), got);
-        if (rr == KErrNone) { r = KErrNone; prev = pv; inner = in; break; }
-        VolRestore(pv);
+        const char* path = cand[c];
+        if (path[0] && path[1] == ':')
+            {
+            // Explicit drive: honour only that volume (existing behaviour).
+            char pv = 0;
+            const char* in = VolPrefix(path, &pv);
+            if (!in || !in[0]) { VolRestore(pv); continue; }
+            TUint g = 0;
+            TInt rr = FatReadPath(in, eBuf, sizeof(eBuf), g);
+            if (rr == KErrNone) { r = KErrNone; prev = pv; inner = in; got = g; break; }
+            VolRestore(pv);
+            }
+        else
+            {
+            // Bare name: try the active drive first, then every other mounted
+            // drive. Leave the found volume active for E32Run and restore the
+            // caller's drive afterwards.
+            char original = FatCurLetter();
+            prev = original;
+            inner = path;
+            TUint g = 0;
+            if (FatReadPath(path, eBuf, sizeof(eBuf), g) == KErrNone)
+                { r = KErrNone; got = g; break; }
+            for (char l = 'A'; l <= 'Z'; ++l)
+                {
+                if (l == original || FatUse(l) != KErrNone)
+                    continue;
+                g = 0;
+                if (FatReadPath(path, eBuf, sizeof(eBuf), g) == KErrNone)
+                    { r = KErrNone; got = g; break; }
+                }
+            if (r == KErrNone)
+                break;
+            VolRestore(original);
+            }
         }
     if (r != KErrNone)
         { KPrintf("%s: not found\r\n", aName); return; }
