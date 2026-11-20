@@ -10,6 +10,12 @@
 #include <kernel/kern_priv.h>
 #include <kernel/kernel.h>
 #include "qemu_variant.h"
+#include "../mmu/pd.h"
+
+// M-03: the full Kern image does not link qemu_kernel.o (bridge-only), so the
+// boot identity map / paging enable must happen here, before any heap use.
+extern "C" void Mmu_BuildIdentityMap(void);
+extern "C" TUint Mmu_Enable(void);
 
 namespace QemuUart
     {
@@ -84,6 +90,17 @@ extern "C" void* memclr(void* aTrg, unsigned aLength);
 extern "C" void HwInit0()
     {
     QemuUart::Init();
+
+    // M-03 step 1: enable paging with the flat 32x4M identity map before the
+    // kernel heap/ROM are touched, then install the #PF and CR3-switch hooks.
+    QemuUart::Puts("QEMU-HwInit0: M-03 building flat 4G identity map...\r\n");
+    Mmu_BuildIdentityMap();
+    TUint cr0 = Mmu_Enable();
+    QemuUart::Puts("QEMU-HwInit0: paging ");
+    QemuUart::Puts(cr0 & 0x80000000u ? "ON" : "FAILED");
+    QemuUart::Puts("\r\n");
+    PdInit();
+
     QemuRomInit();
     // Bootstrap duty (cf. estrt clearing kernel RAM): the kernel data, stacks
     // and heap live in fixed RAM, not in our ELF .bss, so clear the region

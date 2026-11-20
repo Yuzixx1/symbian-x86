@@ -39,7 +39,7 @@ extern "C" void QemuKernelMain(TUint aMagic, TUint aInfo)
     QemuRom::Report();
 
     // Phase 4: ported Direct-model MMU — identity map + CR0.PG/CR4.PGE.
-    QemuUart::Puts("EKA2-QEMU MMU: building 32x4M identity map (0-128M)...\r\n");
+    QemuUart::Puts("EKA2-QEMU MMU: building flat 4G identity map...\r\n");
     QemuMmu::BuildIdentityMap();
     QemuUart::Puts("EKA2-QEMU MMU: enabling paging (CR3 load, CR0.PG|WP, CR4.PGE)...\r\n");
     TUint cr0 = QemuMmu::Enable();

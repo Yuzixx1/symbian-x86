@@ -32,7 +32,8 @@ qemu_mmu_on:
 .section .text.mmu, "ax"
 .code32
 
-/* Build 32x 4M identity PDEs covering 0x00000000-0x07FFFFFF (128M).
+/* Build 1024x 4M identity PDEs covering the full 0x00000000-0xFFFFFFFF flat
+ * 4G range (matches the GDT and the kernel's high MMIO/APIC accesses).
  * EAX untouched except flags. Mirrors genuine MapSingleSection PDE value:
  * PDE = phys | P|W | PS (| G if PGE). */
 .globl Mmu_BuildIdentityMap
@@ -56,16 +57,21 @@ Mmu_BuildIdentityMap:
     testl $EX86Feat_PGE, %edx
     jz 2f
     orl $PDE_G, %eax
-2:  movl %eax, %edx   /* template PDE flags */
+2:  movl %eax, %edx   /* template PDE flags (P|W|PS[|G], U/S=0) */
     movl $qemu_page_dir, %edi
-    xorl %ecx, %ecx   /* PDE index 0..31 */
+    xorl %ecx, %ecx   /* PDE index 0..1023 */
     xorl %eax, %eax   /* phys base */
 3:  movl %eax, %ebx
     orl %edx, %ebx
-    movl %ebx, (%edi,%ecx,4)
+    /* M-03 split: PDE idx<512 (<0x80000000) is U/S=1; high half stays
+       supervisor-only so ring 3 cannot touch kernel MMIO/APIC pages. */
+    cmpl $512, %ecx
+    jae 4f
+    orl $4, %ebx      /* PDE_U/S */
+4:  movl %ebx, (%edi,%ecx,4)
     addl $0x400000, %eax
     incl %ecx
-    cmpl $32, %ecx
+    cmpl $1024, %ecx
     jb 3b
     popl %edi
     popl %edx

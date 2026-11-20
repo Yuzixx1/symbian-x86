@@ -43,6 +43,26 @@ static void TssInitOnce()
     X86_TSS_Ptr = tss;  // reschedule ESP0 updates land in the live TSS
     }
 
+// M-03: tag every thread of an E32 process with its page directory. The
+// genuine ncsched.cia process handler (PdProcessSwitch) reads
+// NThread.iAddressSpace and reloads CR3 on each address-space switch.
+// Called with the system locked, immediately before proc->Resume().
+static void TagProcessAddressSpace(DProcess* aProc)
+    {
+    const TUint pd = PdPhys(aProc);
+    if (!pd)
+        return;
+    SDblQueLink* link = aProc->iThreadQ.First();
+    while (link != &aProc->iThreadQ.iA)
+        {
+        DThread* t = _LOFF(link, DThread, iProcessLink);
+        link = link->iNext;
+        t->iNThread.SetAddressSpace((TAny*)pd);
+        t->iNThread.ModifyAttributes(0, KThreadAttAddressSpace);
+        }
+    KPrintf("e32run: tagged PD=%x for process %x\r\n", pd, (TUint)aProc);
+    }
+
 // --- pilot user-DLL veneer (EUSER ordinals 1=Exit, 2=PutC) ------------------
 // Genuine euser would live in a user DLL; our pilot serves two imports
 // from kernel-owned trampolines instead (Direct model: all RAM is
@@ -873,6 +893,7 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
                 *(TUint32*)(pinfo.iDataRunAddress + info.iDataSize),
                 pinfo.iDataRunAddress);
         NKern::LockSystem();
+        TagProcessAddressSpace(proc);  // M-03: CR3 reload hook for this process
         proc->Resume();
         NKern::UnlockSystem();
         KPrintf("e32run: resumed\r\n");

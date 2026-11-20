@@ -5,6 +5,7 @@ over repeated cycles. Checks: no lost request-semaphore completions, no
 Exc/fault, exit-ring record per death, and zero leaked channels/segs (vs. a
 post-mount baseline).
 """
+import os
 import re
 import subprocess
 import sys
@@ -13,8 +14,10 @@ from pathlib import Path
 
 import test_cli
 
-test_cli.DISK = '/tmp/opencode/cp4_stress.img'
-test_cli.LOG = '/tmp/opencode/cp4_stress.log'
+# PID-unique artifacts: concurrent stress runs must never share a serial log.
+_STAMP = str(os.getpid())
+test_cli.DISK = f'/tmp/opencode/cp4_stress_{_STAMP}.img'
+test_cli.LOG = f'/tmp/opencode/cp4_stress_{_STAMP}.log'
 LOG = test_cli.LOG
 
 CLIENTS = 4          # simultaneous request-issuing processes (3-5)
@@ -53,6 +56,19 @@ def wait_for_done(target, timeout=30):
     raise AssertionError(f'expected >= {target} clean completions, saw {seen}')
 
 
+def wait_after(pos, marker, timeout=15):
+    """Async E32 launch may print after the shell prompt; poll only the bytes
+    following this command's start offset (cycle-aware, no stale matches)."""
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        with open(LOG, 'rb') as src:
+            src.seek(pos)
+            if marker in src.read():
+                return
+        time.sleep(0.1)
+    raise AssertionError(f'{marker!r} not seen after offset {pos}')
+
+
 def read_range(pos, end):
     with open(LOG, 'rb') as src:
         src.seek(pos)
@@ -74,7 +90,10 @@ def boot_prompt(timeout=30):
 
 
 def run(vm, pos, cmd, expected=b''):
-    return test_cli.run_command(vm, LOG_FH, pos, cmd, expected, b'C:/> ')
+    end = test_cli.run_command(vm, LOG_FH, pos, cmd, b'', b'C:/> ')
+    if expected:
+        wait_after(pos, expected)
+    return end
 
 
 def ps(vm, pos, pattern):
@@ -139,15 +158,16 @@ def main():
                 server = srv[0]
                 victim_launch = pos
                 for i in range(1, CLIENTS + 1):
-                    pos = run(vm, pos, f'CPSTRESS.E32 {i}', b'CPSTRESS: start')
+                    pos = run(vm, pos, f'CPSTRESS.E32 {i}',
+                              f'CPSTRESS: start{i}'.encode())
                     if i == VICTIM:
                         victim_launch = pos
                 pos, clients = ps_ids(vm, pos, 'CPSTRESS')
                 assert len(clients) == CLIENTS, f'cycle {cycle}: client ids {clients}'
 
                 # One user PROCESS kills another mid-test (peer kill via the
-                # genuine ProcessOpenById/ProcessKill executives, not the shell
-                # KILL command); the survivors must still complete every async
+                # port kill executive 269 -> E32Kill, not the shell KILL
+                # command); the survivors must still complete every async
                 # request (no lost request-semaphore completions). Prove the
                 # victim is still in-flight: progress but no completion marker.
                 victim = clients[VICTIM - 1]
@@ -182,7 +202,7 @@ def main():
             # Recovery: fresh server completes a full client run, then stops cleanly.
             pos = run(vm, pos, 'IPCSRV.E32', b'IPCSRV: ready')
             target = total_done() + 1
-            pos = run(vm, pos, 'CPSTRESS.E32 99', b'CPSTRESS: start')
+            pos = run(vm, pos, 'CPSTRESS.E32 99', b'CPSTRESS: start99')
             wait_for_done(target)
             pos = run(vm, pos, 'IPCCLI.E32 stop', b'stop acknowledged')
 
@@ -201,8 +221,8 @@ def main():
             for marker in FAIL_MARKERS:
                 assert marker not in out, f'failure marker {marker!r} in log'
             print(f'PASS: {CYCLES} cycles x {CLIENTS} clients, {done} clean '
-                  f'completions, no faults, exit ring, channels={final_chan} '
-                  f'segs={final_segs}')
+                  f'completions, peer kill recorded, no faults, exit ring, '
+                  f'channels={final_chan} segs={final_segs}')
         finally:
             vm.terminate()
             try:

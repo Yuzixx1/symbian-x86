@@ -94,6 +94,18 @@ def build():
         reloc_sites.append(imm_site)
     reloc_sites = sorted(set(reloc_sites))
 
+    # Guard the "Exc 06, EIP=0x203" class of fault. The thread enters at ENT_RVA
+    # with no return address on the user stack, so any `ret` reached from the
+    # entry function jumps to a garbage EIP. The exit thunk above must replace
+    # the whole epilogue (add esp/pop/pop/ret), leaving no reachable `ret`.
+    assert b"\xc3" not in image[ENT_RVA:entry_end + len(exit_seq)], \
+        "reachable ret in entry function (would fault with EIP=0x203)"
+    # Every absolute dword linked for CODEBASE must have a relocation entry;
+    # a stale/absent fixup leaves it pointing at the linked base at runtime.
+    for o in range(codesize - 3):
+        if CODEBASE <= rd32(image, o) < CODEBASE + codesize:
+            assert o in reloc_sites, f"absolute at {o:#x} missing relocation"
+
     # E32 page/block relocations: page is section-relative; entries are
     # 0x1000 (TEXT) | offset-within-page; pad with a zero entry for 4B align.
     pages = defaultdict(list)
