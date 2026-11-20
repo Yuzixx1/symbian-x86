@@ -147,6 +147,9 @@ def run_qemu(kernel, log):
         "-M", "q35", "-m", "128",
         "-netdev", "user,id=n0",
         "-device", "e1000,netdev=n0",
+        "-audiodev", "none,id=a0",
+        "-device", "AC97,audiodev=a0",
+        "-vga", "std",                 # Bochs VBE DISPI for the framebuffer driver
         "-display", "none", "-serial", "stdio",
         "-kernel", kernel,
         "-drive", f"file={DISK_IMG},format=raw,snapshot=on,if=none,id=d0",

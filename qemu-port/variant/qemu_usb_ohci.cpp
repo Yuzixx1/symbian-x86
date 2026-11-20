@@ -36,7 +36,7 @@ static void PciWrite(unsigned aBus, unsigned aDev, unsigned aFn, unsigned aReg, 
 
 enum
     {
-    kHcControl = 0x04, kHcCmd = 0x08, kHcIntDis = 0x14, kHcHCCA = 0x18,
+    kHcRev = 0x00, kHcControl = 0x04, kHcCmd = 0x08, kHcIntDis = 0x14, kHcHCCA = 0x18,
     kHcCtlHead = 0x20, kHcFmInterval = 0x34, kHcPeriodic = 0x40,
     kHcLsThresh = 0x44, kHcRhA = 0x48, kHcRhStatus = 0x50, kHcRhPort = 0x54,
     kCtlOp = 0x80, kCtlCLE = 0x10, kCtlIE = 0x08, kCtlPLE = 0x04,
@@ -65,6 +65,9 @@ namespace
     unsigned gBase = 0;
     TBool gOk = EFalse;
     int gPorts = 0;
+    unsigned gRevision = 0;         // HcRevision (expect 0x10 = OHCI 1.0)
+    unsigned gBar = 0;              // BAR0 MMIO base (identity-mapped)
+    unsigned gBus = 0, gDev = 0, gFn = 0;   // PCI location for diagnostics
 
     __attribute__((aligned(256))) TUint8 gHcca[256];
     __attribute__((aligned(16))) OhciEd gEdCtl;
@@ -186,11 +189,14 @@ TInt OhciInit()
             base = bar & ~0xFFFu;
             unsigned cmd = PciRead(0, dev, fn, 4);
             PciWrite(0, dev, fn, 4, cmd | 0x06u);  // mem space + bus master
+            gBus = 0; gDev = dev; gFn = fn;
+            gBar = base;
             }
         }
     if (!base)
         return KErrNotSupported;
     gBase = base;
+    gRevision = Rd(kHcRev);
     Wr(kHcCmd, kCmdHCR);  // hardware reset
     for (int i = 0; i < 1000; ++i)
         {
@@ -218,10 +224,13 @@ TInt OhciInit()
     Wr(kHcLsThresh, 0x0628);
     Wr(kHcRhStatus, 1u << 16);  // SetGlobalPower (no-op if per-port)
     Wr(kHcControl, kCtlOp | kCtlCLE | kCtlIE | kCtlPLE);
+    // HcRHDescriptorA bits 0..7 = NumberDownstreamPorts (OHCI 1.0a 7.3.1).
     gPorts = (int)(Rd(kHcRhA) & 0xFFu);
     if (gPorts > 4)
         gPorts = 4;
     gOk = ETrue;
+    KPrintf("ohci: rev=%02x bar=%x pci=%02x:%02x.%x ports=%d\r\n",
+        gRevision, gBar, gBus, gDev, gFn, gPorts);
     return KErrNone;
     }
 
@@ -331,3 +340,37 @@ TInt OhciIntPoll(TUint8 aAddr, TUint8 aEp, TUint8& aToggle,
         }
     return (r == KErrTimedOut) ? KErrNotFound : r;
     }
+
+// Raw HcRHPortStatus for one zero-based root port. 0xFFFFFFFF = no
+// controller / bad port. Bit decode: CCS=0x1 PES=0x2 PRS=0x10 LSDA=0x200.
+TUint32 OhciPortStatus(int aPort)
+    {
+    if (!gOk || aPort < 0 || aPort >= gPorts)
+        return 0xFFFFFFFFu;
+    return *(volatile unsigned*)(gBase + kHcRhPort + (unsigned)aPort * 4);
+    }
+
+// Diagnostic dump: revision, MMIO BAR, PCI location, downstream port count
+// and each root port's connect/enable/reset/speed state. Polled only.
+void OhciInfo()
+    {
+    if (!gOk && OhciInit() != KErrNone)
+        {
+        KPrintf("ohci: no OHCI controller (class 0c.03.10)\r\n");
+        return;
+        }
+    KPrintf("ohci: rev=%02x bar=%x pci=%02x:%02x.%x ports=%d\r\n",
+        gRevision, gBar, gBus, gDev, gFn, gPorts);
+    for (int p = 0; p < gPorts; ++p)
+        {
+        TUint32 s = OhciPortStatus(p);
+        KPrintf("ohci: port %d status=%x conn=%d en=%d reset=%d %s\r\n",
+            p, s, (TInt)(s & kPsCCS) ? 1 : 0, (TInt)(s & kPsPES) ? 1 : 0,
+            (TInt)(s & kPsPRS) ? 1 : 0, (s & kPsLSDA) ? "low" : "full");
+        }
+    }
+
+// Boot hook: HwInit0 walks .init_array after paging + TheAsic are ready.
+// OhciInit() is idempotent, so the later `usb` command simply reuses it.
+__attribute__((constructor)) static void OhciBootInit()
+    { OhciInit(); }

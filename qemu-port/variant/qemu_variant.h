@@ -63,6 +63,32 @@ void PciWrite32(unsigned int aBus, unsigned int aDev,
 TBool PciFindClass(unsigned int aClass, unsigned int aSub,
                    unsigned int* aBus, unsigned int* aDev, unsigned int* aFn);
 
+// VBE linear framebuffer + display HAL (variant/qemu_display.cpp).
+TInt display_init();                 // idempotent; sets 1024x768x32 LFB (or 8bpp fallback)
+void display_info();                 // print mode / LFB base / geometry
+void display_clear(TUint aColor);    // 0x00RRGGBB
+void display_rect(TUint aX, TUint aY, TUint aW, TUint aH, TUint aColor);
+void display_putc(TUint aX, TUint aY, char aCh, TUint aFg, TUint aBg);
+TInt display_test();                 // clear + border + "EKA2 GUI READY" + markers
+void QemuDisplayRegisterHal();       // register EHalGroupDisplay in Asic::Init3
+TUint32 display_lfb();               // framebuffer physical base (u32)
+TUint display_fb_size();             // framebuffer byte size
+void display_geometry(TUint& aW, TUint& aH, TUint& aBpp);
+TUint display_getpixel(TUint aX, TUint aY);  // 0x00RRGGBB readback
+
+// GUI desktop shell exec host (variant/qemu_gui_exec.cpp). Exposes slow execs
+// 249 (fb base), 250 (fb size) and 251 (display-list runner / shared base)
+// to ring-3 E32 programs; layout is in user/guishost.h.
+TInt gui_init();                     // idempotent; installs execs 249/250/251
+
+// PS/2 auxiliary (mouse) driver (variant/qemu_mouse.cpp). IRQ12 ISR updates a
+// clamped software cursor; the crosshair is painted through display_rect().
+TInt mouse_init();                   // 8042 init + IRQ12 bind/unmask; idempotent
+void mouse_info();                   // print x/y/buttons/packets/id/pktsize
+void mouse_render_cursor();          // draw/move the crosshair on the framebuffer
+void mouse_poll();                   // polled fallback: drain 8042 output once
+TInt mouse_test();                   // inject one synthetic packet; verify ISR path
+
 // e1000 (82540EM) polled Ethernet driver (variant/qemu_nic.cpp).
 TInt e1000_init();                                  // boot/hot init; idempotent
 TInt e1000_reset();                                 // MAC reset + force link up
@@ -74,6 +100,50 @@ TInt e1000_send(const TUint8* aBuf, TUint aLen);    // alias of e1000_tx
 TInt e1000_recv(TUint8* aBuf, TUint aMax);          // bytes read, or 0
 TBool e1000_link_up();
 TInt e1000_irq();                                   // poll stub: ACK ICR, return bits
+
+// virtio-net (PCI 1AF4:1000/1041) alternative NIC backend
+// (variant/qemu_virtio_net.cpp). Polled only; boot hook via constructor.
+TInt vnet_init();                                  // boot/hot init; idempotent
+TInt vnet_tx(const TUint8* aBuf, TUint aLen);      // enqueue + kick one TX frame
+TInt vnet_recv(TUint8* aBuf, TUint aMax);          // non-blocking; bytes or 0
+void vnet_info();                                  // print MAC, queues, features
+
+// virtio-blk (PCI 1AF4:1001/1042, subsystem 2) polled block storage driver
+// (variant/qemu_virtio_blk.cpp). NEW storage backend alongside ATA/AHCI.
+// One split virtqueue; polled only; boot hook via constructor.
+TInt vblk_init();                                  // boot/hot init; idempotent
+TInt vblk_read(TUint32 aLba, TUint8* aBuf, TUint aCount);        // count sectors
+TInt vblk_write(TUint32 aLba, const TUint8* aBuf, TUint aCount); // count sectors
+void vblk_info();                                  // print capacity/features/queue
+
+// virtio-RNG (PCI 1AF4:1005/1044, subsystem 4) polled entropy source
+// (variant/qemu_virtio_rng.cpp). NEW. One split virtqueue; polled only;
+// boot hook via constructor.
+TInt vrng_init();                                  // boot/hot init; idempotent
+TInt vrng_get(TUint8* aBuf, TUint aLen);           // bytes of random data received
+void vrng_info();                                  // print PCI/features/queue state
+
+// Kernel<->userland e1000 frame bridge (variant/qemu_netbridge.cpp). Shared
+// struct nb_shared is described in user/netbridge.h. Base/size are discoverable
+// from userland via slow execs 247/248.
+struct nb_ring;
+TInt netbridge_init();                                  // boot init (idempotent)
+TInt netbridge_poll();                                  // one TX-drain / RX-fill pass
+void NetBridgePollLoop(TInt aMaxMs);                    // shell-driven poll loop
+struct nb_ring* netbridge_tx_ring();
+struct nb_ring* netbridge_rx_ring();
+TUint32 netbridge_base();
+TUint netbridge_size();
+
+// AC'97 PCM-OUT driver (variant/qemu_audio.cpp). Polled, no IRQ wiring.
+TInt audio_init();                                  // boot/hot init; idempotent
+void audio_info();                                  // BARS, vendor ID, codec status
+TInt audio_play_test();                             // play a 1kHz test tone
+TInt audio_tone(TInt aFreq, TInt aMs);              // play one note (freq Hz, ms)
+
+// Process-viewer census exec (variant/qemu_ps_exec.cpp). Slow exec slot 241:
+// op 0 -> identity-mapped ps_census base (user/pshost.h), op 1 -> refresh.
+TUint PsExecSlot();                                 // == 241, for diagnostics
 
 // ATA PIO driver (variant/qemu_ata.cpp). Devices 0..3 = pri-master,
 // pri-slave, sec-master, sec-slave. LBA28, polled.
@@ -168,12 +238,22 @@ void UsbDebugPoll();  // one-shot interrupt-IN dump (bring-up debug)
 TInt OhciPresent();
 TInt OhciInit();
 int OhciPorts();
+TUint32 OhciPortStatus(int aPort);   // raw HcRHPortStatus; 0xFFFFFFFF = invalid
+void OhciInfo();                     // revision / BAR / ports / per-port status
 TInt OhciPortReset(int aPort, TBool& aLow);
 TInt OhciControl(TUint8 aAddr, TUint8 aMaxPkt, TBool aLow,
                  TUint8 aReqType, TUint8 aReq, TUint16 aValue, TUint16 aIndex,
                  TUint16 aLen, TUint8* aData, TBool aIn);
 TInt OhciIntPoll(TUint8 aAddr, TUint8 aEp, TUint8& aToggle,
                  TUint8* aDst, TUint aLen, TBool aLow, TUint8 aMaxPkt);
+
+// EHCI USB 2.0 host controller (variant/qemu_usb_ehci.cpp). Polled only;
+// boot hook via constructor. Complements the OHCI 1.1 backend above.
+TInt ehci_init();                       // idempotent; BAR0 MMIO + schedule setup
+int ehci_ports();                       // number of root ports (0 if absent)
+TUint32 ehci_port_status(int aPort);    // raw PORTSC; 0xFFFFFFFF = invalid port
+TInt ehci_port_reset(int aPort);        // zero-based root port reset + enable
+void ehci_info();                       // version / BAR / ports / per-port status
 
 // E32 image validation (variant/e32load.cpp). Stage 3a: validate + report.
 struct TE32Info

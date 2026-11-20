@@ -237,10 +237,18 @@ static const TCommandHelp kHelp[] =
     {"ps", "PS", "List processes and IDs."},
     {"threads", "THREADS", "List kernel threads."},
     {"pci", "PCI", "List PCI devices."},
+    {"display", "DISPLAY [TEST]", "Show the VBE framebuffer mode/LFB; TEST clears blue and draws a border + EKA2 GUI banner."},
+    {"mouse", "MOUSE [INFO|POLL|TEST]", "Show the PS/2 mouse cursor/buttons/packets; INFO details the device, POLL drains the 8042 once, TEST injects a synthetic packet through IRQ12."},
     {"nic", "NIC [ARP [count]]", "Show e1000 link/MAC; NIC ARP sends ARP requests and waits for replies."},
+    {"vnet", "VNET [INFO]", "Show virtio-net PCI/MAC/queue state (alternative NIC backend to e1000)."},
+    {"netbridge", "NETBRIDGE [ms]", "Pump the kernel<->userland e1000 frame bridge for up to ms milliseconds (default 6000)."},
     {"ide", "IDE", "List ATA/AHCI disks and FAT32 partitions."},
     {"ahci", "AHCI", "Show SATA controller details."},
-    {"usb", "USB [POLL]", "Probe HID keyboards; POLL displays one debug report."},
+    {"vblk", "VBLK [INFO|TEST]", "Show virtio-blk PCI/capacity/queue state; TEST reads sector 0 through the virtqueue."},
+    {"rng", "RNG [INFO|TEST]", "Show virtio-RNG PCI/queue state; TEST fetches 16 random bytes through the virtqueue."},
+    {"audio", "AUDIO [PLAY]", "Show AC97 audio BARS/vendor ID; PLAY outputs a 1kHz test tone."},
+    {"usb", "USB [POLL|INFO]", "Probe HID keyboards; POLL dumps one debug report, INFO shows OHCI controller/ports."},
+    {"ehci", "EHCI [INFO]", "Show EHCI USB2 controller version/port count; INFO dumps per-port connect/enable/speed."},
     {"xhci", "XHCI", "Show USB3 controller status; XHCIPORTS lists ports."},
     {"xhciports", "XHCIPORTS", "List USB3 root-port status."},
     {"reboot", "REBOOT", "Restart via the 8042 controller."},
@@ -264,7 +272,7 @@ static void PrintHelp(const char* aName)
         KPrintf("Drives:   MOUNT  VOL  DRIVE  X:  FORMAT\r\n");
         KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  REAP  EXITS  WAIT  REBOOT\r\n");
         KPrintf("Programs: type a file name to run it, e.g. HELLO.E32 or HELLO args\r\n");
-        KPrintf("Hardware: PCI  IDE  AHCI  USB  XHCI  XHCIPORTS\r\n");
+        KPrintf("Hardware: PCI  DISPLAY  MOUSE  IDE  AHCI  VBLK  RNG  AUDIO  USB  EHCI  XHCI  XHCIPORTS  NIC  VNET\r\n");
         KPrintf("Paths: X:name selects a mounted drive; quote names containing spaces.\r\n");
         return;
         }
@@ -723,6 +731,25 @@ static void Exec()
         {
         PciList();
         }
+    else if (StrEq(cmd, "display"))
+        {
+        if (argc > 1 && StrEq(argv[1], "test"))
+            display_test();
+        else
+            display_info();
+        }
+    else if (StrEq(cmd, "mouse"))
+        {
+        if (argc > 1 && StrEq(argv[1], "poll"))
+            mouse_poll();
+        else if (argc > 1 && StrEq(argv[1], "test"))
+            {
+            TInt r = mouse_test();
+            KPrintf("mouse test: %s\r\n", r == KErrNone ? "PASS" : "FAIL");
+            }
+        else
+            mouse_info();
+        }
     else if (StrEq(cmd, "nic"))
         {
         TInt r = e1000_init();                       // idempotent boot init
@@ -743,6 +770,88 @@ static void Exec()
                 NicArpTest(count);
                 }
             }
+        }
+    else if (StrEq(cmd, "vnet"))
+        {
+        TInt r = vnet_init();                       // idempotent boot init
+        if (r != KErrNone)
+            KPrintf("vnet: init failed %d\r\n", r);
+        else
+            {
+            vnet_info();
+            if (argc > 1 && StrEq(argv[1], "info"))
+                KPrintf("vnet: info ok\r\n");
+            }
+        }
+    else if (StrEq(cmd, "vblk"))
+        {
+        TInt r = vblk_init();                       // idempotent boot init
+        if (r != KErrNone)
+            KPrintf("vblk: init failed %d\r\n", r);
+        else if (argc > 1 && StrEq(argv[1], "test"))
+            {
+            // Read sector 0 through the virtqueue and show its first bytes.
+            static TUint8 vbBuf[512];
+            static const TUint8 kWmagic[8] =
+                { 'V','B','L','K','W','R','T','!' };
+            memset(vbBuf, 0, sizeof(vbBuf));
+            r = vblk_read(0, vbBuf, 1);
+            KPrintf("vblk test: read=%d first=%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                r, vbBuf[0], vbBuf[1], vbBuf[2], vbBuf[3],
+                vbBuf[4], vbBuf[5], vbBuf[6], vbBuf[7]);
+            // Write a pattern to sector 1, then read it back through the queue.
+            memset(vbBuf, 0, sizeof(vbBuf));
+            for (TInt i = 0; i < 8; ++i) vbBuf[i] = kWmagic[i];
+            TInt wr = vblk_write(1, vbBuf, 1);
+            memset(vbBuf, 0, sizeof(vbBuf));
+            TInt rb = vblk_read(1, vbBuf, 1);
+            KPrintf("vblk test: write=%d readback=%d first=%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                wr, rb, vbBuf[0], vbBuf[1], vbBuf[2], vbBuf[3],
+                vbBuf[4], vbBuf[5], vbBuf[6], vbBuf[7]);
+            }
+        else
+            {
+            vblk_info();
+            if (argc > 1 && StrEq(argv[1], "info"))
+                KPrintf("vblk: info ok\r\n");
+            }
+        }
+    else if (StrEq(cmd, "rng"))
+        {
+        TInt r = vrng_init();                       // idempotent boot init
+        if (r != KErrNone)
+            KPrintf("rng: init failed %d\r\n", r);
+        else if (argc > 1 && StrEq(argv[1], "test"))
+            {
+            // Fetch 16 bytes of hardware entropy through the virtqueue.
+            static TUint8 rbBuf[64];
+            memset(rbBuf, 0, sizeof(rbBuf));
+            r = vrng_get(rbBuf, 16);
+            KPrintf("rng test: get=%d bytes=%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                r, rbBuf[0], rbBuf[1], rbBuf[2], rbBuf[3],
+                rbBuf[4], rbBuf[5], rbBuf[6], rbBuf[7]);
+            KPrintf("rng test: bytes=%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                rbBuf[8], rbBuf[9], rbBuf[10], rbBuf[11],
+                rbBuf[12], rbBuf[13], rbBuf[14], rbBuf[15]);
+            }
+        else
+            {
+            vrng_info();
+            if (argc > 1 && StrEq(argv[1], "info"))
+                KPrintf("rng: info ok\r\n");
+            }
+        }
+    else if (StrEq(cmd, "netbridge"))
+        {
+        TInt ms = 6000;
+        if (argc > 1)
+            {
+            TInt n = 0;
+            for (const char* q = argv[1]; *q >= '0' && *q <= '9'; ++q)
+                n = n * 10 + (*q - '0');
+            if (n > 0 && n <= 120000) ms = n;
+            }
+        NetBridgePollLoop(ms);
         }
     else if (StrEq(cmd, "threads"))
         {
@@ -960,6 +1069,17 @@ static void Exec()
         {
         AhciInfo();
         }
+    else if (StrEq(cmd, "audio"))
+        {
+        if (argc > 1 && StrEq(argv[1], "play"))
+            {
+            TInt r = audio_play_test();
+            if (r != KErrNone)
+                KPrintf("audio play: %s\r\n", ErrName(r));
+            }
+        else
+            audio_info();
+        }
     else if (StrEq(cmd, "xhci"))
         {
         XhciInfo();
@@ -1008,11 +1128,28 @@ static void Exec()
             KPrintf("xhci: keyboard %s\r\n",
                 ErrName(XhciKeyboardInit(argv[1][0] - '1')));
         }
+    else if (StrEq(cmd, "ehci"))
+        {
+        TInt r = ehci_init();                       // idempotent boot init
+        if (r != KErrNone)
+            KPrintf("ehci: init failed %d\r\n", r);
+        else
+            {
+            ehci_info();
+            if (argc > 1 && StrEq(argv[1], "info"))
+                KPrintf("ehci: info ok\r\n");
+            }
+        }
     else if (StrEq(cmd, "usb"))
         {
         if (argc > 1 && StrEq(argv[1], "poll"))
             {
             UsbDebugPoll();
+            return;
+            }
+        if (argc > 1 && StrEq(argv[1], "info"))
+            {
+            OhciInfo();
             return;
             }
         TInt r = UsbInit();

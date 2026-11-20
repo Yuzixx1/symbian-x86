@@ -96,6 +96,10 @@ void QemuVariantAsic::Init3()
     QemuIrq::Enable(1);       // PS/2 keyboard
     QemuIrq::Enable(4);       // COM1 receive
 
+    // K::Init3 already allocated K::HalEntryArray before A::Init3 (sinit.cpp),
+    // so the display group can be registered from pure variant code.
+    QemuDisplayRegisterHal();
+
     // Start the R1 file server (!FileServer) on the FAT32 volume.
     // Mount the first partition of the first AHCI disk (dev 4, part 0 as
     // discovered by QEMU: "ahci: port 0 QEMU HARDDISK").

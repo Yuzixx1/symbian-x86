@@ -232,6 +232,36 @@ build/qemu_ahci.o: variant/qemu_ahci.cpp variant/qemu_variant.h | build
 build/qemu_nic.o: variant/qemu_nic.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_nic.cpp -o $@
 
+build/qemu_virtio_net.o: variant/qemu_virtio_net.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_virtio_net.cpp -o $@
+
+build/qemu_virtio_blk.o: variant/qemu_virtio_blk.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_virtio_blk.cpp -o $@
+
+build/qemu_virtio_rng.o: variant/qemu_virtio_rng.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_virtio_rng.cpp -o $@
+
+build/qemu_display.o: variant/qemu_display.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_display.cpp -o $@
+
+build/qemu_mouse.o: variant/qemu_mouse.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_mouse.cpp -o $@
+
+build/qemu_netbridge.o: variant/qemu_netbridge.cpp variant/qemu_variant.h user/netbridge.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_netbridge.cpp -o $@
+
+build/qemu_gui_exec.o: variant/qemu_gui_exec.cpp variant/qemu_variant.h user/guishost.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_gui_exec.cpp -o $@
+
+build/qemu_audio.o: variant/qemu_audio.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_audio.cpp -o $@
+
+build/qemu_audio_exec.o: variant/qemu_audio_exec.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_audio_exec.cpp -o $@
+
+build/qemu_ps_exec.o: variant/qemu_ps_exec.cpp variant/qemu_variant.h user/pshost.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_ps_exec.cpp -o $@
+
 build/qemu_xhci.o: variant/qemu_xhci.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_xhci.cpp -o $@
 
@@ -243,6 +273,9 @@ build/qemu_usb.o: variant/qemu_usb.cpp variant/qemu_variant.h | build
 
 build/qemu_usb_ohci.o: variant/qemu_usb_ohci.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_usb_ohci.cpp -o $@
+
+build/qemu_usb_ehci.o: variant/qemu_usb_ehci.cpp variant/qemu_variant.h | build
+	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_usb_ehci.cpp -o $@
 
 build/qemu_variant_rom.o: variant/qemu_variant_rom.cpp variant/qemu_variant.h | build
 	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/qemu_variant_rom.cpp -o $@
@@ -271,7 +304,7 @@ build/usercon.o: variant/usercon.cpp variant/qemu_variant.h | build
 
 # Full Kern image: genuine nanokernel (knk) + genuine kernel (kern) + variant.
 # Scratch link first; promoted to boot target once it survives ResetEntry.
-KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o build/mmu_gas.o build/qemu_assp.o build/kernfull_glue.o build/qemu_variant_rom.o build/qemu_variant_asic.o build/qemu_variant_int.o build/qemu_pci.o build/qemu_ata.o build/qemu_ahci.o build/qemu_nic.o build/qemu_xhci.o build/fat32.o build/e32load.o build/pd.o build/qemu_usb.o build/qemu_usb_ohci.o build/kern_shell.o $(KNK_OBJS) $(KERN_OBJS_1) $(KERN_OBJS_2) $(KERN_OBJS_3) $(KERN_OBJS_4)
+KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o build/mmu_gas.o build/qemu_assp.o build/kernfull_glue.o build/qemu_variant_rom.o build/qemu_variant_asic.o build/qemu_variant_int.o build/qemu_pci.o build/qemu_ata.o build/qemu_ahci.o build/qemu_nic.o build/qemu_virtio_net.o build/qemu_virtio_blk.o build/qemu_virtio_rng.o build/qemu_display.o build/qemu_mouse.o build/qemu_netbridge.o build/qemu_gui_exec.o build/qemu_audio.o build/qemu_audio_exec.o build/qemu_ps_exec.o build/qemu_xhci.o build/fat32.o build/e32load.o build/pd.o build/qemu_usb.o build/qemu_usb_ohci.o build/qemu_usb_ehci.o build/kern_shell.o $(KNK_OBJS) $(KERN_OBJS_1) $(KERN_OBJS_2) $(KERN_OBJS_3) $(KERN_OBJS_4)
 
 KERNFULL_OBJS += build/userfiles.o build/usercon.o
 
