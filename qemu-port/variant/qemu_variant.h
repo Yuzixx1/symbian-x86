@@ -69,6 +69,12 @@ void display_info();                 // print mode / LFB base / geometry
 void display_clear(TUint aColor);    // 0x00RRGGBB
 void display_rect(TUint aX, TUint aY, TUint aW, TUint aH, TUint aColor);
 void display_putc(TUint aX, TUint aY, char aCh, TUint aFg, TUint aBg);
+// Scaled stroke-font cell geometry, shared by display_putc() and the VBE
+// teletype mirror.  Compile-time constants on purpose: the display boot
+// constructor calls KPrintf -> VgaTeletype before dynamic initializers run.
+#define QEMU_DISPLAY_FONT_SCALE 2u
+#define QEMU_DISPLAY_CELL_W (8u * QEMU_DISPLAY_FONT_SCALE)        // 16
+#define QEMU_DISPLAY_CELL_H (8u * QEMU_DISPLAY_FONT_SCALE + 2u)   // 18
 TInt display_test();                 // clear + border + "EKA2 GUI READY" + markers
 void QemuDisplayRegisterHal();       // register EHalGroupDisplay in Asic::Init3
 TUint32 display_lfb();               // framebuffer physical base (u32)
@@ -188,6 +194,7 @@ void XhciPorts();
 // FAT32 on ATA (variant/fat32.cpp). Up to 8 mounted volumes (C:, D:, ...)
 // across drives/partitions, each with its own CWD. Mount, list/read/write.
 TInt FatMount(int aDev, int aPart);   // aPart<0: first FAT32 partition
+TInt FatMountAlias(int aDev, int aPart, char aLetter);  // extra letter for a mounted dev/part
 TInt UserFilesInit();
 TInt UserFilesChannelCount();
 TInt UserConInit();          // transitional console-input service

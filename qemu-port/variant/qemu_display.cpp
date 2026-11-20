@@ -114,6 +114,13 @@ namespace
         }
 
     // Minimal 5x7 stroke font -> rendered into 8x8 cells with a 1px margin.
+    // Each font pixel is drawn as a QEMU_DISPLAY_FONT_SCALE x ... block so the
+    // VBE console text is legible on a 1024x768 desktop.  The cell is the
+    // scaled glyph (8*scale) plus a small 2px vertical gap: the old code drew
+    // an 8px glyph but the teletype advanced a whole 16px row (8px of dead
+    // space), which is why lines looked so sparse.  Geometry lives in the
+    // shared header so the teletype mirror steps exactly one cell per char.
+    static const TUint kFontCellW = QEMU_DISPLAY_CELL_W;
     struct TGlyph { TUint8 iCh; TUint8 iRows[7]; };
     static const TGlyph kGlyphs[] = {
         {'A',{0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}},
@@ -286,7 +293,14 @@ void display_putc(TUint aX, TUint aY, char aCh, TUint aFg, TUint aBg)
         {
         TUint8 bits = (g && row < 7) ? (TUint8)(g[row] << 2) : 0;
         for (TUint col = 0; col < 8; ++col)
-            PutPixel(aX + col, aY + row, (bits & (1u << (7 - col))) ? aFg : aBg);
+            {
+            TUint color = (bits & (1u << (7 - col))) ? aFg : aBg;
+            // Blow each 1-bit font pixel up into a solid SCALE x SCALE block.
+            for (TUint sy = 0; sy < QEMU_DISPLAY_FONT_SCALE; ++sy)
+                for (TUint sx = 0; sx < QEMU_DISPLAY_FONT_SCALE; ++sx)
+                    PutPixel(aX + col * QEMU_DISPLAY_FONT_SCALE + sx,
+                             aY + row * QEMU_DISPLAY_FONT_SCALE + sy, color);
+            }
         }
     }
 
@@ -304,7 +318,7 @@ TInt display_test()
     display_rect(gWidth - 12, 8, 4, gHeight - 16, 0x0000FF00u);
     const char* s = "EKA2 GUI READY";
     for (TUint i = 0; s[i]; ++i)
-        display_putc(40 + i * 9, 40, s[i], 0x00FFFFFFu, 0x00000080u);
+        display_putc(40 + i * kFontCellW, 40, s[i], 0x00FFFFFFu, 0x00000080u);
 
     KPrintf("DISPLAY TEST: cleared blue, border + text drawn on %ux%ux%u LFB=0x%08x\r\n",
         gWidth, gHeight, gBpp, (TUint)gLfb);

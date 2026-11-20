@@ -117,6 +117,15 @@ void QemuVariantAsic::Init3()
             }
         }
     }
+    // The bundled PROGRAMS.IMG is the same AHCI disk/partition just mounted as
+    // C:. Alias it as X: so end-user programs are reachable from X: as well.
+    // FatMountAlias adds a second letter without changing the active drive, so
+    // C: stays the default (file_save/selftest are unaffected). The shell's
+    // VOL / DRIVE / X: / DIR / TYPE commands read this same volume table.
+    if (FatMountAlias(4, 0, 'X') == KErrNone) {
+        const char* marker = "X: mounted (programs)\r\n";
+        while (*marker) QemuUart::PutC(*marker++);
+    }
     // S-02: install trusted service-manager execs and launch SVCMGR.E32 at
     // boot. The manager then starts F32/portfilesrv and supervises it in order
     // (docs/r1_service_manager_design_v1.md). FAT is mounted above, so the

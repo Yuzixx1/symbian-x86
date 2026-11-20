@@ -714,6 +714,47 @@ TInt FatMount(int aDev, int aPart)
     return KErrNone;
     }
 
+// Alias a dev+partition under an explicit drive letter. Unlike FatMount(),
+// which reuses the existing letter for an already-mounted dev+partition, this
+// always allocates a fresh volume slot. That lets the single bundled AHCI disk
+// appear as both the default C: and an additional X: (programs drive). The
+// currently active volume is left untouched, so C: remains the default drive.
+TInt FatMountAlias(int aDev, int aPart, char aLetter)
+    {
+    if (aLetter >= 'a' && aLetter <= 'z') aLetter -= 32;
+    if (aLetter < 'A' || aLetter > 'Z') return KErrArgument;
+    for (int i = 0; i < 8; ++i)
+        if (sVols[i].mounted && sVols[i].letter == aLetter)
+            return KErrAlreadyExists;
+
+    const TInt oldCur = sCur;
+    VolState keep;
+    const TBool had = (sCur >= 0);
+    if (had) keep = sVols[sCur];
+
+    TInt r = FatMountInner(aDev, aPart);  // loads geometry, resets cwd to root
+    if (r != KErrNone)
+        {
+        if (had) VolToGlobals(keep); else sMounted = EFalse;
+        return r;
+        }
+    int slot = -1;
+    for (int i = 0; i < 8; ++i)
+        if (!sVols[i].mounted) { slot = i; break; }
+    if (slot < 0)
+        {
+        if (had) VolToGlobals(keep); else sMounted = EFalse;
+        return KErrOverflow;
+        }
+    GlobalsToVol(sVols[slot]);  // snapshot the new volume's geometry + root cwd
+    sVols[slot].letter = aLetter;
+    sVols[slot].mounted = ETrue;
+
+    sCur = oldCur;              // restore the active volume (C:) as default
+    if (had) VolToGlobals(keep); else sMounted = EFalse;
+    return KErrNone;
+    }
+
 char FatCurLetter()
     {
     if (sCur < 0 || !sVols[sCur].mounted)

@@ -79,12 +79,20 @@ namespace
 
     // The display boot hook puts the VGA into Bochs VBE 1024x768x32, so the
     // 0xB8000 text cells are no longer scanned out. Mirror the same teletype
-    // into the LFB with the existing 5x7 stroke font so the shell is visible
-    // on screen as well as on COM1. GUI programs still own the LFB via the
-    // display HAL; their output simply coexists with (or overwrites) text.
-    const TUint kFxCellW = 8, kFxCellH = 16;
-    TUint gFbW = 0, gFbH = 0, gFxCol = 0, gFxRow = 0, gFxRows = 0;
+    // into the LFB with the scaled 5x7 stroke font so the shell is visible on
+    // screen as well as on COM1. Cell geometry comes from qemu_display.cpp so
+    // the glyph and the row/column advances always agree: with SCALE=2 the
+    // glyph is 16x16 and we step 18px per row (2px gap), not 16px with an
+    // 8px glyph as before.  The FB grid is derived from the framebuffer size
+    // (64x42 at 1024x768) so large text never runs off the right edge.
+    const TUint kFxCellW = QEMU_DISPLAY_CELL_W, kFxCellH = QEMU_DISPLAY_CELL_H;
+    TUint gFbW = 0, gFbH = 0, gFxCol = 0, gFxRow = 0;
+    TUint gFxCols = 0, gFxRows = 0;
     TBool gFxReady = EFalse;
+    // Genuine KPrintf appends "\r\n" to every line, so most shell lines arrive
+    // as "\r\n\r\n".  Collapse the duplicate in the LFB mirror only: COM1 and
+    // the 0xB8000 buffer stay byte-for-byte unchanged.
+    TBool gFxLineFresh = ETrue;
 
     void FbEnsure()
         {
@@ -95,9 +103,8 @@ namespace
         if (!w || !h)
             return;
         gFbW = w; gFbH = h;
+        gFxCols = w / kFxCellW;
         gFxRows = h / kFxCellH;
-        if (gFxRows > kRows)
-            gFxRows = kRows;
         gFxReady = ETrue;
         }
 
@@ -130,6 +137,9 @@ namespace
         if (aC == '\n')
             {
             gFxCol = 0;
+            if (gFxLineFresh)
+                return;       // doubled CRLF from KPrintf: no extra blank row
+            gFxLineFresh = ETrue;
             if (++gFxRow >= gFxRows)
                 { gFxRow = gFxRows - 1; FbScroll(); }
             return;
@@ -141,12 +151,13 @@ namespace
                 { --gFxCol; FbCellClear(gFxCol, gFxRow); }
             return;
             }
-        if (gFxCol >= kCols || gFxRow >= gFxRows)
+        if (gFxCol >= gFxCols || gFxRow >= gFxRows)
             return;
         FbCellClear(gFxCol, gFxRow);
         display_putc(gFxCol * kFxCellW, gFxRow * kFxCellH,
                      aC, 0x00C0C0C0u, 0u);
-        if (++gFxCol >= kCols)
+        gFxLineFresh = EFalse;
+        if (++gFxCol >= gFxCols)
             FbPutC('\n');
         }
     }
@@ -186,6 +197,7 @@ static void VgaInit()
         display_clear(0u);
         gFxCol = 0;
         gFxRow = 0;
+        gFxLineFresh = ETrue;
         }
     }
 
