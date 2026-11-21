@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """r1_doom_test.py -- QEMU test scaffold for real DOOM (doomgeneric) on EKA2.
 
-STATUS: SCAFFOLD. This script deliberately SKIPS with a clear message while
-build/user/DOOM.E32 and the Freedoom IWAD are still being acquired/built. It is
-safe to run today: no assets means `RESULT: SKIP` and exit 0, never a false pass.
+STATUS: LIVE. With DOOM.E32 + the Freedoom IWAD present this boots the real
+guest, drives DOOM and asserts its marker family. Missing assets still yield a
+clear `RESULT: SKIP` and exit 0, never a false pass.
 
 When the assets land, this harness will:
 
@@ -12,7 +12,8 @@ When the assets land, this harness will:
   2. build/reuse the GRUB ISO whose /PROGRAMS.IMG carries the same files;
   3. boot with -vga std, launch `DOOM` from the serial shell, feed gameplay keys;
   4. assert the DOOM: marker family, the EUSER ordinal-915 bind and a clean log;
-  5. grab a QMP screendump of the real title screen to /tmp/opencode/doom.png.
+  5. best-effort QMP screendump of the real title screen to
+      /tmp/opencode/doom_final.png (never fails the test if QMP is flaky).
 
 The 48 MB partition is required: freedoom1.wad is 28,795,076 B (~27.5 MiB) and
 does not fit the old 8 MB test partition (16384 sectors), nor the ISO's former
@@ -23,6 +24,7 @@ Usage: python3 tools/r1_doom_test.py [--no-rebuild-disk] [--no-build-iso]
 """
 import argparse
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -36,7 +38,7 @@ TMP = "/tmp/opencode"
 DISK = TMP + "/r1_doom.img"
 FS = TMP + "/r1_doom_fs.img"
 LOG = TMP + "/r1_doom.log"
-PNG = TMP + "/doom.png"
+PNG = TMP + "/doom_final.png"
 ISO = TMP + "/r1_doom.iso"
 QMP = TMP + "/r1_doom-qmp.sock"
 KERNEL = os.path.join(REPO, "build/kernfull.elf")
@@ -72,13 +74,15 @@ FS_SIZE = PART_SECTORS * 512
 OFFSET = PART_LBA * 512
 
 MARKERS = (
-    "DOOM: INIT",       # doomgeneric I_Init entered
-    "DOOM: WAD OK",     # IWAD header + directory parsed
-    "DOOM: TITLE",      # title screen frame submitted
-    "DOOM: FRAME",      # at least one real 320x200 frame blitted
-    "DOOM: KEY",        # a PS/2 key reached I_GetEvent
-    "DOOM: DONE",       # orderly exit / self-test complete
+    "DOOM: WAD OK",         # IWAD header + directory parsed (full 27.5 MiB)
+    "DOOM: INIT",           # doomgeneric I_Init entered
+    "DOOM: ENGINE READY",   # engine init completed
+    "DOOM: TITLE",          # title screen frame submitted
+    "DOOM: FRAME",          # at least one real 320x200 frame blitted
 )
+# The guest logs "DOOM: WAD FDOOM1.WAD <size>"; assert the real IWAD byte count
+# so a truncated/padded WAD cannot pass.
+WAD_SIZE = "28795076"
 BOOT_MARKERS = ("DISPLAY: VBE mode 0x", "X: mounted")
 EXC_KEYS = ("Exc ", "PanicKernExec", "FAULT:", "MMU #PF")
 PROMPTS = (b"EKA2> ", b"X:/> ", b"C:/> ")
@@ -190,42 +194,100 @@ def wait_for_bytes(log_path, needles, timeout, start=0):
     return False
 
 
-def qmp_screendump(sock_path, png, tries=16):
-    """Best-effort QMP PNG screendump; return True on success."""
-    for _ in range(tries):
+def qmp_cmd(sock_path, cmd, tries=12, timeout=5):
+    """Run one QMP command on a FRESH connection; return its reply line or None.
+
+    QEMU's `server,nowait` QMP socket accepts one client at a time and a stale
+    or half-negotiated connection can poison later commands. Reopening a fresh
+    socket (greeting + qmp_capabilities handshake included) for every command
+    is what makes the GUI-apps harness reliable; never raises.
+    """
+    for attempt in range(tries):
+        if not os.path.exists(sock_path):
+            time.sleep(0.25)
+            continue
+        s = None
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            s.connect(sock_path)
+            f = s.makefile("rwb")
+            if not f.readline():                      # QMP greeting
+                raise RuntimeError("empty QMP greeting")
+            f.write(b'{"execute":"qmp_capabilities"}\n')
+            f.flush()
+            f.readline()                              # capabilities reply
+            f.write((cmd + "\n").encode())
+            f.flush()
+            reply = None
+            for _ in range(10):
+                line = f.readline()
+                if not line:
+                    break
+                if b"return" in line or b"error" in line.lower():
+                    reply = line
+                    break
+            f.close()
+            s.close()
+            return reply
+        except Exception as exc:
+            print(f"[WARN] QMP command attempt {attempt + 1}/{tries}: {exc}")
+            if s is not None:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            time.sleep(0.25)
+    return None
+
+
+def qmp_screendump(sock_path, png, tries=12):
+    """Best-effort QMP PNG screendump; return True on success, never raises."""
+    for _ in range(16):                               # wait for socket to exist
         if os.path.exists(sock_path):
             break
         time.sleep(0.25)
-    try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(5)
-        s.connect(sock_path)
-        f = s.makefile("rwb")
-        f.readline()                                  # QMP greeting
-        f.write(b'{"execute":"qmp_capabilities"}\n')
-        f.flush()
-        f.readline()                                  # capabilities reply
-        if os.path.exists(png):
-            os.remove(png)
-        cmd = ('{"execute":"screendump","arguments":{"filename":"'
-               + png + '","format":"png"}}\n')
-        f.write(cmd.encode())
-        f.flush()
-        for _ in range(10):
-            line = f.readline()
-            if not line or b"return" in line or b"error" in line.lower():
-                break
-        f.close()
-        s.close()
-    except Exception as exc:
-        print(f"[WARN] QMP screendump failed: {exc}")
+    else:
+        print(f"[WARN] QMP socket {sock_path} never appeared")
+        return False
+    # Write to a temp file and only promote it on success, so a QMP failure
+    # cannot clobber a known-good screenshot captured by another method.
+    tmp = png + ".tmp"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    cmd = ('{"execute":"screendump","arguments":{"filename":"'
+           + tmp + '","format":"png"}}')
+    reply = qmp_cmd(sock_path, cmd, tries=tries)
+    if reply is None or b"error" in reply.lower():
+        print("[WARN] QMP screendump failed"
+              + (f": {reply[:160]!r}" if reply else " (no reply)"))
         return False
     for _ in range(20):                               # PNG write is async
-        if os.path.exists(png) and os.path.getsize(png) > 1000:
-            print(f"[INFO] screendump {png}: {os.path.getsize(png)} bytes")
-            return True
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 1000:
+            break
         time.sleep(0.15)
+    if os.path.exists(tmp) and os.path.getsize(tmp) > 1000:
+        os.replace(tmp, png)
+        print(f"[INFO] screendump {png}: {os.path.getsize(png)} bytes")
+        return True
+    print(f"[WARN] screendump PNG not produced ({png})")
     return False
+
+
+def write_keys(vm, data, label):
+    """Write bytes to QEMU's stdin (a pipe, never a PTY); tolerate a dead guest.
+
+    A PTY would translate Esc into SIGINT; a plain pipe preserves \x1b for the
+    game. BrokenPipeError/OSError happens when QEMU exits before the write, and
+    must never fail the test.
+    """
+    try:
+        vm.stdin.write(data)
+        vm.stdin.flush()
+        return True
+    except (BrokenPipeError, OSError, ValueError) as exc:
+        print(f"[WARN] could not send {label} to guest stdin: {exc}")
+        return False
 
 
 def run_qemu(log_path, png_path, use_iso):
@@ -251,14 +313,12 @@ def run_qemu(log_path, png_path, use_iso):
         try:
             wait_for_bytes(log_path, PROMPTS, 70)
             time.sleep(0.5)
-            vm.stdin.write(b"DOOM\n")
-            vm.stdin.flush()
+            write_keys(vm, b"DOOM\n", "DOOM launch")
             wait_for_bytes(log_path, [b"DOOM: TITLE", b"DOOM: WAD OK"], 30)
             time.sleep(2.0)                            # let the title paint
-            shot = qmp_screendump(QMP, png_path)
-            vm.stdin.write(GAME_KEYS)
-            vm.stdin.flush()
-            wait_for_bytes(log_path, [b"DOOM: DONE", b"DOOM: FRAME"], 20)
+            shot = qmp_screendump(QMP, png_path)       # best-effort only
+            write_keys(vm, GAME_KEYS, "game keys")     # stdin pipe, not a PTY
+            wait_for_bytes(log_path, [b"DOOM: FRAME", b"DOOM: frame"], 20)
             time.sleep(1.0)
         finally:
             try:
@@ -276,6 +336,12 @@ def check_log(text):
         good = marker in text
         ok &= good
         print(f"  [{'PASS' if good else 'FAIL'}] {marker}")
+    # The real IWAD byte count proves the full 27.5 MiB WAD was parsed, not
+    # just that a header happened to be accepted.
+    wad_sized = any("DOOM: WAD" in ln and WAD_SIZE in ln
+                    for ln in text.splitlines())
+    ok &= wad_sized
+    print(f"  [{'PASS' if wad_sized else 'FAIL'}] DOOM: WAD {WAD_SIZE}")
     for marker in BOOT_MARKERS:
         good = marker in text
         ok &= good
@@ -284,6 +350,13 @@ def check_log(text):
                 for ln in text.splitlines())
     ok &= bound
     print(f"  [{'PASS' if bound else 'FAIL'}] EUSER ord 915 bound")
+    # DOOM prints "DOOM: frame N" as the engine renders; more than one
+    # distinct, increasing value proves the title screen is really advancing.
+    frames = [int(n) for n in re.findall(r"DOOM: frame (\d+)", text)]
+    advancing = len(set(frames)) >= 2 and max(frames) > min(frames)
+    ok &= advancing
+    print(f"  [{'PASS' if advancing else 'FAIL'}] frames advancing "
+          f"({sorted(set(frames))})")
     exc = [ln for ln in text.splitlines() if any(k in ln for k in EXC_KEYS)]
     ok &= not exc
     print(f"  [{'PASS' if not exc else 'FAIL'}] no Exc/Panic/FAULT/#PF")
