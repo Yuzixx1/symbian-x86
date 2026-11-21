@@ -268,3 +268,24 @@ real display), make sure the GTK window has focus, and type `mouse info` at the
 shell *before* launching the desktop to confirm packets arrive; `DT: mouse
 x=... y=...` markers appear on motion. Remember clicks are not wired into
 applications (section 6/11) — cursor motion working is the expected result.
+
+## 13. Launching apps from the desktop
+
+When you select an application icon and press **Enter** (or click it in builds
+that wire clicks through), DESKTOP does **not** keep drawing a fake "launched"
+window on top of the wallpaper. It prints its launch/handoff markers, releases
+the PortCon input lease (`con_release()`), and **exits**, handing the framebuffer
+and console over to the launched app. The app is then rendered *normally* — it
+owns the whole screen. After a short delay the launched program's own output
+appears where the desktop was; for a text app such as `CALC` that is the
+console teletype writing `CALC: CALCULATOR READY` and its self-test lines into
+the LFB, and for a GUI app the program paints the framebuffer itself through
+the display-list protocol of section 4.
+
+When that app quits you are returned to the serial shell (`X:/>`). Type
+`desktop` again to bring the desktop back. On the serial log the handoff looks
+like `DT: launched CALC`, a release marker such as `DT: handing off` (or
+`DT: DONE`), followed by the app's own markers such as
+`CALC: CALCULATOR READY`. `tools/r1_desktop_handoff_test.py` drives exactly this
+sequence and compares screendumps before/after the handoff to prove the app is
+actually visible.

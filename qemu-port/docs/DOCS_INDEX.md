@@ -186,3 +186,15 @@ BREAKOUT, GUIMENU, GUIHELLO and BASIC when present.
   `SV:`) with no `Exc`/`PanicKernExec`, and takes QMP screendumps when possible.
 
 This brings the indexed Markdown total to **95**.
+
+## Added — windowed GUI application development (append-only)
+
+- [GUI_APP_DEVELOPMENT.md](GUI_APP_DEVELOPMENT.md) — Builder's guide to writing
+  a **windowed** PE2 E32 app on this port, derived from the running `DTCALC`
+  (windowed calculator) and `DTEDIT` (windowed text editor) code: the GUI stack
+  from `guishost.h` / `guilib.c` through exec 251 display lists to the Bochs
+  VBE LFB, the `gui_shared` protocol, `gui_window()` / `gui_button()` /
+  `gui_text()` widgets, mouse hit-testing, keyboard input, the PortFile save
+  dependency for the editor, desktop icon integration and the QEMU proof flow.
+
+This brings the indexed Markdown total to **96**.

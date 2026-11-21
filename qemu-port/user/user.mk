@@ -1318,3 +1318,37 @@ build/user/desktop.elf: build/user/start.o build/user/runtime.o build/user/deskt
 build/user/DESKTOP.E32: build/user/desktop.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# WINDOWED TEXT EDITOR E32 (DTEDIT) -- a second REAL GUI desktop application:
+# a decorated "EKA2 Notepad" window on the VBE LFB with a clickable toolbar
+# (SAVE/CLEAR/QUIT), a title-bar close box and a live text area with a blinking
+# cursor.  Keyboard typing, Backspace, Enter and arrow keys edit the buffer;
+# mouse presses are read from gui_shared (button word + button_seq) and
+# hit-tested against the toolbar/close box/text cells.  Saving uses PortFile IPC
+# (file_save -> NOTE.DAT).  Built on the reusable guilib.c toolkit over GUI slow
+# execs 249/250/251.  Genuine PE2 import of EUSER.DLL ordinal 915
+# (RDebug::Printf); IAT slot dtedit_printf_slot at 0x408000 (textSize).
+userland: build/user/DTEDIT.E32
+build/user/dtedit.o: user/dtedit.c user/guilib.h user/guishost.h user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/dtedit.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/dtedit.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=dtedit_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DTEDIT.E32: build/user/dtedit.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# WINDOWED DESKTOP CALCULATOR E32 -- a real application window (title bar,
+# close button, border, drop shadow) with a live display and a 20-key keypad,
+# painted on the VBE LFB through the reusable guilib.c toolkit (GUI execs
+# 249/250/251).  Clickable with the PS/2 mouse (gui_shared.buttons/button_seq)
+# and typeable on the serial keyboard; expressions use a recursive-descent
+# parser adapted from calc.c.  Genuine PE2 import of EUSER.DLL ord 915;
+# IAT slot dtcalc_printf_slot at 0x408000 (textSize).
+userland: build/user/DTCALC.E32
+build/user/dtcalc.o: user/dtcalc.c user/runtime.h user/guilib.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/dtcalc.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/dtcalc.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=dtcalc_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DTCALC.E32: build/user/dtcalc.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet

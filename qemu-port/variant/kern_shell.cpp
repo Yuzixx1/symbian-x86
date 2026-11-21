@@ -25,6 +25,16 @@ namespace QemuUart
     }
 
 void VgaTeletype(char aC);
+static void VgaInit();
+
+// exec-268 hand-off state.  While a full-screen GUI program owns the LFB the
+// mirror is muted; a NON-graphics child launched by that GUI program (DESKTOP
+// -> CALC/FILEMGR/...) must get the display back.  Track the GUI owner's pid
+// and the shell's own pid so the mirror can be resumed for the child without
+// letting the shell's own launch chatter paint over the GUI.
+static TUint sGuiMirrorPid = 0;
+static TUint sMirrorShellPid = 0;
+static volatile TBool sChildTookMirror = EFalse;
 
 // Raw char output: COM1 + VGA with NO line ending. Genuine Kern::Printf
 // appends \r\n per call (A::DebugPrint), so per-char echo must bypass it
@@ -149,8 +159,34 @@ namespace
 
     void FbPutC(char aC)
         {
+        // A graphical parent (DESKTOP) keeps its own RDebug markers on COM1
+        // even after a child has taken the mirror back over.
+        TUint pid = 0;
+        if (sGuiMirrorPid)
+            {
+            DThread* self = &Kern::CurrentThread();
+            if (self && self->iOwningProcess)
+                pid = (TUint)self->iOwningProcess->iId;
+            }
+        if (sGuiMirrorPid && pid == sGuiMirrorPid)
+            return;
         if (gFbMirrorSuspended)
-            return;   // COM1 keeps the text; the GUI framebuffer is untouched
+            {
+            // The mute was installed for the GUI parent.  If some OTHER user
+            // process is printing (an exec-268 child such as CALC), hand the
+            // display to it: resume the mirror, wipe the GUI pixels and let
+            // this character -- and everything after it -- through.  The
+            // shell's own thread must not trigger this (its launch chatter
+            // belongs on COM1 only).
+            if (!pid || pid == sMirrorShellPid)
+                return;
+            QemuFbMirrorSet(0);
+            sChildTookMirror = ETrue;
+            VgaInit();
+            // COM1-only marker; never KPrintf from inside this output path.
+            const char* m = "SH: mirror resumed for child\r\n";
+            while (*m) QemuUart::PutC(*m++);
+            }
         FbEnsure();
         if (!gFxReady)
             return;
@@ -245,8 +281,6 @@ static volatile TUint sHead = 0, sTail = 0;
 // E32 process and returns to the prompt. No signal machinery in the guest.
 static volatile TBool sAbortPending = EFalse;
 static TUint sForegroundPid = 0;
-// Non-zero while a graphical E32 process is running with the LFB mirror muted.
-static TUint sGuiMirrorPid = 0;
 
 extern "C" void QemuKbdPush(char aC)
     {
@@ -889,7 +923,8 @@ static void CheckAbort()
 static TBool IsGraphicsImage(const char* aName)
     {
     static const char* const kGraphics[] = {
-        "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER"
+        "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER",
+        "DTCALC", "DTEDIT"
         };
     if (!aName) return EFalse;
     const char* base = aName;
@@ -995,7 +1030,13 @@ static void RunImage(const char* aName, const char* aTail)
     // path, so every launch-time print must be COM1-only from here on.
     const TBool graphics = IsGraphicsImage(aName);
     if (graphics)
+        {
         QemuFbMirrorSet(1);
+        sChildTookMirror = EFalse;
+        DThread* self = &Kern::CurrentThread();
+        sMirrorShellPid = (self && self->iOwningProcess)
+                        ? (TUint)self->iOwningProcess->iId : 0u;
+        }
     TInt rr = E32Run(eBuf, got, inner, aTail);
     if (rr == KErrNone)
         {
@@ -2103,8 +2144,19 @@ static void ShellMain(TAny* /*aPtr*/)
         if (sGuiMirrorPid && E32ProcessDead(sGuiMirrorPid))
             {
             sGuiMirrorPid = 0;
-            QemuFbMirrorSet(0);
-            VgaInit();
+            if (sChildTookMirror)
+                {
+                // A non-graphics child already resumed the mirror and painted
+                // its text; clearing here would erase it before the user can
+                // see it.  Just append the prompt below the child's output.
+                sChildTookMirror = EFalse;
+                QemuFbMirrorSet(0);
+                }
+            else
+                {
+                QemuFbMirrorSet(0);
+                VgaInit();
+                }
             sPromptNeeded = ETrue;
             }
         // While a user program leases console input, the shell must not

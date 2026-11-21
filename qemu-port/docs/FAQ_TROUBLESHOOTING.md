@@ -353,3 +353,29 @@ and compare screendumps (pixel diff); `mouse test` injects a synthetic AUX
 packet from inside the guest. Clicks are not wired into applications, so only
 cursor motion is expected. See
 [`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md) §12 for details.
+
+### Q: I clicked a program in the desktop and it disappeared / the program is invisible. Why?
+
+**A: That is the intended handoff, not a crash.** Selecting an app and pressing
+**Enter** (or clicking it) makes DESKTOP release the console/input lease and
+exit, handing the whole screen to the launched program — there is no window
+left behind for the desktop to draw. The program then renders itself: a GUI app
+paints the framebuffer through the display-list execs; a text app such as
+`CALC` writes through the console teletype, so its text appears on screen after
+a short delay (the wallpaper does not simply persist under a window).
+
+To confirm on the serial log, look for the marker chain
+`DT: launched CALC`, a release marker such as `DT: handing off` (older builds
+use `DT: DONE`), then the app's own output — e.g. `CALC: CALCULATOR READY` and
+`CALC: 2+3*4 = 14`. If those markers are present the handoff worked; the screen
+really did change from the desktop to the app. `python3
+tools/r1_desktop_handoff_test.py` verifies this end to end, including a
+before/after screendump pixel comparison.
+
+When the program quits you return to the `X:/>` shell; type `desktop` to bring
+the desktop back. If you see `Exc ` / `PanicKernExec` instead of the app's
+markers, that is a genuine fault — capture the full COM1 log. Also make sure
+you boot with `-vga std` (not `-display none` if you want to watch the window),
+and that `DESKTOP.E32` and the selected app's `.E32` are present on `X:`
+(`make userland && make isogrub`). See
+[`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md) §13.

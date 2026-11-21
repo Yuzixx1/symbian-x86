@@ -115,7 +115,7 @@ static void text(unsigned x, unsigned y, const char* s,
 #define C_CLOSE     0x00C03020u
 #define C_ICONSEL   0x00C06020u
 
-/* ---- application table: 8 desktop icons -------------------------------- */
+/* ---- application table: 10 desktop icons ------------------------------- */
 struct App { const char* label; const char* image; unsigned color; char glyph; };
 static const struct App kApps[] = {
     { "CALC",     "CALC.E32",     0x007050C0u, 'C' },
@@ -126,6 +126,8 @@ static const struct App kApps[] = {
     { "BREAKOUT", "BREAKOUT.E32", 0x00A04040u, 'B' },
     { "GUIMENU",  "GUIMENU.E32",  0x00408040u, 'G' },
     { "SYSINFO",  "SYSINFO.E32",  0x00606060u, 'S' },
+    { "DTCALC",   "DTCALC.E32",   0x0030A060u, '=' },
+    { "DTEDIT",   "DTEDIT.E32",   0x00806030u, 'E' },
 };
 #define NAPPS ((int)(sizeof(kApps) / sizeof(kApps[0])))
 
@@ -452,15 +454,39 @@ static void launch(int idx)
     line[n] = 0;
     marker(line);
 
-    add_window(app, ret);
-    if (ret <= 0)
+    if (ret > 0)
         {
-        n = append(line, 0, "DT: fallback ");
-        n = append(line, n, app->label);
-        n = append(line, n, " (use shell)");
-        line[n] = 0;
-        marker(line);
+        /* The child is now the foreground program.  A text-only app writes
+         * its RDebug output through the kernel's LFB mirror, which was muted
+         * while WE were the graphical foreground.  Release input so the child
+         * owns the console, then leave the desktop entirely: staying alive
+         * would keep repainting over the child's text.  The shell detects our
+         * exit, resumes the mirror and repaints the prompt when the child
+         * finishes. */
+        marker("DT: handing off");
+        con_release();
+        marker("DT: DONE");            /* same end marker as ESC exit (tests) */
+        process_exit(0);
         }
+
+    /* exec 268 failed: stay on the desktop and leave a visible error window
+     * (add_window's window is drawn by the next full repaint). */
+    add_window(app, ret);
+    if (FOCUS >= 0)
+        {
+        struct Win* w = &gWins[FOCUS];
+        w->tcol = C_CLOSE;
+        w->title = "LAUNCH FAILED";
+        n = append(w->l1, 0, app->image);
+        n = append(w->l1, n, " r=");
+        n = dec(w->l1, n, (unsigned)ret);
+        w->l1[n] = 0;
+        }
+    n = append(line, 0, "DT: fallback ");
+    n = append(line, n, app->label);
+    n = append(line, n, " (use shell)");
+    line[n] = 0;
+    marker(line);
 }
 
 /* ---- window operations ------------------------------------------------- */

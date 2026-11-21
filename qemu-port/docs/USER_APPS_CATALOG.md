@@ -223,3 +223,22 @@ with `-vga std`, feeds each name plus a few keys and Esc, and asserts the right
 marker with no `Exc`/`PanicKernExec` (plus best-effort screendumps). Missing
 programs are skipped, not failed. See [`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md)
 for the full desktop architecture and usage guide.
+
+## Windowed GUI apps (append-only)
+
+These are the first **windowed** E32 applications: each paints its own decorated
+window, buttons and mouse hit-testing on the VBE LFB through exec 251 display
+lists (exec 268 launches them from the desktop). Both are staged in
+`/PROGRAMS.IMG` and appear as clickable desktop icons (the icon count went from
+8 to 10; `DT: icons=10`). The porting pattern is written up in
+[`GUI_APP_DEVELOPMENT.md`](GUI_APP_DEVELOPMENT.md).
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **DTCALC** | Windowed calculator: a real window with a clickable keypad (`DCALC: buttons=` / `DCALC: click ...`), keyboard entry, expression evaluation and a live result display. Mouse clicks are hit-tested against the button rectangles; Enter/= evaluates, Esc exits. | `DCALC:` | Std+915 | `r1_dtcalc_test.py` |
+| **DTEDIT** | Windowed text editor: a text canvas plus a toolbar (`DTE: click TEXT/CLEAR/SAVE/CLOSE/QUIT`), click-to-focus and typing with newline/^S handling. **Saving (`SAVE`, ^S) needs the PortFile server running** (`file_save` IPC, exactly as in the older `TEXTEDIT`); without it the edit session still works but the save reports `DTE: save failed`. | `DTE:` | Std+915 | `r1_dtedit_test.py` |
+
+Both are graphical foreground programs: when launched via exec 268 from
+`DESKTOP` they take over the display and the desktop hands input over to them
+(`DT: handing off`, `DT: DONE`). Run them directly from the `X:/>` shell with
+`DTCALC` / `DTEDIT`, or click the new `DTCALC` / `DTEDIT` icons on the desktop.
