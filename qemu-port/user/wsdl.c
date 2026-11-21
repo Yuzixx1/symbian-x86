@@ -285,6 +285,23 @@ static void event_marker(unsigned type, int x, int y)
     marker(line);
 }
 
+/* ---- event targeting ----------------------------------------------------- */
+/* Every ring event carries the id of the window it was aimed at (-1/0 =
+ * broadcast).  WSDL owns exactly one window: acting on an event aimed at
+ * WINSRV or another client is what made our composited window vanish when the
+ * harness sent ESC to the server.  The wsclient console fallback also stamps
+ * our own window id on bytes it steals from PortCon, so a targeting filter
+ * alone cannot catch that path -- see the ESC long-press guard in app_main. */
+static int event_for_me(int wid, const struct ws_event* e)
+{
+    return e->target_wid == wid || e->target_wid == -1 || e->target_wid == 0;
+}
+
+/* Consecutive targeted ESC keypresses required to close the calculator.
+ * A single ESC is the shared-console quit used to stop WINSRV; if WSDL happens
+ * to snag it from the serial console it must not destroy its own window. */
+#define ESC_CLOSE_RUN 3
+
 /* ---- deterministic startup self-drive (same handler as real input) ------ */
 struct DemoEvent { unsigned type; int x, y; unsigned key; };
 static const struct DemoEvent sDemo[] = {
@@ -303,7 +320,7 @@ int app_main(void)
     char line[160];
     char expr[32], result[24];
     int wid, rc, i, idx, key, hover = -1, dirty = 1;
-    int quit = 0, just_eval = 0, polls, demo = 0;
+    int quit = 0, just_eval = 0, polls, demo = 0, esc_run = 0;
 
     expr[0] = 0;
     result[0] = 0;
@@ -354,6 +371,11 @@ int app_main(void)
         else
             have = ws_get_event(&e);
 
+        /* Input aimed at another window (typically the ESC that quits WINSRV)
+         * must never reach this client, or we would destroy our own window. */
+        if (have && !event_for_me(wid, &e))
+            have = 0;
+
         if (have)
             {
             event_marker(e.type, e.x, e.y);
@@ -361,25 +383,40 @@ int app_main(void)
             if (e.type == WSE_KEY)
                 {
                 key = (int)(e.key & 0xFFu);
-                if (key == 27) { quit = 1; }
-                else if (key == 13 || key == 10) idx = 18;
-                else if (key == 8 || key == 127) idx = 17;
-                else if (key == 'c' || key == 'C') idx = 16;
+                if (key == 27)
+                    {
+                    /* A lone ESC is the shared-console quit aimed at WINSRV.
+                     * If we snag it from PortCon it is NOT a close request:
+                     * only a deliberate long-press closes the calculator. */
+                    if (++esc_run >= ESC_CLOSE_RUN)
+                        {
+                        marker("WDL: close (ESC long-press)");
+                        quit = 1;
+                        }
+                    }
                 else
                     {
-                    idx = -1;
-                    for (i = 0; i < NB; ++i)
-                        if (kLabel[i][0] == key && kLabel[i][1] == 0)
-                            { idx = i; break; }
-                    }
-                if (!quit && idx >= 0)
-                    {
-                    press_key(idx, expr, result, &just_eval, &quit);
-                    dirty = 1;
+                    esc_run = 0;
+                    if (key == 13 || key == 10) idx = 18;
+                    else if (key == 8 || key == 127) idx = 17;
+                    else if (key == 'c' || key == 'C') idx = 16;
+                    else
+                        {
+                        idx = -1;
+                        for (i = 0; i < NB; ++i)
+                            if (kLabel[i][0] == key && kLabel[i][1] == 0)
+                                { idx = i; break; }
+                        }
+                    if (!quit && idx >= 0)
+                        {
+                        press_key(idx, expr, result, &just_eval, &quit);
+                        dirty = 1;
+                        }
                     }
                 }
             else if (e.type == WSE_DOWN || e.type == WSE_UP)
                 {
+                esc_run = 0;
                 idx = hit_test(wid, e.x, e.y);
                 if (e.type == WSE_DOWN && idx >= 0)
                     {
@@ -389,7 +426,9 @@ int app_main(void)
                 }
             else if (e.type == WSE_MOVE)
                 {
-                int nh = hit_test(wid, e.x, e.y);
+                int nh;
+                esc_run = 0;
+                nh = hit_test(wid, e.x, e.y);
                 if (nh != hover) { hover = nh; dirty = 1; }
                 }
             }

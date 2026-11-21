@@ -197,6 +197,30 @@ static int gFocus = -1;                  /* window id (slot index), -1 = none */
 static unsigned gEvents, gComposites, gFrames;
 static int gQuit;
 
+/* A full 320x200 RLE blit needs far more than the GUI_MAX_CMDS commands one
+ * exec-251 display list can hold, and GUI_MAX_CMDS is also the kernel's per-
+ * exec budget (guishost.h), so it cannot be raised from here.  Instead the
+ * desktop is repainted in bounded vertical bands across successive frames.
+ * VRAM persists between execs, so each band adds to the previous picture
+ * instead of clearing it; the window is only flagged complete (dirty cleared)
+ * after every content row has been blitted. */
+#define WSV_BAND_BUDGET 512u          /* commands added per band frame */
+static int  gPaintActive;             /* 1 while a band sequence is in flight */
+static int  gPaintedOnce;             /* 0 until the first frame is complete   */
+static int  gCursorDirty;             /* pointer moved since last completion   */
+static unsigned gBandRow;             /* next content row to blit              */
+static unsigned gBandRows;            /* rows to blit in this cycle           */
+static unsigned gCycleDirty[WS_MAX_WINDOWS]; /* dirty generation at cycle start */
+
+static void composite_marker(void)
+{
+    char s[48];
+    unsigned n = append(s, 0, "WSV: composite ");
+    n = dec(s, n, gComposites);
+    s[n] = 0;
+    marker(s);
+}
+
 /* A generous safety ceiling: 4000 frames * 25 ms = 100 s.  Normal operation
  * runs until Esc / q / a KEY event with code 27, so the compositor stays alive
  * long enough for the host to take its screendumps. */
@@ -229,73 +253,113 @@ static void set_content(unsigned i, unsigned x, unsigned y, unsigned col)
 }
 
 /* ---- compositing ------------------------------------------------------- */
-static void draw_window(unsigned i)
+/* Clamped on-screen geometry of a client window.  The content buffer is the
+ * whole window (the client paints its own border/title into it), so every
+ * content row maps to exactly one window row, starting at the window top. */
+static int window_geom(unsigned i, unsigned* px, unsigned* py,
+                       unsigned* pw, unsigned* ph)
 {
     struct ws_window* s = WS_WIN(gWs, i);
     int ix = s->x, iy = s->y, iw = s->w, ih = s->h;
     unsigned x, y, w, h, W, H;
-    unsigned focused;
-    unsigned char* content;
-    unsigned cols, rows, cy, cx;
-    char title[WS_TITLE_LEN];
 
-    if (!s->visible || !s->pid || iw <= 0 || ih <= 24) return;
-
+    if (!s->visible || !s->pid || iw <= 0 || ih <= 24) return 0;
     x = (unsigned)(ix < 0 ? 0 : ix);
     y = (unsigned)(iy < 0 ? 0 : iy);
     w = (unsigned)iw;
     h = (unsigned)ih;
     W = (unsigned)gSh->fb_w;
     H = (unsigned)gSh->fb_h;
-    if (!w || x >= W || y >= H) return;
+    if (!w || x >= W || y >= H) return 0;
     if (w > W - x) w = W - x;
     if (h > H - y) h = H - y;
-    if (h <= 20u) return;
-    focused = ((int)i == gFocus);
-
-    /* shadow, frame and client background */
-    rect(x + 4u, y + 6u, w, h, C_SHADOW);
-    rect(x > 2u ? x - 2u : 0u, y > 2u ? y - 2u : 0u,
-         w + 4u, h + 4u, focused ? C_TITLE_FOC : C_BORDER);
-    rect(x, y + 20u, w, h - 20u, C_CLIENTBG);
-
-    /* Real content blit: horizontal RLE runs of same-colour pixels.  One
-     * GC_RECT per run (1 pixel high).  A 320x200 window needs ~4k-8k runs,
-     * i.e. about 7-12 exec-251 flushes per frame, which is plenty fast with
-     * -display none and puts every client pixel on screen -- unlike the old
-     * 16x16 one-pixel sampler, which only produced a coarse mosaic. */
-    content = WS_CONTENT(gWs, i);
-    if (content)
-        {
-        cols = WS_CONTENT_W;
-        rows = WS_CONTENT_H;
-        if (cols > w) cols = w;
-        if (rows > h - 20u) rows = h - 20u;
-        for (cy = 0; cy < rows; ++cy)
-            {
-            cx = 0;
-            while (cx < cols)
-                {
-                unsigned colour = content_pixel(content, cx, cy);
-                unsigned start = cx;
-                ++cx;
-                while (cx < cols && content_pixel(content, cx, cy) == colour)
-                    ++cx;
-                rect(x + start, y + 20u + cy, cx - start, 1u, colour);
-                }
-            }
-        }
-
-    /* chrome on top of the client content */
-    rect(x, y, w, 20u, focused ? C_TITLE_FOC : C_TITLE);
-    slot_title(i, title, sizeof(title));
-    text(x + 8u, y + 2u, title, C_WHITE,
-         focused ? C_TITLE_FOC : C_TITLE);
-    if (focused) rect(x, y + 18u, w, 2u, C_LIVE);
-    s->dirty = 0;
+    if (!h) return 0;
+    *px = x; *py = y; *pw = w; *ph = h;
+    return 1;
 }
 
-static void composite(void)
+/* Static frame drawn once per paint cycle (before any content bands). */
+static void draw_window_frame(unsigned i)
+{
+    unsigned x, y, w, h;
+    if (!window_geom(i, &x, &y, &w, &h)) return;
+    rect(x + 4u, y + 6u, w, h, C_SHADOW);
+    rect(x > 2u ? x - 2u : 0u, y > 2u ? y - 2u : 0u,
+         w + 4u, h + 4u, ((int)i == gFocus) ? C_TITLE_FOC : C_BORDER);
+    rect(x, y, w, h, C_CLIENTBG);
+}
+
+/* Title bar is painted last, on top of the blitted content. */
+static void draw_window_title(unsigned i)
+{
+    unsigned x, y, w, h;
+    char title[WS_TITLE_LEN];
+    if (!window_geom(i, &x, &y, &w, &h)) return;
+    rect(x, y, w, 20u, ((int)i == gFocus) ? C_TITLE_FOC : C_TITLE);
+    slot_title(i, title, sizeof(title));
+    text(x + 8u, y + 2u, title, C_WHITE,
+         ((int)i == gFocus) ? C_TITLE_FOC : C_TITLE);
+    if ((int)i == gFocus) rect(x, y + 18u, w, 2u, C_LIVE);
+}
+
+/* One content row as horizontal RLE GC_RECT runs (1 pixel high).  Returns
+ * the number of commands emitted so the caller can bound a frame's work. */
+static unsigned blit_row(unsigned i, unsigned cy,
+                         unsigned x, unsigned y, unsigned cols)
+{
+    unsigned char* content = WS_CONTENT(gWs, i);
+    unsigned cx = 0, n = 0;
+    if (!content || cy >= WS_CONTENT_H) return 0;
+    while (cx < cols)
+        {
+        unsigned colour = content_pixel(content, cx, cy);
+        unsigned start = cx;
+        ++cx;
+        while (cx < cols && content_pixel(content, cx, cy) == colour) ++cx;
+        rect(x + start, y + cy, cx - start, 1u, colour);
+        ++n;
+        }
+    return n;
+}
+
+/* Add up to WSV_BAND_BUDGET commands worth of content rows.  cmd() itself
+ * auto-flushes at GUI_MAX_CMDS, so a single exec can never exceed the kernel
+ * budget; VRAM persistence means no GC_CLEAR is issued between bands. */
+static void blit_bands(void)
+{
+    unsigned budget = WSV_BAND_BUDGET;
+    unsigned i, z;
+
+    while (gBandRow < gBandRows && budget)
+        {
+        unsigned spent = 0;
+        for (z = 0; z < 8; ++z)
+            for (i = 0; i < WS_MAX_WINDOWS; ++i)
+                {
+                unsigned x, y, w, h, cols, rows;
+                if (!WS_WIN(gWs, i)->visible || WS_WIN(gWs, i)->z != (int)z)
+                    continue;
+                if (!window_geom(i, &x, &y, &w, &h)) continue;
+                cols = WS_CONTENT_W; if (cols > w) cols = w;
+                rows = WS_CONTENT_H; if (rows > h) rows = h;
+                if (gBandRow < rows)
+                    spent += blit_row(i, gBandRow, x, y, cols);
+                }
+        budget -= (spent < budget) ? spent : budget;
+        ++gBandRow;
+        }
+}
+
+static int need_paint(void)
+{
+    unsigned i;
+    if (!gPaintedOnce) return 1;
+    for (i = 0; i < WS_MAX_WINDOWS; ++i)
+        if (WS_WIN(gWs, i)->visible && WS_WIN(gWs, i)->dirty) return 1;
+    return gCursorDirty;
+}
+
+static void start_paint(void)
 {
     unsigned W = (unsigned)gSh->fb_w, H = (unsigned)gSh->fb_h;
     unsigned bar_y = (H > 40u) ? H - 32u : 0u;
@@ -326,22 +390,59 @@ static void composite(void)
     for (z = 0; z < 8; ++z)
         for (i = 0; i < WS_MAX_WINDOWS; ++i)
             if (WS_WIN(gWs, i)->visible && WS_WIN(gWs, i)->z == (int)z)
-                draw_window(i);
+                draw_window_frame(i);
 
+    gBandRow = 0;
+    gBandRows = WS_CONTENT_H;
+    for (i = 0; i < WS_MAX_WINDOWS; ++i)
+        gCycleDirty[i] = WS_WIN(gWs, i)->dirty;
+    gPaintActive = 1;
+    marker("WSV: drawing");
+}
+
+static void finish_paint(void)
+{
+    unsigned i, z;
+
+    for (z = 0; z < 8; ++z)
+        for (i = 0; i < WS_MAX_WINDOWS; ++i)
+            if (WS_WIN(gWs, i)->visible && WS_WIN(gWs, i)->z == (int)z)
+                draw_window_title(i);
     if (gSh->mouse_x >= 0 && gSh->mouse_y >= 0)
         { gCursorX = (unsigned)gSh->mouse_x; gCursorY = (unsigned)gSh->mouse_y; }
     rect(gCursorX, gCursorY, 12u, 12u, C_CURSOR);
+
+    gPaintActive = 0;
+    gPaintedOnce = 1;
+    gCursorDirty = 0;
+    /* Only now that the whole window has been blitted is the frame done.  A
+     * dirty bump that arrived mid-cycle is left set for the next cycle. */
+    for (i = 0; i < WS_MAX_WINDOWS; ++i)
+        if (WS_WIN(gWs, i)->visible &&
+            WS_WIN(gWs, i)->dirty == gCycleDirty[i])
+            WS_WIN(gWs, i)->dirty = 0;
+    marker("WSV: painted");
+}
+
+static void composite(void)
+{
+    if (!gPaintActive && !need_paint())
+        {
+        /* The framebuffer already holds a complete frame; do not redraw it. */
+        exec2(WS_EXEC_CTL, WSO_FRAME_TICK, 0);
+        ++gComposites;
+        if (gComposites == 1u || (gComposites % 25u) == 0u) composite_marker();
+        return;
+        }
+
+    if (!gPaintActive) start_paint();
+    blit_bands();
+    if (gBandRow >= gBandRows) finish_paint();
+
     flush();
     exec2(WS_EXEC_CTL, WSO_FRAME_TICK, 0);
     ++gComposites;
-    if (gComposites == 1u || (gComposites % 25u) == 0u)
-        {
-        char s[48];
-        unsigned n = append(s, 0, "WSV: composite ");
-        n = dec(s, n, gComposites);
-        s[n] = 0;
-        marker(s);
-        }
+    if (gComposites == 1u || (gComposites % 25u) == 0u) composite_marker();
 }
 
 /* ---- input events ------------------------------------------------------ */
@@ -356,6 +457,7 @@ static void deliver(unsigned type, int px, int py, unsigned key)
         {
         gCursorX = (unsigned)(px < 0 ? 0 : px);
         gCursorY = (unsigned)(py < 0 ? 0 : py);
+        gCursorDirty = 1;   /* old cursor rect must be repainted */
         }
     else if (type == WSEV_DOWN_T)
         {

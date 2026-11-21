@@ -33,7 +33,7 @@ ROOT = "/tmp/opencode"
 ISO = ROOT + "/r1_windowsys.iso"
 SOCK = ROOT + "/r1_windowsys-qmp.sock"
 INITIAL_PNG = ROOT + "/window_system_initial.png"   # pre-launch baseline
-PNG = ROOT + "/window_system_final.png"              # composited desktop
+PNG = ROOT + "/window_system_final2.png"             # composited desktop
 PROMPTS = (b"EKA2> ", b"X:/> ", b"C:/> ")
 BOOT_MARKERS = ("DISPLAY: VBE mode 0x", "GUI: execs 249/250/251 installed")
 EXC_KEYS = ("Exc ", "PanicKernExec", "FAULT:", "MMU #PF")
@@ -114,7 +114,7 @@ def build_iso(server, clients):
 
 
 def wait_for(log, needle, start=0, timeout=70):
-    """Poll the log for a byte string; return offset past it or None."""
+    """Poll the log for a byte string; return offset past it or -1."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         with open(log, "rb") as f:
@@ -124,7 +124,7 @@ def wait_for(log, needle, start=0, timeout=70):
         if pos >= 0:
             return start + pos + len(needle)
         time.sleep(0.2)
-    return None
+    return -1
 
 
 def wait_any(log, needles, start=0, timeout=60):
@@ -149,6 +149,20 @@ def wait_prompt(log, timeout=75):
             return True
         time.sleep(0.2)
     return False
+
+
+def wait_prompt_at(log, start=0, timeout=90):
+    """Wait for a shell prompt at/after start; return offset past it."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with open(log, "rb") as f:
+            f.seek(start)
+            data = f.read()
+        for p in PROMPTS:
+            if p in data:
+                return start + data.index(p) + len(p)
+        time.sleep(0.2)
+    return start
 
 
 def qmp_screendump(path):
@@ -274,10 +288,13 @@ def visual_proof(before_path, after_path):
 def run_guest(log, server, clients):
     """Boot once, start server + clients, capture baseline and final screens.
 
-    Returns (initial_ok, final_ok).  WINSRV grabs PortCon for its ~10 s serve
-    loop, so `wsdl` typed while it runs is eaten as input events.  We try the
-    documented winsrv->wsdl order first, then fall back to wsdl->winsrv (the
-    only order in which both processes are alive simultaneously).
+    Returns (initial_ok, final_ok).  WINSRV holds the PortCon console lease for
+    its ~10 s serve loop, so `wsdl` typed while it runs is consumed as input
+    events instead of by the shell.  We port the proven r1_wsdl_test.py
+    sequence: try the documented winsrv->wsdl order first, check for a WDL
+    start marker, and if the client never launched, ESC the server to release
+    the lease and re-launch wsdl FIRST, winsrv SECOND -- the only order in
+    which both processes stay alive concurrently for the composited capture.
     """
     if os.path.exists(SOCK):
         os.remove(SOCK)
@@ -289,45 +306,67 @@ def run_guest(log, server, clients):
     ]
     print("== booting GRUB ISO, driving winsrv then wsdl ...")
     initial_ok = final_ok = False
+    READY = b"WSV: WINDOW SERVER READY"
+    WDL_READY = b"WDL: CLIENT READY"
+    WDL_WINDOW = b"WDL: window "
     with open(log, "wb") as out:
         vm = subprocess.Popen(qemu, stdin=subprocess.PIPE,
                               stdout=out, stderr=subprocess.STDOUT)
         try:
+            pos = 0
             if not wait_prompt(log):
                 print("[WARN] shell prompt not seen; continuing")
+            time.sleep(0.5)
             # Baseline BEFORE anything from the window system is launched.
             initial_ok = qmp_screendump(INITIAL_PNG)
-            # The first server self-quits after its serve loop, freeing the
-            # shell.  Let the client create its window (E32 validation makes
-            # this take >6 s), then start a SECOND server so a LIVE compositor
-            # is present at capture time.  No ESC is sent before the dump: an
-            # ESC from a speculative "relaunch" was reaching this second
-            # server and killing it at frame ~93 before the screenshot.
+
+            def send(cmd):
+                nonlocal pos
+                vm.stdin.write(cmd)
+                vm.stdin.flush()
+                time.sleep(0.4)
+
+            # Documented order first: start the server, then the client.
             if server:
-                before = os.path.getsize(log)
-                vm.stdin.write(server["cmd"])
-                vm.stdin.flush()
-                if not wait_any(log, SERVER_START, before, timeout=25):
-                    print("[WARN] no WSV: marker yet; continuing")
+                send(server["cmd"])
+                found = wait_for(log, READY, pos, 40)
+                if found < 0:
+                    print("[WARN] no WSV READY after first winsrv")
+                else:
+                    pos = found
             for spec in clients:
-                before = os.path.getsize(log)
-                vm.stdin.write(spec["cmd"])
-                vm.stdin.flush()
-                if not wait_any(log, ("WDL: window ", "WDL: CLIENT READY"),
-                                before, timeout=30):
-                    print("[WARN] client did not create a window")
+                send(spec["cmd"])            # consumed by WINSRV's console lease
+            time.sleep(1.5)
+            launched = any(wait_for(log, WDL_READY, pos, 4) >= 0
+                           for spec in clients)
+
+            if not launched:
+                print("[INFO] client consumed by the server's console lease; "
+                      "re-launching the pair so both are alive concurrently")
                 if server:
-                    before = os.path.getsize(log)
-                    vm.stdin.write(server["cmd"])    # live compositor joins
+                    vm.stdin.write(b"\x1b")  # ESC -> WINSRV quits, frees lease
                     vm.stdin.flush()
-                    if not wait_any(log, SERVER_START, before, timeout=25):
-                        print("[WARN] server did not restart")
-                time.sleep(0.8)
+                    wait_for(log, b"WSV: DONE", pos, 20)
+                    pos = wait_prompt_at(log, pos)
+                for spec in clients:
+                    send(spec["cmd"])        # client first
+                    found = wait_for(log, WDL_WINDOW, pos, 30)
+                    if found < 0:
+                        print(f"[WARN] {spec['name']} did not create a window")
+                    else:
+                        pos = found
+                if server:
+                    send(server["cmd"])      # then a live compositor joins
+                    wait_for(log, READY, pos, 40)
+
+            # Let the composite loop paint a few frames, then drive the client.
+            time.sleep(3.0)
+            for spec in clients:
                 for key in spec["keys"]:
                     vm.stdin.write(key)
                     vm.stdin.flush()
-                    time.sleep(0.25)
-                time.sleep(0.5)
+                    time.sleep(0.3)
+            time.sleep(2.0)
             # Final frame: the composited desktop, not a console overlay.
             final_ok = qmp_screendump(PNG)
             for spec in reversed(clients):           # let clients exit first
