@@ -333,3 +333,23 @@ the Bochs VBE path is unavailable and you fall back to 320x200x8. Quit with Esc
 where supported. See [`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md) for details,
 and note the honest limitation: this is a cooperative single-app-at-a-time
 desktop, not a preemptive multi-window compositor.
+
+### Q: Mouse doesn't move in the desktop. Is the guest driver broken?
+
+**A: Usually it is a host/display setup issue, not the guest.** The guest uses
+the **PS/2 mouse on i8042 IRQ12**, not a USB tablet. The default `-M q35` already
+exposes a PS/2 mouse — do **not** add `-usbdevice tablet` or `-device usb-mouse`,
+because the guest PS/2 driver will not receive their absolute HID events. You
+also need a display that delivers pointer events: `-display gtk` with a focused
+window, or VNC. `-display none` delivers no pointer events at all.
+
+Note that **XTEST / host-window pointer detection can fail in headless
+environments even when the guest code works** — a synthetic host pointer test
+that reports "no movement" says nothing about the guest PS/2 path. Verify the
+guest directly: type `mouse info` at the shell before launching the desktop to
+check packet/ISR counts, and look for `DT: mouse x=... y=...` markers on motion.
+For an end-to-end check, inject relative PS/2 motion with QEMU HMP `mouse_move`
+and compare screendumps (pixel diff); `mouse test` injects a synthetic AUX
+packet from inside the guest. Clicks are not wired into applications, so only
+cursor motion is expected. See
+[`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md) §12 for details.

@@ -97,6 +97,10 @@ TInt display_set_mode(TInt aVbeMode); // reprogram Bochs DISPI to another mode;
 // state must refresh from the updated display_* globals (defined in
 // kern_shell.cpp / qemu_gui_exec.cpp / qemu_mouse.cpp).
 void FbMirrorReset();                // reset the VBE text-mirror cursor/grid
+// Mute/unmute the console -> LFB text mirror. While muted, KPrintf/DebugPrint
+// output still goes to COM1 and 0xB8000 but never touches the framebuffer, so
+// a full-screen GUI app's pixels cannot be scrolled away by console text.
+void QemuFbMirrorSet(int aOn);       // aOn != 0 = suspend LFB mirror
 void GuiGeometryReset();             // refresh guishost shared fb geometry
 void MouseGeometryReset();           // clamp/refresh the PS/2 cursor
 

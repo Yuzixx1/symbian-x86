@@ -105,6 +105,12 @@ namespace
     // as "\r\n\r\n".  Collapse the duplicate in the LFB mirror only: COM1 and
     // the 0xB8000 buffer stay byte-for-byte unchanged.
     TBool gFxLineFresh = ETrue;
+    // While a full-screen graphical E32 program owns the display, every
+    // KPrintf/DebugPrint character (shell banners, "started" notices and the
+    // GUI app's own RDebug markers) must go to COM1 only. Writing any of it
+    // into the LFB mirror would paint text over the GUI and, once the 42-row
+    // grid fills, FbScroll() would shift the entire framebuffer up 18px.
+    volatile TBool gFbMirrorSuspended = EFalse;
 
     void FbEnsure()
         {
@@ -143,6 +149,8 @@ namespace
 
     void FbPutC(char aC)
         {
+        if (gFbMirrorSuspended)
+            return;   // COM1 keeps the text; the GUI framebuffer is untouched
         FbEnsure();
         if (!gFxReady)
             return;
@@ -204,6 +212,12 @@ void FbMirrorReset()
     gFxCol = 0; gFxRow = 0; gFxReady = EFalse; gFxLineFresh = ETrue;
     }
 
+// Public switch used by the shell launcher (see RunImage/ShellMain below).
+void QemuFbMirrorSet(int aOn)
+    {
+    gFbMirrorSuspended = aOn ? ETrue : EFalse;
+    }
+
 static void VgaInit()
     {
     for (TUint i = 0; i < kCols * kRows; ++i)
@@ -231,6 +245,8 @@ static volatile TUint sHead = 0, sTail = 0;
 // E32 process and returns to the prompt. No signal machinery in the guest.
 static volatile TBool sAbortPending = EFalse;
 static TUint sForegroundPid = 0;
+// Non-zero while a graphical E32 process is running with the LFB mirror muted.
+static TUint sGuiMirrorPid = 0;
 
 extern "C" void QemuKbdPush(char aC)
     {
@@ -865,6 +881,33 @@ static void CheckAbort()
         }
     }
 
+// Programs that repaint the whole VBE framebuffer. While one of these runs,
+// the console->LFB mirror is muted so shell banners, "started" notices and the
+// program's own RDebug markers stay on COM1 instead of scrolling the GUI off
+// screen. The base name is compared case-insensitively, ignoring any directory
+// prefix and the .EXE/.E32 extension.
+static TBool IsGraphicsImage(const char* aName)
+    {
+    static const char* const kGraphics[] = {
+        "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER"
+        };
+    if (!aName) return EFalse;
+    const char* base = aName;
+    for (const char* p = aName; *p; ++p)
+        if (*p == '\\' || *p == '/') base = p + 1;
+    for (TUint i = 0; i < sizeof(kGraphics) / sizeof(kGraphics[0]); ++i)
+        {
+        const char* n = kGraphics[i];
+        TUint k = 0;
+        while (n[k] && Up(base[k]) == n[k]) ++k;
+        if (n[k]) continue;
+        if (base[k] && base[k] != '.' && base[k] != '\\' && base[k] != '/')
+            continue;
+        return ETrue;
+        }
+    return EFalse;
+    }
+
 // Run an E32 image as a user process. Symbian-style: the name is tried as
 // given; a bare name (no dot) is also tried with ".EXE" and then ".E32"
 // appended (real Symbian EXE name wins when both exist). A name that already
@@ -947,15 +990,27 @@ static void RunImage(const char* aName, const char* aTail)
     TInt reaped = E32Reap();
     if (reaped)
         KPrintf("reaped %d dead user image(s)\r\n", reaped);
+    // Mute the LFB mirror BEFORE E32Run's chatter for graphical images: the
+    // child starts on Resume() and its RDebug markers share the same console
+    // path, so every launch-time print must be COM1-only from here on.
+    const TBool graphics = IsGraphicsImage(aName);
+    if (graphics)
+        QemuFbMirrorSet(1);
     TInt rr = E32Run(eBuf, got, inner, aTail);
     if (rr == KErrNone)
         {
         sForegroundPid = E32LastPid();
+        if (graphics)
+            sGuiMirrorPid = sForegroundPid;   // resume when this process dies
         sJustLaunched = ETrue;   // post-Exec prompt must be deferred if leased
         KPrintf("%s started (user process, pid=%u)\r\n", aName, sForegroundPid);
         }
     else
+        {
+        if (graphics)
+            { QemuFbMirrorSet(0); VgaInit(); }
         KPrintf("%s (%s)\r\n", aName, ErrName(rr));
+        }
     VolRestore(prev);
     }
 
@@ -2041,6 +2096,17 @@ static void ShellMain(TAny* /*aPtr*/)
         // deciding whether to sleep. A ^C kills the foreground child and
         // returns us to the prompt regardless of who holds the lease.
         CheckAbort();
+        // A graphical child has exited: unmute the LFB mirror, wipe the GUI
+        // pixels and repaint the shell prompt. E32ProcessDead() also covers a
+        // GUI app that never leased the console, so the mirror is never left
+        // muted after it leaves the screen.
+        if (sGuiMirrorPid && E32ProcessDead(sGuiMirrorPid))
+            {
+            sGuiMirrorPid = 0;
+            QemuFbMirrorSet(0);
+            VgaInit();
+            sPromptNeeded = ETrue;
+            }
         // While a user program leases console input, the shell must not
         // touch the stream (it would steal program keystrokes). A dead
         // owner is reclaimed here so a crash without release cannot wedge

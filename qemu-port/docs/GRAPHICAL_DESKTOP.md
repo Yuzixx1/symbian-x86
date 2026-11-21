@@ -245,3 +245,26 @@ for a syntax check, then `python3 tools/r1_graphical_desktop_test.py`.
 - Only clear/rectangle/glyph primitives; no alpha, sprites, image decode or
   true double buffering; `guilib`'s back list is a software staging buffer.
 - Audio is AC'97 PCM-OUT tone generation only (exec 240); see `GUI_AUDIO.md`.
+
+## 12. Mouse input — requirements and verification
+
+The guest uses the **PS/2 mouse on i8042 IRQ12** (`variant/qemu_mouse.cpp`),
+**not** a USB tablet. QEMU must expose a PS/2 mouse: the default `-M q35` does.
+Do **not** pass `-usbdevice tablet` or `-device usb-mouse` — the guest PS/2
+driver will not receive absolute HID events from those devices.
+
+You also need a display that actually delivers pointer events — e.g. `-display
+gtk` with a real window, or VNC. `-display none` delivers no pointer events at
+all (fine for serial-only smoke tests, useless for mouse testing).
+
+**Verified behaviour:** relative PS/2 motion moves the drawn cursor (confirm
+with the `DT: mouse x=... y=...` markers and screendump pixel diffs), and
+`mouse info` reports packet/ISR counts. Kernel diagnostics exist: `mouse`
+(x/y/buttons/packets/id/pktsize), `mouse test` (synthetic 3-byte AUX packet via
+command 0xD3) and `mouse press`.
+
+**If the pointer seems frozen:** check the QEMU flags (no USB tablet/mouse, a
+real display), make sure the GTK window has focus, and type `mouse info` at the
+shell *before* launching the desktop to confirm packets arrive; `DT: mouse
+x=... y=...` markers appear on motion. Remember clicks are not wired into
+applications (section 6/11) — cursor motion working is the expected result.
