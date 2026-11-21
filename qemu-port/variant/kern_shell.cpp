@@ -291,6 +291,23 @@ extern "C" TUint qemu_cpu_features;  // bootcpu_gas.o BSS (CPUID report)
 static char sLine[128];
 static TUint sLen = 0;
 
+// ---- line-editor state (command history, escape sequences, prompt handoff) ----
+static const TUint kHistMax = 16;
+static char sHist[kHistMax][sizeof(sLine)];  // ring of recent commands
+static TUint sHistHead = 0;                   // next free ring slot
+static TUint sHistCount = 0;                  // valid entries
+static TBool sHistBrowsing = EFalse;          // Up/Down recall in progress
+static TUint sHistPos = 0;                    // 0=oldest .. sHistCount=new line
+static char sHistSaved[sizeof(sLine)];        // in-progress line before recall
+static TUint sHistSavedLen = 0;
+static TUint sEscState = 0;                   // 0=normal 1=ESC 2=ESC '['
+
+// Prompt handoff: a child that leases PortCon owns the console, so the shell
+// must not spray its own prompt over the child's (e.g. FILEMGR's "FM> ").
+static TBool sJustLaunched = EFalse;         // E32Run succeeded on this command
+static TBool sPromptNeeded = EFalse;         // emit a prompt when console is free
+static TBool sWasLeased = EFalse;            // edge-detect con_release()
+
 // Multi-line `write` state (4KB static buffer, BSS).
 static TUint8 wBuf[4096];
 static TUint wLen = 0;
@@ -388,7 +405,7 @@ static void PrintHelp(const char* aName)
         KPrintf("Files:    DIR  CD  TYPE  WRITE  COPY  REN  DEL  MKDIR  RMDIR  CLS\r\n");
         KPrintf("Drives:   MOUNT  VOL  DRIVE  X:  FORMAT\r\n");
         KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  ABORT  REAP  EXITS  WAIT  REBOOT\r\n");
-        KPrintf("Programs: type a file name to run it, e.g. HELLO.E32 or HELLO args\r\n");
+        KPrintf("Programs: type a file name to run it, e.g. CALC.EXE, CALC.E32 or CALC args\r\n");
         KPrintf("Hardware: PCI  DISPLAY  MOUSE  IDE  AHCI  VBLK  RNG  AUDIO  USB  EHCI  XHCI  XHCIPORTS  NIC  VNET\r\n");
         KPrintf("Paths: X:name selects a mounted drive; quote names containing spaces.\r\n");
         return;
@@ -403,6 +420,148 @@ static void PrintHelp(const char* aName)
         if (Same(aName, kHelp[i].name))
             { KPrintf("%s\r\n  %s\r\n", kHelp[i].usage, kHelp[i].detail); return; }
     KPrintf("help: unknown command %s\r\n", aName);
+    }
+
+// ----------------------------------------------------------- line editor helpers
+static TUint StrLen2(const char* aS)
+    {
+    TUint n = 0;
+    while (aS[n]) ++n;
+    return n;
+    }
+
+// sHistPos is a logical index: 0 = oldest entry, sHistCount-1 = newest,
+// sHistCount = the (possibly empty) line being typed right now.
+static const char* HistEntry(TUint aPos)
+    {
+    TUint slot = (sHistHead + kHistMax - sHistCount + aPos) % kHistMax;
+    return sHist[slot];
+    }
+
+static void HistAdd(const char* aLine, TUint aLen)
+    {
+    if (!aLen)
+        return;
+    if (sHistCount)
+        {
+        const char* last = HistEntry(sHistCount - 1);
+        if (StrLen2(last) == aLen)
+            {
+            TUint i = 0;
+            while (i < aLen && Up(last[i]) == Up(aLine[i])) ++i;
+            if (i == aLen) return;  // don't record consecutive duplicates
+            }
+        }
+    TUint k = 0;
+    for (; k < aLen && k < sizeof(sLine) - 1; ++k)
+        sHist[sHistHead][k] = aLine[k];
+    sHist[sHistHead][k] = 0;
+    sHistHead = (sHistHead + 1) % kHistMax;
+    if (sHistCount < kHistMax) ++sHistCount;
+    }
+
+// Erase the currently displayed line and redraw it with aText. The cursor
+// always returns to the same column, so the edit stays on one row.
+static void RedrawLine(const char* aText, TUint aLen)
+    {
+    while (sLen > 0) { --sLen; EmitBackspace(); }
+    if (aLen > sizeof(sLine) - 1) aLen = sizeof(sLine) - 1;
+    for (TUint i = 0; i < aLen; ++i) sLine[i] = aText[i];
+    sLine[aLen] = 0;
+    sLen = aLen;
+    EmitRawS(sLine);
+    }
+
+static void HistPrev()
+    {
+    if (!sHistCount) return;
+    if (!sHistBrowsing)
+        {
+        for (TUint i = 0; i < sLen; ++i) sHistSaved[i] = sLine[i];
+        sHistSaved[sLen] = 0;
+        sHistSavedLen = sLen;
+        sHistBrowsing = ETrue;
+        sHistPos = sHistCount;
+        }
+    if (sHistPos > 0) --sHistPos;
+    const char* e = HistEntry(sHistPos);
+    RedrawLine(e, StrLen2(e));
+    }
+
+static void HistNext()
+    {
+    if (!sHistBrowsing) return;
+    if (sHistPos < sHistCount)
+        {
+        ++sHistPos;
+        if (sHistPos == sHistCount)
+            RedrawLine(sHistSaved, sHistSavedLen);
+        else
+            {
+            const char* e = HistEntry(sHistPos);
+            RedrawLine(e, StrLen2(e));
+            }
+        }
+    }
+
+// Tab completes the first word against built-in command names. Directory
+// entries are not enumerated by an exported API, so command completion is the
+// supported form (ambiguous prefixes list all matches).
+static void EmitUpperS(const char* aS)
+    {
+    while (*aS) EmitRaw(Up(*aS++));
+    }
+
+static void CompleteLine()
+    {
+    if (!sLen) return;
+    for (TUint i = 0; i < sLen; ++i)
+        if (sLine[i] == ' ' || sLine[i] == '\t') return;  // only word 1
+    char prefix[sizeof(sLine)];
+    for (TUint i = 0; i < sLen; ++i) prefix[i] = Up(sLine[i]);
+    prefix[sLen] = 0;
+    const char* matches[128];
+    TUint n = 0;
+    for (TUint i = 0; i < sizeof(kHelp) / sizeof(kHelp[0]) && n < 128; ++i)
+        {
+        const char* name = kHelp[i].name;
+        TUint k = 0;
+        while (prefix[k] && name[k] && Up(name[k]) == prefix[k]) ++k;
+        if (!prefix[k]) matches[n++] = name;
+        }
+    static const char* const kExtra[] = { "cls", "erase", "rd", "rename", 0 };
+    for (TUint j = 0; kExtra[j] && n < 128; ++j)
+        {
+        const char* name = kExtra[j];
+        TUint k = 0;
+        while (prefix[k] && name[k] && Up(name[k]) == prefix[k]) ++k;
+        if (!prefix[k]) matches[n++] = name;
+        }
+    if (!n) return;
+    TUint common = 0;
+    for (;;)
+        {
+        char ch = Up(matches[0][common]);
+        if (!ch) break;
+        TBool all = ETrue;
+        for (TUint i = 1; i < n; ++i)
+            if (Up(matches[i][common]) != ch) { all = EFalse; break; }
+        if (!all) break;
+        ++common;
+        }
+    if (common > sLen)
+        {
+        char done[sizeof(sLine)];
+        for (TUint k = 0; k < common; ++k) done[k] = Up(matches[0][k]);
+        RedrawLine(done, common);
+        }
+    if (n > 1)
+        {
+        EmitRawS("\r\n");
+        for (TUint i = 0; i < n; ++i) { EmitUpperS(matches[i]); EmitRawS("\r\n"); }
+        FatPrompt();
+        EmitRawS(sLine);
+        }
     }
 
 // Optional "X:" drive prefix on a path arg: switches to that volume and
@@ -663,17 +822,22 @@ static void CheckAbort()
     if (sAbortPending)
         {
         AbortForeground();
-        FatPrompt();
+        // Let the main loop emit exactly one prompt now that the console is
+        // free (avoids doubling with the lease-release edge below).
+        sPromptNeeded = ETrue;
         }
     }
 
-// Run an E32 image as a user process. DOS-style: the name is tried as
-// given, then with ".E32" appended when it has no extension. aTail (the raw
-// words after the name) becomes the process command line.
+// Run an E32 image as a user process. Symbian-style: the name is tried as
+// given; a bare name (no dot) is also tried with ".EXE" and then ".E32"
+// appended (real Symbian EXE name wins when both exist). A name that already
+// carries an extension, e.g. CALC.EXE, is opened exactly as typed. The bytes
+// are still genuine E32 images — .EXE is just the on-disk name. aTail (the
+// raw words after the name) becomes the process command line.
 static void RunImage(const char* aName, const char* aTail)
     {
     static TUint8 eBuf[65536];
-    char cand[2][164];
+    char cand[3][164];
     int n = 0;
     while (aName[n] && n < 150) { cand[0][n] = aName[n]; ++n; }
     cand[0][n] = 0;
@@ -683,11 +847,21 @@ static void RunImage(const char* aName, const char* aTail)
         if (cand[0][i] == '.') { hasDot = 1; break; }
     if (!hasDot)
         {
-        int k = 0;
-        while (cand[0][k] && k < 150) { cand[1][k] = cand[0][k]; ++k; }
-        cand[1][k++] = '.'; cand[1][k++] = 'E'; cand[1][k++] = '3'; cand[1][k++] = '2';
-        cand[1][k] = 0;
-        nCand = 2;
+        // Candidate 1: ".EXE" (preferred Symbian spelling), candidate 2: the
+        // historical ".E32" spelling. The loop below tries each candidate on
+        // the active drive first, so the first format found wins.
+        for (int suffix = 0; suffix < 2; ++suffix)
+            {
+            char* out = cand[1 + suffix];
+            int k = 0;
+            while (cand[0][k] && k < 150) { out[k] = cand[0][k]; ++k; }
+            out[k++] = '.';
+            out[k++] = 'E';
+            out[k++] = (char)(suffix == 0 ? 'X' : '3');
+            out[k++] = (char)(suffix == 0 ? 'E' : '2');
+            out[k] = 0;
+            }
+        nCand = 3;
         }
     TUint got = 0;
     TInt r = KErrNotFound;
@@ -740,6 +914,7 @@ static void RunImage(const char* aName, const char* aTail)
     if (rr == KErrNone)
         {
         sForegroundPid = E32LastPid();
+        sJustLaunched = ETrue;   // post-Exec prompt must be deferred if leased
         KPrintf("%s started (user process, pid=%u)\r\n", aName, sForegroundPid);
         }
     else
@@ -1758,19 +1933,32 @@ static void ShellMain(TAny* /*aPtr*/)
         // touch the stream (it would steal program keystrokes). A dead
         // owner is reclaimed here so a crash without release cannot wedge
         // input forever; the next keystroke then reaches the shell.
-        if (ConInputLeased())
+        TBool leased = ConInputLeased();
+        if (leased)
             {
             if (!ConOwnerAlive())
                 {
                 ConForceRelease();
                 KPrintf("\r\nconsole lease released (owner died)\r\n");
-                FatPrompt();
+                leased = EFalse;
                 }
             else
                 {
+                sWasLeased = ETrue;
                 __asm__ __volatile__("hlt");
                 continue;
                 }
+            }
+        if (sWasLeased)
+            {
+            // The child called con_release(): the console is ours again.
+            sWasLeased = EFalse;
+            sPromptNeeded = ETrue;
+            }
+        if (sPromptNeeded)
+            {
+            sPromptNeeded = EFalse;
+            FatPrompt();
             }
         int c = KbdPoll();
         if (c < 0) c = SerialPoll();  // fallback: IRQ4 normally fills the ring
@@ -1783,10 +1971,30 @@ static void ShellMain(TAny* /*aPtr*/)
             __asm__ __volatile__("hlt");
             continue;
             }
+        // Escape sequences from a serial terminal: ESC [ A/B = Up/Down.
+        // (PS/2 E0-prefixed arrow scancodes are discarded by the ISR, so this
+        // is the path that actually delivers arrow keys to the shell.)
+        if (sEscState == 2)
+            {
+            sEscState = 0;
+            if (c == 'A') HistPrev();
+            else if (c == 'B') HistNext();
+            continue;
+            }
+        if (c == 27) { sEscState = 1; continue; }
+        if (sEscState == 1)
+            {
+            sEscState = 0;
+            if (c == '[') { sEscState = 2; continue; }
+            while (sLen > 0) { --sLen; EmitBackspace(); }  // lone ESC clears
+            }
         if (c == '\r') c = '\n';
         if (c == '\n')
             {
             KPrintf("\n");
+            HistAdd(sLine, sLen);
+            sHistBrowsing = EFalse;
+            sHistPos = sHistCount;
             if (wMode)
                 {
                 sLine[sLen] = 0;
@@ -1823,16 +2031,34 @@ static void ShellMain(TAny* /*aPtr*/)
                 UserFilesUnlock();
                 }
             sLen = 0;
-            FatPrompt();
+            if (sJustLaunched)
+                {
+                // Give the freshly resumed child a few scheduler ticks to
+                // acquire the PortCon lease. If it did, it owns the console
+                // (and prints its own prompt): defer ours until it releases.
+                // Programs that never lease the console keep the old prompt.
+                sJustLaunched = EFalse;
+                for (TInt k = 0; k < 5 && !ConInputLeased(); ++k)
+                    NKern::Sleep(1);
+                }
+            if (ConInputLeased())
+                {
+                sWasLeased = ETrue;
+                sPromptNeeded = ETrue;
+                }
+            else
+                FatPrompt();
             }
         else if (c == '\b' || c == 127)  // BS or DEL
             {
             if (sLen > 0) { --sLen; EmitBackspace(); }
             }
-        else if (c == 27)                // ESC clears the whole line
-            {
-            while (sLen > 0) { --sLen; EmitBackspace(); }
-            }
+        else if (c == 16)                // Ctrl-P: previous command
+            HistPrev();
+        else if (c == 14)                // Ctrl-N: next command
+            HistNext();
+        else if (c == 9)                 // Tab: complete the first word
+            CompleteLine();
         else if (c >= 32 && c < 127)
             {
             if (sLen < sizeof(sLine) - 1)

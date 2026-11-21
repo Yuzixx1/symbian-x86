@@ -1214,3 +1214,91 @@ build/user/snake2.elf: build/user/start.o build/user/runtime.o build/user/snake2
 build/user/SNAKE2.E32: build/user/snake2.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# REUSABLE GUI TOOLKIT DEMO (GH) -- guilib.c is a self-contained PE2 GUI
+# toolkit (display-list double buffer, primitives, windows, buttons, keyboard
+# and mouse input) built on GUI slow execs 249/250/251; guihello.c is its
+# interactive demonstration (arrow-key focus, Enter press, Esc quit).  Genuine
+# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# guihello_printf_slot at 0x408000 (textSize).
+userland: build/user/GUIHELLO.E32
+build/user/guilib.o: user/guilib.c user/guilib.h user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/guihello.o: user/guihello.c user/guilib.h user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/guihello.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/guihello.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=guihello_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GUIHELLO.E32: build/user/guihello.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# SMALL BASIC INTERPRETER E32 -- a genuine line-oriented interpreter with a
+# recursive-descent expression evaluator (+ - * / MOD, parentheses, all six
+# comparisons, variables A-Z), a 100-line program store, GOTO/IF/FOR/NEXT, and
+# a built-in number-guessing game written in BASIC source (DEMO).  Driven from
+# PortCon (LOAD DEMO / RUN / LIST / NEW / QUIT / numbered lines).  Genuine PE2
+# import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot basic_printf_slot
+# at 0x408000 (textSize).
+userland: build/user/BASIC.E32
+build/user/basic.o: user/basic.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/basic.elf: build/user/start.o build/user/runtime.o build/user/basic.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=basic_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BASIC.E32: build/user/basic.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# BREAKOUT E32 -- genuine real-time graphical arcade game on the VBE LFB.
+# Builds full animated frames (bricks/paddle/ball/HUD) in the low-RAM gui_shared
+# display list and submits them through GUI slow exec 251; reads real keyboard
+# input via the PortCon lease (A/D move, ENTER restart, ESC quit). PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot breakout_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/BREAKOUT.E32
+build/user/breakout.o: user/breakout.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/breakout.elf: build/user/start.o build/user/runtime.o build/user/breakout.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=breakout_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BREAKOUT.E32: build/user/breakout.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# Genuine Symbian .EXE naming (append-only addition, 2026-11-21).
+# Every user E32 gets a byte-identical <NAME>.EXE alias in build/user. The
+# bytes are still real E32/PE2 images — only the directory entry name changes,
+# so a FAT disk can present CALC.EXE / SNAKE.EXE instead of CALC.E32.
+# The shell's RunImage opens an explicit .EXE name exactly, and for a bare
+# name tries .EXE first, then .E32. `make userland-exe` runs after `userland`
+# and copies every E32 (including legacy lowercase *.e32) to a .EXE alias.
+.PHONY: userland-exe
+userland-exe: userland
+	@set -e; \
+	n=0; \
+	for f in build/user/*.E32 build/user/*.e32; do \
+	    [ -f "$$f" ] || continue; \
+	    base=$${f%.*}; \
+	    if cmp -s "$$f" "$$base.EXE"; then continue; fi; \
+	    cp -f "$$f" "$$base.EXE"; \
+	    n=$$((n+1)); \
+	done; \
+	total=$$(find build/user -maxdepth 1 -type f -iname '*.EXE' | wc -l); \
+	echo "USERLAND-EXE-OK: $$n new .EXE aliases ($$total total) in build/user"
+
+# Per-file rule: `make build/user/CALC.EXE` works too and stays byte-identical.
+build/user/%.EXE: build/user/%.E32
+	cp -f $< $@
+
+# GRAPHICAL APPLICATION LAUNCHER E32 -- full-screen desktop menu rendered to
+# the VBE LFB through GUI slow exec 251.  Up/Down (or W/S) select, A/D switch
+# columns, ENTER launches via trusted exec 268 (SvcMgrLaunch), ESC exits.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for markers;
+# IAT slot guimenu_printf_slot at 0x408000 (textSize).
+userland: build/user/GUIMENU.E32
+build/user/guimenu.o: user/guimenu.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/guimenu.elf: build/user/start.o build/user/runtime.o build/user/guimenu.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=guimenu_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GUIMENU.E32: build/user/guimenu.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet

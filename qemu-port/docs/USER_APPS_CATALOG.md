@@ -187,3 +187,23 @@ Hardware/driver QEMU checks that accompany the app catalog:
 
 All paths above are relative to `qemu-port/`; build artifacts live in
 `build/user/` and test logs/images under `/tmp/opencode/`.
+
+## New GUI toolkit / BASIC programs (append-only)
+
+These are being built concurrently by other agents. An entry here lists the
+intended image, marker prefix and harness; a program is only "shipped" once its
+`build/user/<NAME>.E32` exists and is packed into `PROGRAMS.IMG`.
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **BREAKOUT** | Real-time graphical Breakout on the VBE LFB (exec 251 display lists + `con_tryread()` input) | `BO:` | Std+915 | `r1_gui_regression.py` |
+| **GUIMENU** | Graphical launcher / menu painted through the display-list protocol | `GM:` | Std+915 | `r1_gui_regression.py` |
+| **GUIHELLO** | Minimal GUI window + key demo (worked example in `GUI_PROGRAMMING.md`) | `HG:` | Std+915 | `r1_gui_regression.py` |
+| **BASIC** | Freestanding BASIC line interpreter (integer/fixed-point only, no libc) | `BASIC:` | Std+915 | `r1_gui_regression.py` |
+
+`tools/r1_gui_regression.py` is a single test that probes `build/user/*.E32` for
+all four programs, skips any that are not built yet, boots with `-vga std`,
+stages each program plus `EUSER.DLL`, feeds its name at the `EKA2>` prompt, and
+asserts a known marker and no `Exc`/`PanicKernExec`. See
+[`GUI_PROGRAMMING.md`](GUI_PROGRAMMING.md) for the display-list API and
+[`COMPLEX_PROGRAMS.md`](COMPLEX_PROGRAMS.md) for the porting constraints.

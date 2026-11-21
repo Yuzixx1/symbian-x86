@@ -72,6 +72,14 @@ def curated_programs(work):
 
     Names are 8.3 where possible; longer ones get mtools' LFN aliases, which
     the guest's FAT driver resolves (confirmed: APPLAUNCH.E32 shows in DIR).
+
+    .EXE policy: every program keeps its historical .E32 entry — boot-time
+    SVCMGR (SvcMgrBootLaunch reads \\SVCMGR.E32) and APPLAUNCH's built-in menu
+    hard-code .E32 names, so replacing them would break those paths. Instead
+    we stage a byte-identical .EXE alias for the flagship demo (CALC.EXE) so
+    a real Symbian-style command line works straight off X:, and `make
+    userland-exe` creates .EXE aliases for the whole catalog in build/user
+    for custom disks. One ~33 KB alias, no format change, no image doubling.
     """
     if not os.path.isdir(USER_DIR):
         return []
@@ -83,6 +91,10 @@ def curated_programs(work):
         if os.path.getsize(src) < E32_MIN_SIZE:
             continue
         out.append((src, name.upper()))
+    # Genuine Symbian-style name on the shipped ISO (same E32 bytes).
+    calc = os.path.join(USER_DIR, "CALC.E32")
+    if os.path.isfile(calc) and os.path.getsize(calc) >= E32_MIN_SIZE:
+        out.append((calc, "CALC.EXE"))
     if os.path.exists(EUSER_DLL):
         out.append((EUSER_DLL, "EUSER.DLL"))
     notes = os.path.join(work, "NOTES.TXT")
@@ -91,9 +103,15 @@ def curated_programs(work):
                 "================================\r\n"
                 "This is the FAT32 image embedded in the bootable GRUB ISO as\r\n"
                 "/PROGRAMS.IMG. Mount it in the EKA2 shell with MOUNT (or it is\r\n"
-                "mounted at boot), then DIR / CD / run a program by name, e.g.:\r\n"
-                "  MOUNT\r\n  DIR\r\n  CALC\r\n"
-                "EUSER.DLL must stay next to the E32 images.\r\n")
+                "mounted at boot), then DIR / CD / run a program by name.\r\n"
+                "Both Symbian-style and legacy spellings launch the same image:\r\n"
+                "  CALC.EXE   (exact .EXE name, byte-identical E32 image)\r\n"
+                "  CALC       (shell tries .EXE, then .E32)\r\n"
+                "  CALC.E32   (legacy name)\r\n"
+                "For every other app `make userland-exe` writes <NAME>.EXE aliases\r\n"
+                "into build/user/ — copy those onto a custom disk to use .EXE names.\r\n"
+                "The bytes are genuine E32/PE2 images; .EXE is only the file name.\r\n"
+                "EUSER.DLL must stay next to the program images.\r\n")
     readme = os.path.join(work, "README.TXT")
     with open(readme, "w") as f:
         f.write("Boot with tools/boot_grub.sh to expose this image to QEMU.\r\n")
@@ -156,7 +174,7 @@ set default=0
 # End-user E32 programs are on this ISO as /programs.img (FAT32, MBR at 0).
 # GRUB loads it as a Multiboot1 module; the kernel maps that RAM range as a
 # read-only block device and mounts it at X: at boot. No extra -drive needed.
-# In the shell: VOL, DIR, then type a program name (e.g. CALC).
+# In the shell: VOL, DIR, then type a program name (e.g. CALC.EXE or CALC).
 menuentry "Symbian EKA2 full kernel (genuine)" {
     set gfxpayload=text
     echo Booting full kernel...

@@ -204,10 +204,17 @@ The shell launches programs by **bare name** (see `docs/SHELL_REFERENCE.md`,
 "Programs / implicit execution"). It looks on the active drive first, then
 searches **all mounted drives** `A:`–`Z:`, so a program bundled in
 `PROGRAMS.IMG` (mounted on `X:`) is found even when the active drive is `C:`.
-If the typed name has no `.` in it, `RunImage` retries with **`.E32` appended**;
-`MYAPP`, `MYAPP.E32` and `X:MYAPP` all launch the same image. Before launching,
-dead user images are reaped. Arguments after the program name are passed to
-`app_main` as a UTF-16 command line via `command_line()` (see `calc.c`).
+If the typed name has no `.` in it, `RunImage` retries with **`.EXE` first and
+then `.E32`**; `MYAPP`, `MYAPP.EXE`, `MYAPP.E32` and `X:MYAPP` all launch the same
+image (the `.EXE` wins if both exist). A name with an extension, e.g.
+`CALC.EXE`, is opened exactly as typed. `make userland-exe` copies every built
+E32 to a byte-identical `<NAME>.EXE` in `build/user/` — the bytes are still
+genuine E32/PE2 images, only the file name is Symbian-style. Copy those aliases
+onto a custom FAT disk to use `.EXE` names for any app; the shipped
+`PROGRAMS.IMG` keeps every `.E32` (boot/APPLAUNCH depend on it) and adds a
+`CALC.EXE` demo alias. Before launching, dead user images are reaped. Arguments
+after the program name are passed to `app_main` as a UTF-16 command line via
+`command_line()` (see `calc.c`).
 
 `tools/mkgrubiso.py` builds `PROGRAMS.IMG` automatically as part of `make
 isogrub`. Its `curated_programs()` scans `build/user/` and includes **every

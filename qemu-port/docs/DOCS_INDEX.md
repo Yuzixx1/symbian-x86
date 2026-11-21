@@ -151,3 +151,19 @@ This index file itself is [`DOCS_INDEX.md`](DOCS_INDEX.md).
 `ARCHITECTURE.md` are maintained separately from the historical records above;
 when they conflict with a dated design note, the running code and the
 canonical boot doc are authoritative.
+
+## Added — GUI toolkit / complex programs (append-only)
+
+- [GUI_PROGRAMMING.md](GUI_PROGRAMMING.md) — Reader-facing guide to writing GUI
+  programs: the VBE LFB, slow execs 249/250/251, the `gui_shared` display-list
+  protocol, drawing primitives, the 2x font geometry, keyboard input and a
+  worked window example. The low-level protocol is the stable API; the
+  higher-level `user/guilib.h` toolkit is in progress.
+- [COMPLEX_PROGRAMS.md](COMPLEX_PROGRAMS.md) — What it takes to run complex
+  programs: 64 KiB heap cap, no hosted libc, EUSER ordinal 915, freestanding C,
+  no FPU, the porting checklist and honest gaps (no threads/filesystem/DLL
+  linking).
+
+These two documents bring the indexed Markdown total to **94**. Also added:
+`tools/r1_gui_regression.py`, one host test that probes for and verifies
+BREAKOUT, GUIMENU, GUIHELLO and BASIC when present.

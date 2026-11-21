@@ -127,8 +127,11 @@ boot works (El Torito), but guest-side ISO9660 reads do not exist.
 
 **A: On `X:` (the `PROGRAMS.IMG` RAM disk).** Type `X:` then `DIR`, or launch by
 bare name — the shell searches the active drive and then every mounted drive,
-auto-appending `.E32`. Examples: `CALC`, `PING 5`, `SNAKE`, `X:SNAKE`,
-`X:\GAMES\SNAKE.E32`. The full inventory (~70 apps: utilities, network tools,
+trying `.EXE` first and then `.E32`. Examples: `CALC`, `CALC.EXE`, `PING 5`,
+`SNAKE`, `X:SNAKE`, `X:\GAMES\SNAKE.E32`. `make userland-exe` writes byte-identical
+`<NAME>.EXE` aliases into `build/user/` for any custom disk; the shipped ISO
+keeps all `.E32` names and adds `CALC.EXE` as a Symbian-style demo. The full
+inventory (~70 apps: utilities, network tools,
 GUI demos, games, test fixtures) is in
 [`USER_APPS_CATALOG.md`](USER_APPS_CATALOG.md).
 
