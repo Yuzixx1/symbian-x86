@@ -76,4 +76,23 @@ int con_tryread(void);    /* char 0..255, or negative (empty = KErrNotReady) */
 void con_puts_raw(const char* text);  /* raw echo, NO trailing newline (prompts) */
 int read_line(char* buffer, unsigned capacity, int timeout_ms);
 
+/* -------------------------------------------------------------- heap helpers
+ * Multi-MB chunk-backed allocator extras (append-only addition, 2026-11-21).
+ * calloc zeroes count*size bytes; realloc preserves the old prefix. Both are
+ * implemented in user/malloc.c alongside malloc/free. */
+void* calloc(unsigned count, unsigned size);
+void* realloc(void* ptr, unsigned new_size);
+
+/* ------------------------------------------------------- large-file streaming
+ * Append-only addition (2026-11-21).  The original PortFile read path snapshots
+ * at most 64 KiB; these APIs stream straight from the FAT cluster chain via
+ * the PortBigFile logical device, so multi-MB files (DOOM WADs) are readable.
+ * file_open()/file_read()/file_close() keep their existing behaviour and also
+ * work on these handles.  All offsets/lengths are byte counts; file_seek sets
+ * the handle's position for subsequent file_read() calls.  Negative returns
+ * are Symbian error codes; file_read_at returns the byte count actually read. */
+long file_size(int handle);                         /* total bytes, or <0 */
+int  file_seek(int handle, unsigned offset);        /* 0 on success, <0 error */
+int  file_read_at(int handle, unsigned offset, void* buf, unsigned len);
+
 #endif

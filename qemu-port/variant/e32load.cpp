@@ -19,6 +19,7 @@
 #include <kernel/x86/x86.h>
 #include <e32ldr_private.h>
 #include "qemu_variant.h"
+#include "qemu_fbblit.h"   // fb blit/info ops appended to SvcMgr ctl exec 270
 #include "../mmu/pd.h"  // M-03: per-process PD side-table (port-side only)
 
 extern "C" TUint8 qemu_tss[];  // 104B bootstrap TSS (bootcpu_gas.S BSS)
@@ -1116,7 +1117,7 @@ TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName)
 // (268/269/270) at boot. kernelhwsrv source is not touched. Flags=0: the
 // callees enter CS themselves (as the shell's RunImage path does).
 extern const TUint32 EpocSlowExecTable[];
-namespace { TUint8 sSvcImg[256 * 1024]; }
+namespace { TUint8 sSvcImg[512 * 1024]; }  // fit large E32s (DOOM ~338 KiB) + margin
 
 static TInt SvcDesc(TInt aDesc, TBuf8<160>& aOut)
     {
@@ -1175,6 +1176,11 @@ static TInt SvcMgrCtlExec(TInt aOp, TInt aArg)
     {
     if (aOp == 0) return E32ProcessDead((TUint)aArg) ? 1 : 0;
     if (aOp == 1) return E32Reap();
+    // Append-only capability: bulk framebuffer blit / info.  These are new
+    // operations on this existing genuine slow exec; slots 274/275 cannot be
+    // added safely (they overlap EpocFastExecTable -- see qemu_fbblit.h).
+    if (aOp == (TInt)FBO_FBINFO) return fbblit_info_exec(aArg);
+    if (aOp == (TInt)FBO_FBBLIT) return fbblit_blit_exec(aArg);
     return KErrArgument;
     }
 

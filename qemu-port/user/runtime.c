@@ -283,9 +283,21 @@ static int port_channel(void)
     return exec4(132, (unsigned)&name, (unsigned)&create, 1, 0);
 }
 
+/* Large-file streaming channel (PortBigFile). It supersedes PortFile for
+   reads: same fn 0 open / fn 4 sequential read wire shape, but no 64 KiB or
+   256-byte whole-file snapshot ceiling. Write/cwd functions still use
+   port_channel() above and are untouched. */
+static int bigfile_channel(void)
+{
+    struct PtrC8 name = {0x1000000B, "PortBigFile"};
+    struct { unsigned version; int unit; void* physical; void* info; }
+        create = {1, -1, 0, 0};
+    return exec4(132, (unsigned)&name, (unsigned)&create, 1, 0);
+}
+
 int file_open(const char* path)
 {
-    int handle = port_channel();
+    int handle = bigfile_channel();
     if (handle < 0) return handle;
     unsigned length = 0;
     while (path[length]) ++length;
@@ -295,11 +307,31 @@ int file_open(const char* path)
     return handle;
 }
 
+/* Sequential read from the handle's current position.  Capacity is still
+   capped at 256 bytes to preserve the original contract exactly. */
 int file_read(int handle, void* buffer, unsigned capacity)
 {
     if (capacity > 256) return -6; /* KErrArgument: fail fast, no silent short read */
-    struct Ptr8 descriptor = {0x20000000, capacity, buffer};
-    return exec4(10, handle, 1, (unsigned)&descriptor, capacity);
+    struct { void* buffer; unsigned length; } seq = {buffer, capacity};
+    return exec4(10, handle, 4, (unsigned)&seq, 0);
+}
+
+/* ---- new large-file streaming APIs (append-only) ------------------------ */
+long file_size(int handle)
+{
+    return (long)exec4(10, handle, 1, 0, 0);
+}
+
+int file_seek(int handle, unsigned offset)
+{
+    return exec4(10, handle, 3, offset, 0);
+}
+
+int file_read_at(int handle, unsigned offset, void* buf, unsigned len)
+{
+    struct { void* buffer; unsigned offset; unsigned length; }
+        io = {buf, offset, len};
+    return exec4(10, handle, 2, (unsigned)&io, 0);
 }
 
 void file_close(int handle) { exec2(106, handle, 0); }

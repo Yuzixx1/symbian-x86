@@ -218,3 +218,59 @@ This brings the indexed Markdown total to **96**.
   grabs a best-effort QMP screendump to `/tmp/opencode/window_system.png`.
 
 This brings the indexed Markdown total to **97**.
+
+## Added — ported real software (append-only)
+
+- [PORTED_SOFTWARE.md](PORTED_SOFTWARE.md) — What porting *real* third-party C
+  onto this OS means, as opposed to hand-written apps: the freestanding E32
+  toolchain constraints, why real ports matter, the libc-shim strategy
+  (`printf` -> EUSER ordinal 915, `malloc` -> `user/malloc.c`, local string
+  helpers, PortFile file I/O, the 16/64 KiB chunk heap budget), how Lua,
+  Z-machine/Zork, miniz/ZIP32 and bc are built/staged/tested, licence checks
+  (notably GNU bc and copyrighted Zork story data), an honest full-source vs
+  subset vs blocked status table, and a step-by-step recipe for the next port.
+- `tools/r1_ported_software_test.py` — consolidated host test that probes
+  `build/user/` for `LUA.E32`, `ZMACHINE.E32`, `ZIP32.E32` and `BC32.E32`,
+  skips missing images, verifies via mtools that the present images plus
+  `EUSER.DLL` are staged in `PROGRAMS.IMG` on a GRUB ISO, boots the ISO once per
+  port with `-vga std`, feeds each program's basic command, asserts start/
+  result/done marker families, the ord-915 bind and no `Exc`/`PanicKernExec`/
+  `FAULT`, and writes one log per port under `/tmp/opencode/`.
+
+This brings the indexed Markdown total to **98**.
+
+## Added — DOOM porting design (append-only)
+
+- [DOOM_PORTING.md](DOOM_PORTING.md) — Design for running *real* DOOM via
+  `doomgeneric` on EKA2: the full GRUB ISO → WAD-on-FAT → E32 → fbblit → VBE
+  LFB architecture; the 24 MB FAT32 partition at LBA 2048 needed for a ~10 MB
+  Freedoom IWAD (with exact file:line constants for the other agents to
+  change); Freedoom-only licensing (never `DOOM.WAD`); 8.3 WAD staging via
+  `mcopy` and the PortFile 64 KiB snapshot blocker for WAD reads; libc shim
+  (`printf` → ord 915, chunk-backed heap, local string helpers, no FPU);
+  8-bit 320x200 palette → 32bpp RGBA conversion through a new exec-251
+  `GC_BLIT` opcode; PS/2 input, 35 Hz exec timing, AC97 PCM audio and its v1
+  limitations; the QEMU/screendump test plan and an honest status table.
+- `tools/r1_doom_test.py` — scaffold-only host test that checks for
+  `DOOM.E32` and a Freedoom IWAD and **skips cleanly** while either is absent;
+  when assets land it stages the WAD on a 24 MB FAT disk, boots the GRUB ISO,
+  feeds gameplay keys, asserts the `DOOM:` marker family plus ord-915 bind and
+  a clean log, and grabs a QMP screendump to `/tmp/opencode/doom.png`.
+
+This brings the indexed Markdown total to **99**.
+
+## Added — DOOM FAT/WAD staging integration (append-only)
+
+- Integration update for [DOOM_PORTING.md](DOOM_PORTING.md): the real
+  Freedoom1.wad is 28,795,076 B (~27.5 MiB), not ~10 MB, so the embedded FAT
+  disk was enlarged from 32/16 MB to **64 MB disk / 48 MB FAT32 partition at
+  LBA 2048 (98304 sectors)**, ~47 MiB usable. `tools/mkgrubiso.py` gained
+  `WAD_CANDIDATES`/`find_wad()` and stages the WAD at build time from
+  `/tmp/opencode/doom/...` (never committed) as the 8.3 name `FDOOM1.WAD`, with
+  a warning + skip when absent. `tools/r1_doom_test.py` uses the same enlarged
+  constants and drop-off points. Verified: `make isogrub` succeeds,
+  `build/programs.img` = 67,108,864 B, `build/symbian-grub.iso` =
+  75,853,824 B (~72 MiB), and `mdir -i build/programs.img@@1048576 ::` lists
+  `FDOOM1.WAD` (28,795,076 B) among 87 files with ~16.8 MB free. Kernel-side
+  blockers (streaming WAD reads, fbblit, DOOM.E32) remain. `kernelhwsrv/`
+  untouched; no commits or pushes.

@@ -1,0 +1,45 @@
+bc for Sybian REAL -- bc-compatible subset (E32 port)
+=====================================================
+
+SOURCE PROVENANCE (honest disclosure)
+-------------------------------------
+GNU bc 1.07 was downloaded from https://ftp.gnu.org/gnu/bc/bc-1.07.tar.gz as
+a reference.  It is ~14k lines of C plus a flex scanner and a Bison grammar,
+and depends on stdio, malloc, getopt and libm.  That cannot be ported verbatim
+to a freestanding, no-libc E32 process with a 64 KiB heap budget, so this
+directory contains a FAITHFUL, FROM-SCRATCH bc-compatible SUBSET, not GNU bc
+source code.  The arithmetic semantics (decimal digit arrays, scale rules,
+truncating division/remainder, right-associative power) follow GNU bc 1.07.
+
+Files
+-----
+  bignum.h / bignum.c   base-10 arbitrary-precision engine (no libc, bump arena)
+  bcinterp.h / bcinterp.c  recursive-descent parser + tree-walk interpreter
+  README                this file
+
+Language subset implemented
+---------------------------
+  * arbitrary-precision decimal numbers (integer + fractional scale)
+  * operators: + - * / % ^ (right-assoc), unary -, comparisons
+    (< <= > >= == !=), logical !, assignment = and += -= *= /= %= ^=
+  * `scale` variable controls division precision (GNU bc rule)
+  * variables a-z plus `scale`
+  * define ... { ... } functions, parameters, return, recursion, if/else,
+    while, for, break, continue, { } blocks, print (numbers and strings)
+  * comments: # to end of line, // to end of line, /* ... */
+  * statements separated by `;` or newline; multiple per input line
+
+Limitations vs real bc
+----------------------
+  * no `auto` locals (parameters are saved/restored per call; other names are
+    globals), no arrays, no `length`/`sqrt`/math library functions, no `-l`
+  * single-letter variable names only (function names may be longer)
+  * digits per value capped at 160; expression arena 48 KiB; max 200k loop
+    iterations and 16 nested calls (deliberate guards for a freestanding host)
+  * print emits one BC: marker per statement rather than raw stdout bytes
+
+Memory
+------
+The interpreter uses a 48 KiB bump arena reset per top-level statement plus
+fixed variable/function tables.  Total static footprint is under 64 KiB,
+matching the process heap budget.  No hosted libc calls are made.

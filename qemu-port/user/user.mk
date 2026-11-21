@@ -1385,3 +1385,229 @@ build/user/wsdl.elf: build/user/start.o build/user/runtime.o build/user/wsclient
 build/user/WSDL.E32: build/user/wsdl.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# LARGE USER HEAP PROOF (BIGHEAP) -- append-only addition, 2026-11-21.
+# A genuine PE2 E32 that allocates 1/2/3 MiB from the 4 MiB chunk-backed heap,
+# stamps and verifies every byte, frees/repeats, and checks calloc + realloc.
+# Uses the same EUSER ord 915 marker pattern as MEMTEST.E32 / SELFTEST.E32.
+# Named BIGHEAP (not HEAPTEST) because `heaptest` is a shell built-in command
+# that would shadow the program image at launch.
+userland: build/user/BIGHEAP.E32
+build/user/heaptest.o: user/heaptest.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/heaptest.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/heaptest.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=heaptest_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BIGHEAP.E32: build/user/heaptest.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+# Lowercase `make build/user/heaptest.E32` alias still works.
+build/user/heaptest.E32: build/user/BIGHEAP.E32
+	cp -f $< $@
+
+# ---------------------------------------------------------------------------
+# ZLIB-COMPATIBLE GZIP / DEFLATE UTILITY (ZIP32) -- append-only addition.
+# A genuine PE2 E32 (EUSER.DLL ordinal 915) driving a freestanding RFC1951
+# codec vendored in ports/miniz/ (LZ77 + fixed-Huffman deflate, full
+# stored/fixed/dynamic inflate, CRC-32).  PortFile IPC for file I/O.
+userland: build/user/ZIP32.E32
+build/user/miniz.o: ports/miniz/miniz.c ports/miniz/miniz.h | build/user
+	$(CC) $(USER_FLAGS) -Iports/miniz -c $< -o $@
+build/user/zip32.o: user/zip32.c user/runtime.h ports/miniz/miniz.h | build/user
+	$(CC) $(USER_FLAGS) -Iports/miniz -c $< -o $@
+build/user/zip32.elf: build/user/start.o build/user/runtime.o build/user/miniz.o build/user/zip32.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=zip32_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ZIP32.E32: build/user/zip32.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# LARGE-FILE STREAMING TEST (LARGEFILE) -- append-only addition, 2026-11-21.
+# Genuine PE2 E32 that opens a >2 MiB FAT file via the PortBigFile streaming
+# device and verifies file_size / file_read_at / file_seek at start, middle and
+# end (the path DOOM uses to read a multi-MB WAD). EUSER ord 915 marker pattern.
+userland: build/user/LARGEFILE.E32
+build/user/largefile.o: user/largefile.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/largefile.elf: build/user/start.o build/user/runtime.o build/user/largefile.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=largefile_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/LARGEFILE.E32: build/user/largefile.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+# Lowercase spelling also works (`make build/user/largefile.E32`).
+build/user/largefile.E32: build/user/LARGEFILE.E32
+	cp -f $< $@
+
+# ---------------------------------------------------------------------------
+# WADPATH PROBE (WADPROBE) -- append-only diagnostic, 2026-11-21.
+# Tiny E32 that prints file_open()/file_size()/file_read_at() results for every
+# candidate spelling of FDOOM1.WAD, so the DOOM WAD-open failure can be pinned
+# down with in-guest ground truth. Uses the same PE2 ord-915 marker path.
+userland: build/user/WADPROBE.E32
+build/user/wadprobe.o: user/wadprobe.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/wadprobe.elf: build/user/start.o build/user/runtime.o build/user/wadprobe.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=wadprobe_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WADPROBE.E32: build/user/wadprobe.elf tools/elf2e32.py tools/e32read.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+build/user/wadprobe.E32: build/user/WADPROBE.E32
+	cp -f $< $@
+
+# ---------------------------------------------------------------------------
+# BULK FRAMEBUFFER BLIT PROOF (FBBLITTEST) -- append-only addition, 2026-11-21.
+# Ring-3 E32 that allocates a 320x200 8-bit indexed frame, paints a 16x16
+# checkerboard and submits it in ONE kernel exec (slot 270 op 3) to the VBE LFB.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# fbblittest_printf_slot at 0x408000 (textSize).
+userland: build/user/FBBLITTEST.E32
+build/user/fbblittest.o: user/fbblittest.c user/runtime.h variant/qemu_fbblit.h | build/user
+	$(CC) $(USER_FLAGS) -Ivariant -c $< -o $@
+build/user/fbblittest.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/fbblittest.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=fbblittest_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/FBBLITTEST.E32: build/user/fbblittest.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# GC_BLIT proof E32 (append-only addition, 2026-11-21).  Allocates a 640x400
+# RGBA frame, publishes its physical base/size via guishost's tail fields and
+# submits ONE exec-251 GC_BLIT command (real bulk LFB blit).  Genuine PE2
+# import of EUSER.DLL ordinal 915; IAT slot gcblittest_printf_slot at 0x408000.
+userland: build/user/GCBLITTEST.E32
+build/user/gcblittest.o: user/gcblittest.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/gcblittest.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/gcblittest.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=gcblittest_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GCBLITTEST.E32: build/user/gcblittest.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# LUA 5.4.6 interpreter (append-only addition, Lua E32 port).
+# Full Lua 5.4.6 core/VM plus base, table, string and reduced math libraries.
+# Freestanding shims live in ports/lua/; stdout goes through EUSER ord 915.
+LUA_GCC_INC := $(shell $(CC) -m32 -print-file-name=include)
+LUA_FLAGS := $(USER_FLAGS) -ffunction-sections -fdata-sections -flto -nostdinc -isystem $(LUA_GCC_INC) -Iports/lua \
+             -DLUA_USE_C89 -Dl_signalT=int
+LUA_SRCS := lapi.c lauxlib.c lbaselib.c lcode.c lctype.c ldebug.c ldo.c \
+            ldump.c lfunc.c lgc.c linit.c llex.c lmathlib.c lmem.c lobject.c \
+            lopcodes.c lparser.c lstate.c lstring.c lstrlib.c ltable.c \
+            ltablib.c ltm.c lundump.c lvm.c lzio.c e32_shim.c
+LUA_OBJS := $(patsubst %.c,build/lua/%.o,$(LUA_SRCS))
+
+build/lua:
+	mkdir -p $@
+
+build/lua/%.o: ports/lua/%.c ports/lua/lua.h ports/lua/luaconf.h ports/lua/e32_shim.h | build/lua
+	$(CC) $(LUA_FLAGS) -c $< -o $@
+
+build/user/luae32.o: user/luae32.c user/runtime.h ports/lua/lua.h ports/lua/lauxlib.h ports/lua/e32_shim.h | build/user
+	$(CC) $(LUA_FLAGS) -c $< -o $@
+
+build/user/luae32.elf: build/user/start.o build/user/runtime.o build/user/malloc.o $(LUA_OBJS) build/user/luae32.o user/link.ld
+	$(CC) -m32 -nostdlib -flto -Wl,--emit-relocs,--gc-sections -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/LUA.E32: build/user/luae32.elf tools/elf2e32.py tools/mke32.py ports/lua/pack_lua_e32.py
+	python3 ports/lua/pack_lua_e32.py $< $@ --euser-import-915
+	python3 tools/e32read.py $@ --quiet
+
+userland: build/user/LUA.E32
+
+# ---------------------------------------------------------------------------
+# BC32 -- the bc arbitrary-precision calculator language as a genuine E32.
+# The interpreter is a faithful, from-scratch bc-compatible subset vendored in
+# ports/bc/ (arbitrary-precision base-10 engine + recursive-descent parser).
+# It is freestanding, needs no libc, and stays under the 64 KiB heap budget.
+# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# bc32_printf_slot at 0x408000 (textSize).
+BC_FLAGS := $(USER_FLAGS) -Iports/bc
+BC_SRCS  := bignum.c bcinterp.c
+BC_OBJS  := $(patsubst %.c,build/bc/%.o,$(BC_SRCS))
+
+build/bc:
+	mkdir -p $@
+
+build/bc/%.o: ports/bc/%.c ports/bc/bignum.h ports/bc/bcinterp.h | build/bc
+	$(CC) $(BC_FLAGS) -c $< -o $@
+
+build/user/bc32.o: user/bc32.c user/runtime.h ports/bc/bcinterp.h | build/user
+	$(CC) $(BC_FLAGS) -c $< -o $@
+
+build/user/bc32.elf: build/user/start.o build/user/runtime.o $(BC_OBJS) build/user/bc32.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=bc32_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/BC32.E32: build/user/bc32.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+userland: build/user/BC32.E32
+# 8.3 short-name alias: the guest FAT driver (variant/fat32.cpp) only resolves
+# single-entry LFNs, so the 11-char GCBLITTEST stem cannot be opened by name.
+# This byte-identical alias lets the shell launch it as `gcblit`.
+build/user/GCBLIT.E32: build/user/GCBLITTEST.E32
+	cp -f $< $@
+
+# Tiny launcher for the full Lua image (shell load buffer is only 64 KiB).
+build/lua/luaboot.o: ports/lua/luaboot.c user/runtime.h | build/lua
+	$(CC) $(USER_FLAGS) -c $< -o $@
+
+build/user/luaboot.elf: build/user/start.o build/user/runtime.o build/lua/luaboot.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/LUABOOT.E32: build/user/luaboot.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+userland: build/user/LUABOOT.E32
+
+# ---------------------------------------------------------------------------
+# REAL DOOM via doomgeneric (append-only, 2026-11-21).  The engine core is
+# copied verbatim into ports/doom/ from the codesuki doomgeneric-kernel mirror
+# (GPL-2.0-or-later).  Only the platform layer (e32_platform.c), the freestanding
+# libc shim (e32_shim.c) and the PE2 launcher (user/doome32.c) are E32-specific.
+#  --gc-sections + -ffunction-sections keep the image smaller.  The PE2 IAT
+#  slot for EUSER.DLL ordinal 915 sits at codeBase+IAT_OFF; elf2e32.py's
+#  --iat-off option (backward compatible) widens it for this large image.
+userland: build/user/DOOM.E32
+
+DOOM_CORE := dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop d_main d_mode d_net f_finale f_wipe g_game hu_lib hu_stuff info i_cdmus i_endoom i_joystick i_scale i_sound i_system i_timer memio m_argv m_bbox m_cheat m_config m_controls m_fixed m_menu m_misc m_random p_ceilng p_doors p_enemy p_floor p_inter p_lights p_map p_maputl p_mobj p_plats p_pspr p_saveg p_setup p_sight p_spec p_switch p_telept p_tick p_user r_bsp r_data r_draw r_main r_plane r_segs r_sky r_things sha1 sounds statdump st_lib st_stuff s_sound tables v_video wi_stuff w_checksum w_file w_main w_wad z_zone w_file_stdc i_input i_video doomgeneric mus2mid
+DOOM_ENGINE_OBJS := $(addprefix build/user/doom_,$(addsuffix .o,$(DOOM_CORE)))
+DOOM_ALL_OBJS := $(DOOM_ENGINE_OBJS) build/user/doom_e32_shim.o build/user/doom_e32_platform.o build/user/doome32.o
+DOOM_FLAGS := $(USER_FLAGS) -std=gnu99 -Iports/doom -Iports/doom/sysinc -Ivariant -ffunction-sections -fdata-sections
+DOOM_IAT_OFF := 0x40000
+
+build/user/doom_%.o: ports/doom/%.c user/runtime.h | build/user
+	$(CC) $(DOOM_FLAGS) -c $< -o $@
+
+build/user/doome32.o: user/doome32.c ports/doom/doomgeneric.h ports/doom/e32_shim.h user/runtime.h | build/user
+	$(CC) $(DOOM_FLAGS) -c $< -o $@
+
+build/user/doome32.elf: build/user/start.o build/user/runtime.o $(DOOM_ALL_OBJS) user/link.ld
+	ld -m elf_i386 --emit-relocs --gc-sections --defsym=doom_printf_slot=0x440000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+
+build/user/DOOM.E32: build/user/doome32.elf tools/elf2e32.py tools/e32read.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915 --iat-off $(DOOM_IAT_OFF)
+	python3 tools/e32read.py $@
+
+# Z-MACHINE INTERPRETER E32 (ZM) -- a genuine freestanding Z-machine v3
+# interpreter (ports/zmachine/zmachine.c, ~930 LOC) running real Infocom
+# Z-code.  It parses v3 headers, ZSCII text with abbreviations, the object
+# and property tables, the dictionary with lexical analysis and the full
+# v1-3 opcode set (calls/locals/stack, branches, print, sread, status line).
+# Story bytes are staged as ZORK.Z3 or MINIZORK.Z3 on FAT and read over
+# PortFile IPC straight into the interpreter's static 128 KiB image; no
+# malloc() is used.  Serial markers cross a genuine PE2 import of EUSER.DLL
+# ordinal 915 (RDebug::Printf); IAT slot zm_printf_slot at 0x408000.
+userland: build/user/ZMACHINE.E32
+build/zmachine:
+	mkdir -p $@
+build/zmachine/zmachine.o: ports/zmachine/zmachine.c ports/zmachine/zmachine.h | build/zmachine
+	$(CC) $(USER_FLAGS) -Iports/zmachine -c $< -o $@
+build/user/zmachine32.o: user/zmachine32.c user/runtime.h ports/zmachine/zmachine.h | build/user
+	$(CC) $(USER_FLAGS) -Iports/zmachine -c $< -o $@
+build/user/zmachine32.elf: build/user/start.o build/user/runtime.o build/zmachine/zmachine.o build/user/zmachine32.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=zm_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ZMACHINE.E32: build/user/zmachine32.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet

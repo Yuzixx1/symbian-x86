@@ -91,6 +91,68 @@ namespace
         display_rect((TUint)(aX - 1), (TUint)(aY - 1), 3u, 3u, white);
         }
 
+    // GC_BLIT: bulk RGBA -> 32bpp LFB (user/guishost.h ABI).  The source is a
+    // separate low-RAM user buffer described by gui_shared.blit_src_phys/size;
+    // it never lives in the small command list.  Everything is validated here
+    // in ring 0 before a single destination byte is touched.
+    static TUint gBlitCount = 0;
+
+    static void BlitRgba(const struct gc_blit_cmd& aCmd)
+        {
+        const TUint srcPhys = (TUint)gGui.blit_src_phys;
+        const TUint srcSize = (TUint)gGui.blit_src_size;
+        const TUint x = aCmd.x, y = aCmd.y;
+        const TUint w = aCmd.w, h = aCmd.h;
+        const TUint offset = aCmd.src_offset;
+
+        TUint fw = 0, fh = 0, bpp = 0;
+        display_geometry(fw, fh, bpp);
+        const TUint kMaxBytes = 640u * 400u * 4u;   // 1,024,000
+
+        // Source descriptor bounds: low, identity-mapped RAM only, no wrap.
+        if (srcPhys < 0x1000u || srcPhys >= 0x80000000u ||
+            srcSize < 4u || srcSize > kMaxBytes ||
+            srcSize > 0x80000000u - srcPhys)
+            return;
+        // Only the 32bpp VBE modes can accept an RGBA8888 frame verbatim.
+        if (bpp != 32u || fw == 0u || fh == 0u)
+            return;
+        // Destination rect: non-empty, <= one DOOM-class frame, fully on screen
+        // (subtract-form avoids x+w / y+h overflow).
+        if (w == 0u || h == 0u || w > 640u || h > 400u ||
+            x >= fw || y >= fh || w > fw - x || h > fh - y)
+            return;
+        const TUint bytes = w * h * 4u;
+        if (bytes < 4u || bytes > kMaxBytes || bytes > srcSize ||
+            offset > srcSize - bytes)
+            return;
+
+        // Sparse kernel marker: once per 100 blits (~frames).  Printed before
+        // the copy so the console's LFB text mirror cannot smear this frame.
+        if ((gBlitCount++ % 100u) == 0u)
+            KPrintf("GCB: blit %ux%u %u bytes\r\n", w, h, bytes);
+
+        const TUint8* src = (const TUint8*)srcPhys + offset;
+        volatile TUint8* lfb = (volatile TUint8*)display_lfb();
+        if (!lfb)
+            return;
+        // gPitch is private to qemu_display.cpp; for every supported 32bpp
+        // mode it equals fb_width*4 (1024*4 = 4096), so gPitch/4 == fb_width.
+        const TUint pitch = fw * 4u;
+        for (TUint row = 0; row < h; ++row)
+            {
+            const TUint8* s = src + row * w * 4u;
+            volatile TUint32* d =
+                (volatile TUint32*)(lfb + (y + row) * pitch + x * 4u);
+            for (TUint col = 0; col < w; ++col)
+                {
+                // RGBA8888 source -> 0x00RRGGBB LFB word (A ignored).
+                d[col] = ((TUint)s[0] << 16) | ((TUint)s[1] << 8) | (TUint)s[2];
+                s += 4;
+                }
+            }
+        }
+
     // exec 251: multiplexed GUI host.
     static TInt GuiDrawExec(TInt aArg, TInt)
         {
@@ -141,6 +203,12 @@ namespace
                 case GC_PUTC:
                     display_putc(c.a, c.b, (char)c.c, c.d, c.e);
                     break;
+                case GC_BLIT:
+                    {
+                    const struct gc_blit_cmd& b = (const struct gc_blit_cmd&)c;
+                    BlitRgba(b);
+                    break;
+                    }
                 default:
                     break;
                 }

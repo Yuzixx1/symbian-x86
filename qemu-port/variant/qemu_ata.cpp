@@ -124,8 +124,23 @@ namespace QemuUart
 
 static void RamDiskCopy(TUint8* aDst, const TUint8* aSrc, TUint aLen)
     {
-    for (TUint i = 0; i < aLen; ++i)
-        aDst[i] = aSrc[i];
+    // Overlap-safe (memmove) copy. A large GRUB module (64 MiB PROGRAMS.IMG)
+    // can be loaded low enough that its source range reaches past the
+    // high-RAM snapshot destination. A plain forward loop would then overwrite
+    // source bytes we have not read yet. When the destination starts inside or
+    // above the source, copy back-to-front instead; this preserves every byte
+    // and is exactly the safety property the old overlap guard was protecting.
+    TUint dst = (TUint)aDst, src = (TUint)aSrc;
+    if (dst > src && (dst - src) < aLen)
+        {
+        for (TUint i = aLen; i > 0; --i)
+            aDst[i - 1] = aSrc[i - 1];
+        }
+    else
+        {
+        for (TUint i = 0; i < aLen; ++i)
+            aDst[i] = aSrc[i];
+        }
     }
 
 // Called from HwInit0 right after paging is enabled, before the kernel data
@@ -147,16 +162,19 @@ void QemuRamdiskInit(TUint aModStart, TUint aModEnd)
         if (reported && reported < ramTop)
             ramTop = reported;
         }
-    TUint dst = ramTop - (len & ~0xFFFu);
+    // Place the snapshot at the top of RAM, above the user pool (0x2000000+).
+    // The image is 4K-aligned in our Multiboot setup, so round the start down.
+    if (len > ramTop)
+        return;  // image cannot fit in the available RAM
+    TUint dst = (ramTop - len) & ~0xFFFu;
     if (dst < 0x2000000u)
-        return;  // image too large for the available RAM
-    // Defensive: never copy onto ourselves if GRUB happened to load high.
-    if (aModStart < dst + len && aModEnd > dst)
-        {
-        dst = 0x4000000u;
-        if (aModStart < dst + len && aModEnd > dst)
-            return;
-        }
+        return;  // image too large to keep clear of kernel/user low RAM
+    // A 64 MiB module loaded low can overlap this high-RAM destination. That
+    // is no longer a reason to bail out: RamDiskCopy() handles overlap with
+    // memmove semantics, so the snapshot is byte-identical either way. We keep
+    // the guards above (never below the user pool, never past physical RAM) so
+    // kernel pages and the heap stay protected -- we only relax the spurious
+    // "source and destination may touch" rejection that broke large images.
     RamDiskCopy((TUint8*)dst, (const TUint8*)aModStart, len);
     gRamDisk = (TUint8*)dst;
     gRamDiskSectors = (TUint32)(len / 512);

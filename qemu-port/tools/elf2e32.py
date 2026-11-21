@@ -18,7 +18,7 @@ K_IMAGE_IMP_FMT_PE2 = 0x20000000
 EUSER_PE2_DLL = b'euser{000a0000}[100039e5].dll\0'
 
 
-def pack(blob, euser_import_ord=0):
+def pack(blob, euser_import_ord=0, iat_off=IAT_OFF):
     if blob[:7] != b'\x7fELF\x01\x01\x01':
         raise ValueError('expected little-endian ELF32')
     hdr = struct.unpack_from('<HHIIIIIHHHHHH', blob, 16)
@@ -65,7 +65,7 @@ def pack(blob, euser_import_ord=0):
             if not 0 <= offset <= target[5] - 4:
                 raise ValueError('relocation outside target section')
             if euser_import_ord and symbol[5] == 0xfff1:  # SHN_ABS: PE2 IAT slot
-                if typ != 1 or not (0x400000 <= symbol[1] < 0x410000):
+                if typ != 1 or not (0x400000 <= symbol[1] <= 0x400000 + iat_off):
                     raise ValueError('unsupported absolute relocation')
                 relocations[s[7]].append((offset, 1))  # TEXT-region fixup
                 continue
@@ -92,10 +92,10 @@ def pack(blob, euser_import_ord=0):
     header = bytearray(build_args_e32(0x10000001, 0x10000002, 0x10000002)[:156])
     code = contents(text)
     if euser_import_ord:
-        if len(code) > IAT_OFF:
-            raise ValueError(f'code {len(code)} exceeds IAT offset {IAT_OFF:#x}')
+        if len(code) > iat_off:
+            raise ValueError(f'code {len(code)} exceeds IAT offset {iat_off:#x}')
         code = bytearray(code)
-        code.extend(b'\x00' * (IAT_OFF - len(code)))
+        code.extend(b'\x00' * (iat_off - len(code)))
         code.extend(struct.pack('<I', euser_import_ord))  # PE2 IAT: 1-based ord
         code = bytes(code)
     initialized = contents(data) if data[5] else b''
@@ -116,7 +116,7 @@ def pack(blob, euser_import_ord=0):
         imp = struct.pack('<I', isize) + sec
         struct.pack_into('<I', header, 44, K_IMAGE_HDR_FMT_V | K_IMAGE_IMP_FMT_PE2)
         struct.pack_into('<I', header, 84, 1)  # one DLL dependency (EUSER)
-    struct.pack_into('<I', header, 96, IAT_OFF if euser_import_ord else len(code))
+    struct.pack_into('<I', header, 96, iat_off if euser_import_ord else len(code))
     struct.pack_into('<5I', header, 100, 156, data_off if initialized else 0,
                      imp_off, cr_off if cr else 0, dr_off if dr else 0)
     struct.pack_into('<I', header, 20, KImageCrcInitialiser)
@@ -130,9 +130,12 @@ def main():
     parser.add_argument('output')
     parser.add_argument('--euser-import', type=int, default=0, metavar='ORD',
                         help='emit a PE2 EUSER.DLL import for this 1-based ordinal')
+    parser.add_argument('--iat-off', type=lambda s: int(s, 0), default=IAT_OFF, metavar='OFF',
+                        help='byte offset of the PE2 IAT slot inside the code region '
+                             '(default 0x8000; larger for big images like DOOM)')
     args = parser.parse_args()
     try:
-        result = pack(Path(args.input).read_bytes(), args.euser_import)
+        result = pack(Path(args.input).read_bytes(), args.euser_import, args.iat_off)
     except (ValueError, KeyError, IndexError, struct.error) as error:
         parser.error(str(error))
     Path(args.output).write_bytes(result)

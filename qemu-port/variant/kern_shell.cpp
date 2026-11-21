@@ -981,7 +981,7 @@ static TBool IsGraphicsImage(const char* aName)
 // raw words after the name) becomes the process command line.
 static void RunImage(const char* aName, const char* aTail)
     {
-    static TUint8 eBuf[65536];
+    static TUint8 eBuf[512 * 1024];  // fit large E32s (DOOM ~338 KiB) + margin
     char cand[3][164];
     int n = 0;
     while (aName[n] && n < 150) { cand[0][n] = aName[n]; ++n; }

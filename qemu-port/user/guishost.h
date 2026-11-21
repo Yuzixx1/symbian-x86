@@ -27,6 +27,25 @@
  * a click even if press+release happen between two polls.  Both fields re-use
  * the old reserved word / a tail slot, so every pre-existing field keeps its
  * offset and GUI_VERSION stays 1.
+ *
+ * GC_BLIT (opcode 3) -- real bulk RGBA blit, appended 2026-11-21.  A full
+ * 640x400x4 frame is 1,024,000 bytes, far larger than the GUI_MAX_CMDS list,
+ * so the source lives in a SEPARATE low-RAM user buffer whose physical base
+ * and byte size are published in the two tail fields below.  gui_shared's new
+ * fields are appended after button_seq (all prior offsets, including cmds and
+ * button_seq, are unchanged) so GUI_VERSION stays 1; old binaries simply
+ * ignore the tail and never emit GC_BLIT.  ABI contract for a blit:
+ *   gui_shared.blit_src_phys  physical (== virtual in low RAM) source base,
+ *                             0x1000 <= phys < 0x80000000, kernel validates
+ *   gui_shared.blit_src_size  allocated source bytes (<= 640*400*4); the
+ *                             kernel rejects a blit whose w*h*4 + src_offset
+ *                             exceeds it
+ *   gc_blit_cmd.{x,y,w,h}     destination rect in the VBE LFB (0,0 top-left)
+ *   gc_blit_cmd.src_offset    byte offset into the source buffer
+ * Source pixels are RGBA8888 (R,G,B,A byte order); the kernel writes each as
+ * a 0x00RRGGBB word into the 32bpp LFB, so the A byte is ignored and R/B are
+ * correctly oriented on screen.  One GC_BLIT in a one-command exec paints the
+ * whole frame; clipping/scales are the caller's job (no new exec slot used).
  * ------------------------------------------------------------------------ */
 
 #define QE_EXEC_GUI_FBBASE      249u
@@ -48,10 +67,20 @@
 #define GC_CLEAR                0u   /* a = 0x00RRGGBB colour                  */
 #define GC_RECT                 1u   /* a=x b=y c=w d=h e=colour              */
 #define GC_PUTC                 2u   /* a=x b=y c=char d=fg e=bg              */
+#define GC_BLIT                 3u   /* bulk RGBA source -> LFB, see ABI above */
 
 struct gui_cmd {
     volatile unsigned type;
     volatile unsigned a, b, c, d, e;
+};
+
+/* GC_BLIT overlays struct gui_cmd exactly (6 u32): a=x b=y c=w d=h
+ * e=src_offset.  Source pixels come from gui_shared.blit_src_phys, not from
+ * this command, so a full frame takes ONE display-list slot. */
+struct gc_blit_cmd {
+    volatile unsigned type;
+    volatile unsigned x, y, w, h;
+    volatile unsigned src_offset;
 };
 
 struct gui_shared {
@@ -67,6 +96,10 @@ struct gui_shared {
     struct gui_cmd    cmds[GUI_MAX_CMDS];
     volatile unsigned button_seq;     /* kernel: increments on button change  */
                                       /* (tail append: cmds offset unchanged) */
+    /* GC_BLIT source descriptor (tail append; ABI documented at file top).
+     * User writes both fields before an exec-251 list containing GC_BLIT. */
+    volatile unsigned blit_src_phys;  /* physical base of RGBA source buffer  */
+    volatile unsigned blit_src_size;  /* byte size of that source buffer      */
 };
 
 #endif /* QPORT_USER_GUIHOST_H */

@@ -65,10 +65,38 @@ USER_DIR = os.path.join(BUILD, "user")
 EUSER_DLL = os.path.join(QPORT, "EUSER.DLL")
 PROGRAMS_IMG_NAME = "programs.img"
 E32_MIN_SIZE = 30000
-DISK_MB, FS_MB, PART_LBA = 32, 16, 2048
+# Disk geometry. Grown from 32/16 MB to 64/48 MB so the FAT32 volume really
+# holds the full curated set (~2.6 MB of E32s + EUSER.DLL) *and* the Freedoom
+# IWAD (28,795,076 B ~= 27.5 MiB): about 30.5 MiB of files, ~47 MiB usable on
+# this partition. PART_LBA stays 2048: the kernel hard-codes partlba 2048 and
+# the MBR/boot-info table layout depends on it. fs_secs and the MBR entry are
+# derived from FS_MB below, so only these numbers need changing.
+DISK_MB, FS_MB, PART_LBA = 64, 48, 2048
+
+# Freedoom IWAD is a build-time asset, NEVER copied into the git repo (28 MB).
+# Drop-off points, in priority order; the scout downloads v0.13.0 into /tmp.
+# On the FAT volume it is staged under the 8.3 alias FDOOM1.WAD, which is the
+# name the guest DOOM E32 and r1_doom_test.py both use.
+WAD_NAME = "FDOOM1.WAD"
+WAD_CANDIDATES = (
+    os.path.join(QPORT, "wads", "freedoom1.wad"),
+    os.path.join(QPORT, "wads", "FREEDOOM1.WAD"),
+    os.path.join(BUILD, "wad", "freedoom1.wad"),
+    os.path.join(BUILD, "wad", "FREEDOOM1.WAD"),
+    "/tmp/opencode/doom/freedoom-0.13.0/freedoom1.wad",
+    "/tmp/opencode/doom/freedoom1.wad",
+)
 
 
-def curated_programs(work):
+def find_wad():
+    """First existing Freedoom IWAD, or None (caller warns and skips)."""
+    for path in WAD_CANDIDATES:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def curated_programs(work, wad=None):
     """End-user E32s + support files, as (source path, FAT name) pairs.
 
     Names are 8.3 where possible; longer ones get mtools' LFN aliases, which
@@ -81,6 +109,9 @@ def curated_programs(work):
     a real Symbian-style command line works straight off X:, and `make
     userland-exe` creates .EXE aliases for the whole catalog in build/user
     for custom disks. One ~33 KB alias, no format change, no image doubling.
+
+    `wad`, when given, is the Freedoom IWAD 8.3 alias FDOOM1.WAD (added by the
+    caller so its presence is decided in one place and warned about once).
     """
     if not os.path.isdir(USER_DIR):
         return []
@@ -98,6 +129,11 @@ def curated_programs(work):
         out.append((calc, "CALC.EXE"))
     if os.path.exists(EUSER_DLL):
         out.append((EUSER_DLL, "EUSER.DLL"))
+    iwad_note = ""
+    if wad:
+        iwad_note = ("FDOOM1.WAD is the Freedoom IWAD (freedoom1.wad, BSD-3-Clause,\r\n"
+                     "freely redistributable) staged under its 8.3 guest-safe name.\r\n"
+                     "Launch with DOOM; optional PWADs go in build/wad/ as *.WAD.\r\n")
     notes = os.path.join(work, "NOTES.TXT")
     with open(notes, "w") as f:
         f.write("Symbian EKA2 end-user programs\r\n"
@@ -112,6 +148,7 @@ def curated_programs(work):
                 "For every other app `make userland-exe` writes <NAME>.EXE aliases\r\n"
                 "into build/user/ — copy those onto a custom disk to use .EXE names.\r\n"
                 "The bytes are genuine E32/PE2 images; .EXE is only the file name.\r\n"
+                + iwad_note +
                 "EUSER.DLL must stay next to the program images.\r\n")
     readme = os.path.join(work, "README.TXT")
     with open(readme, "w") as f:
@@ -122,12 +159,22 @@ def curated_programs(work):
 
 
 def build_programs_image(work):
-    """Return (path to a 32MB MBR+FAT32 disk, staged file names); (None, []) on skip."""
+    """Return (path to a 64MB MBR+FAT32 disk, staged file names); (None, []) on skip."""
     for tool in ("mkfs.fat", "mcopy", "mdir"):
         if not shutil.which(tool):
             print(f"PROGRAMS-IMG: skipped ({tool} missing)")
             return None, []
-    files = curated_programs(work)
+    wad = find_wad()
+    if wad:
+        print(f"PROGRAMS-IMG: staging FREEDOOM1.WAD from {wad} "
+              f"({os.path.getsize(wad)} bytes) as {WAD_NAME}")
+    else:
+        print("PROGRAMS-IMG: WARN FREEDOOM1.WAD not found (looked in "
+              "qemu-port/wads/, build/wad/ and /tmp/opencode/doom/); "
+              "building FAT image without an IWAD")
+    files = curated_programs(work, wad)
+    if wad:
+        files.append((wad, WAD_NAME))
     if not files:
         print("PROGRAMS-IMG: skipped (no user E32s built; run make userland)")
         return None, []

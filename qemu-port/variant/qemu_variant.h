@@ -344,6 +344,13 @@ TBool E32ProcessDead(TUint aId);   // reaper predicate: husks count as dead
 void VgaTeletype(char aC);
 void ShellSpawnFull();
 
+// Bulk framebuffer blit exec (variant/qemu_fbblit.cpp).  Slots 274/275 would
+// overlap EpocFastExecTable, so blit/info are ops 3/2 of genuine slow exec 270.
+TUint display_pitch();                       // bytes per scanline (derived from geometry)
+TInt fbblit_info_exec(TInt aArg);            // exec 270 op 2: struct fbblit_info out
+TInt fbblit_blit_exec(TInt aArg);            // exec 270 op 3: struct fbblit_req in
+TInt FbBlitInit();                           // idempotent boot hook
+
 // Genuine G launch integration; separate from legacy E32Run/reaper ownership.
 void E32EnsureUserTss();
 TInt R1GCommand(const char* mode);

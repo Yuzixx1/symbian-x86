@@ -18,12 +18,15 @@ namespace
     {
     // Device-wide, boot-lifetime quarantine: all partitions/letters on the same
     // dispatch device share it. Never indexed by reusable mount-table slot.
-    TBool sStorageFailed[8] = { EFalse };
-    TUint32 sWriteAttempts[8] = { 0 };
+    // Indexed by storage device (not mount slot). Must cover every valid
+    // device, incl. the GRUB RAMDISK at dev 8 (X:).
+    const TInt kStorageDevCount = 16;
+    TBool sStorageFailed[kStorageDevCount] = { EFalse };
+    TUint32 sWriteAttempts[kStorageDevCount] = { 0 };
     TBool StorageFailed(TInt dev)
-        { return dev < 0 || dev >= 8 || sStorageFailed[dev]; }
+        { return dev < 0 || dev >= kStorageDevCount || sStorageFailed[dev]; }
     void StoragePoison(TInt dev)
-        { if (dev >= 0 && dev < 8) sStorageFailed[dev] = ETrue; }
+        { if (dev >= 0 && dev < kStorageDevCount) sStorageFailed[dev] = ETrue; }
     TInt StorageWrite(int dev,TUint32 lba,TUint count,const TUint8* data)
         {
         if (StorageFailed(dev)) return KErrCorrupt;

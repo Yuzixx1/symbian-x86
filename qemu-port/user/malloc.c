@@ -5,13 +5,21 @@
    creates it with chunk_create (genuine EExecChunkCreate) and OOM grows it
    with chunk_adjust (EExecChunkAdjust). The free list lives inside the chunk;
    free() coalesces both neighbours so allocate/free cycles stay stable.
-   No locks: user-thread isolation is M-03, not this layer. Growth is capped
-   below the 100 KiB oversize probe in malloctest.c. */
+   No locks: user-thread isolation is M-03, not this layer.
+
+   Heap ceiling raised from 64 KiB to 4 MiB (0x400000). This is a genuine
+   RChunk ceiling, not a kernel cap: the Direct memory model backs chunks with
+   reserved RAM from the 128 MiB QEMU image, and the 107/108 executives really
+   create/adjust the chunk. 4 MiB is deliberate: it covers a DOOM-class
+   framebuffer/texture working set and a Lua-class GC heap while leaving ample
+   RAM for the kernel, VBE framebuffer and other processes. NB: the old
+   `malloc(100000)` "oversize must fail" probe in malloctest.c is obsolete
+   under this ceiling -- a 100 KiB allocation is now expected to succeed. */
 
 #define ALIGN 8
-#define INITIAL_CHUNK 16384u
+#define INITIAL_CHUNK 16384u      /* start small, grow on demand to MAX_CHUNK */
 #define GROW_STEP 16384u
-#define MAX_CHUNK 65536u
+#define MAX_CHUNK 0x400000u       /* 4 MiB genuine chunk-backed user heap */
 
 struct Block { unsigned size; struct Block* next; };  /* size incl. header */
 
@@ -120,15 +128,57 @@ void* malloc(unsigned size)
         }
 }
 
-void free(void* ptr)
+/* Validate a user pointer and recover its block header. 0 for NULL/invalid. */
+static struct Block* block_of(void* ptr)
 {
     struct Block* b;
-    if (!ptr) return;
+    if (!ptr) return 0;
     b = (struct Block*)((unsigned char*)ptr - sizeof(struct Block));
     /* Sanity: inside the committed chunk, 8-aligned, plausible size. */
     if ((unsigned char*)b < heap_base || (unsigned char*)b >= heap_base + heap_size ||
         ((unsigned)ptr & (ALIGN - 1)) ||
         b->size < sizeof(struct Block) + ALIGN || b->size > heap_size)
-        return;
-    insert_block(b);
+        return 0;
+    return b;
+}
+
+void free(void* ptr)
+{
+    struct Block* b = block_of(ptr);
+    if (b) insert_block(b);
+}
+
+/* Zero-filled allocation. Overflow-checked before multiplying. */
+void* calloc(unsigned count, unsigned size)
+{
+    unsigned total;
+    unsigned char* p;
+    if (size && count > 0xffffffffu / size) return 0;
+    total = count * size;
+    p = (unsigned char*)malloc(total ? total : 1);
+    if (!p) return 0;
+    for (unsigned i = 0; i < total; ++i) p[i] = 0;
+    return p;
+}
+
+/* Resize an allocation, preserving the prefix. Shrinks in place; grows by
+   allocating a new block, copying the old payload and releasing the old one.
+   ptr == NULL behaves like malloc, new_size == 0 behaves like free. */
+void* realloc(void* ptr, unsigned new_size)
+{
+    struct Block* b;
+    unsigned old_size, copy, i;
+    unsigned char* p;
+    if (!ptr) return malloc(new_size);
+    if (!new_size) { free(ptr); return 0; }
+    b = block_of(ptr);
+    if (!b) return 0;
+    old_size = b->size - sizeof(struct Block);
+    if (new_size <= old_size) return ptr;   /* shrink: keep the block */
+    p = (unsigned char*)malloc(new_size);
+    if (!p) return 0;                       /* old block still valid on OOM */
+    copy = old_size < new_size ? old_size : new_size;
+    for (i = 0; i < copy; ++i) p[i] = ((unsigned char*)ptr)[i];
+    free(ptr);
+    return p;
 }

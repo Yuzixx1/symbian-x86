@@ -265,3 +265,32 @@ either is missing, stages the present ones with `EUSER.DLL`, boots with
 screendump at `/tmp/opencode/window_system.png`. Unlike the old DESKTOP handoff
 (`DT: handing off` -> app takes over -> `desktop` again), the server stays
 resident while clients come and go.
+
+## Ported real software (append-only)
+
+These four E32s are ports of *existing third-party programs*, not apps written
+for this OS. Each brings a genuinely different workload (a scripting language,
+a virtual machine, a decompressor and a big-number calculator) onto the
+freestanding runtime via the shims described in
+[`PORTED_SOFTWARE.md`](PORTED_SOFTWARE.md). All are being built by sibling
+agents concurrently: a row is only "shipped" once its `build/user/<NAME>.E32`
+exists and its harness passes; the consolidated test skips missing images
+rather than failing. Statuses here are deliberately conservative (subset / in
+progress) until each port's real scope is verified.
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **LUA** | Lua-style scripting core rewritten to freestanding C: expressions, variables and `print` through the ord-915 shim; no io/os/math libraries (those need libm or PortFile). | `LUA:` | Std+915 | `r1_ported_software_test.py` |
+| **ZMACHINE** | Z-machine interpreter: chunk-backed virtual memory, story file read via PortFile, line commands (`look`, `quit`). A redistributable story fixture is still needed for a full Zork demo. | `ZMAC:` / `ZORK:` | Std+915 | `r1_ported_software_test.py` |
+| **ZIP32** | miniz inflate subset wrapped as a zip member reader: walks a small staged `.zip`, checks a CRC. The compressor is intentionally not ported. | `ZIP:` | Std+915 | `r1_ported_software_test.py` |
+| **BC32** | bc-style desktop calculator: fixed-capacity big-number digits, precedence and a few variables with `quit`; no GNU bc compatibility, math library or scripts. Licence still to be settled. | `BC:` | Std+915 | `r1_ported_software_test.py` |
+
+`tools/r1_ported_software_test.py` probes for all four E32s, skips the ones not
+built, verifies with `mdir` that the present images and `EUSER.DLL` are packed
+into `/PROGRAMS.IMG` on a GRUB ISO, boots the ISO with `-vga std`, feeds each
+program's name and a basic command (`print(1+2)`, `look`/`quit`, a zip listing,
+`1+2`/`quit`), and asserts start/result/done markers, the `e32run: bind slot
+... ord 915` line and no `Exc`/`PanicKernExec`/`FAULT`. Logs are written to
+`/tmp/opencode/r1_ported_<app>.log`. Run it with
+`python3 tools/r1_ported_software_test.py`; exit 0 means every available port
+passed (or all four were still missing).
