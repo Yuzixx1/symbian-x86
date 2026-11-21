@@ -34,7 +34,7 @@ EXC_KEYS = ("Exc ", "PanicKernExec", "FAULT:", "MMU #PF")
 EXPECTED = [
     "DT: DESKTOP READY",
     "DT: fb=0x",
-    "DT: icons=8",
+    "DT: icons=10",
     "DT: select CALC",
     "DT: select PING",
     "DT: launched ",
