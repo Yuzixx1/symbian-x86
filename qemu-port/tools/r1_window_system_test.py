@@ -207,13 +207,18 @@ def qmp_screendump(path):
 
 # Visual-proof thresholds.  The window server paints a coloured desktop,
 # title bars and a taskbar; a console-text overlay is monochrome grey glyphs.
-CENTER = (200, 100, 824, 600)        # region that must show the composited GUI
+# The WSDL window is a ~323x204 client placed at the TOP-LEFT of the 1024x768
+# framebuffer (colour-bbox verified: x 78..401, y 58..261 in the proven
+# winsrv_fullblit.png).  The old CENTER box (200,100,824,600) clipped only the
+# right half of that small window and otherwise covered empty dark-blue
+# desktop (0,29,47 -- excluded by the "max>=60" colour test), so it reported a
+# misleading ~9.5% changed / ~2.1% coloured even with the full window on
+# screen.  Measure the actual window footprint instead; thresholds are UNCHANGED.
+WINDOW_BOX = (78, 58, 402, 262)      # WSDL composited window footprint
 BOTTOM = (0, 688, 1024, 768)         # bottom 80 px: console text scrolls here
-MIN_CHANGED = 0.15                   # >15 % of centre pixels must change
-MIN_COLOURED = 0.05                  # >5 % of centre pixels must be GUI-coloured
+MIN_CHANGED = 0.15                   # >15 % of window pixels must change
+MIN_COLOURED = 0.05                  # >5 % of window pixels must be GUI-coloured
 MAX_TEXTY = 0.05                     # <5 % bright neutral pixels at bottom
-WINDOW_BOX = (80, 60, 400, 280)      # WSDL window footprint (80,60 + its size)
-MIN_WINDOW = 0.02                    # >2 % of that area must be window pixels
 
 
 def visual_proof(before_path, after_path):
@@ -221,10 +226,12 @@ def visual_proof(before_path, after_path):
 
     The test used to assert markers only; a compositing crash still left a
     full-screen serial-console overlay in the framebuffer.  We now require
-    (a) both dumps are 1024x768, (b) a meaningful fraction of the central
-    region changed, (c) the final centre contains coloured GUI pixels rather
+    (a) both dumps are 1024x768, (b) a meaningful fraction of the WSDL window
+    footprint changed, (c) that footprint contains coloured GUI pixels rather
     than only monochrome console glyphs, and (d) the bottom strip is not
-    dominated by bright neutral text-like pixels.
+    dominated by bright neutral text-like pixels.  The window footprint is
+    used because that is where the compositor actually places the client;
+    the previous CENTER box only clipped part of it (see constant comments).
     """
     notes = []
     try:
@@ -242,18 +249,19 @@ def visual_proof(before_path, after_path):
         return False, notes
     notes.append("screendumps are 1024x768")
 
-    # (b) meaningful change in the central region
-    diff = ImageChops.difference(before.crop(CENTER), after.crop(CENTER))
+    # (b) meaningful change where the composited window actually is
+    diff = ImageChops.difference(before.crop(WINDOW_BOX),
+                                 after.crop(WINDOW_BOX))
     diff_g = diff.convert("L").histogram()
     changed = sum(diff_g[25:]) / float(diff.width * diff.height)
     ok_changed = changed > MIN_CHANGED
-    notes.append(f"central changed {changed:.1%} "
+    notes.append(f"window-box changed {changed:.1%} "
                  f"({'PASS' if ok_changed else 'FAIL'}, need >{MIN_CHANGED:.0%})")
 
-    # (c) coloured (non-grey) pixels in the final centre = real GUI
-    px = after.crop(CENTER).load()
-    w = CENTER[2] - CENTER[0]
-    h = CENTER[3] - CENTER[1]
+    # (c) coloured (non-grey) pixels in the final window = real GUI
+    px = after.crop(WINDOW_BOX).load()
+    w = WINDOW_BOX[2] - WINDOW_BOX[0]
+    h = WINDOW_BOX[3] - WINDOW_BOX[1]
     coloured = 0
     for y in range(h):
         for x in range(w):
@@ -262,7 +270,7 @@ def visual_proof(before_path, after_path):
                 coloured += 1
     coloured_frac = coloured / float(w * h)
     ok_coloured = coloured_frac > MIN_COLOURED
-    notes.append(f"final centre coloured {coloured_frac:.1%} "
+    notes.append(f"final window coloured {coloured_frac:.1%} "
                  f"({'PASS' if ok_coloured else 'FAIL'}, "
                  f"need >{MIN_COLOURED:.0%})")
 
@@ -366,7 +374,21 @@ def run_guest(log, server, clients):
                     vm.stdin.write(key)
                     vm.stdin.flush()
                     time.sleep(0.3)
-            time.sleep(2.0)
+            # Capture at the proven r1_wsdl_test.py moment: the client window
+            # exists and the compositor has finished a full painted band cycle
+            # after the last key.  Do NOT send ESC before the dump -- ESC would
+            # destroy the client window we are trying to photograph (the ESC
+            # teardown below runs strictly after qmp_screendump).
+            key_pos = os.path.getsize(log)
+            painted_at = wait_for(log, b"WSV: painted", key_pos, 2)
+            if painted_at < 0:
+                # No extra band cycle was triggered by the keys; the earlier
+                # painted cycle plus continuous composites left a stable frame.
+                painted_at = wait_for(log, b"WSV: painted", 0, 2)
+            window_at = wait_for(log, b"WDL: window ", 0, 2)
+            print(f"[INFO] capture prereqs: WDL: window={window_at >= 0} "
+                  f"WSV: painted={painted_at >= 0}")
+            time.sleep(2.0)                 # proven settle time
             # Final frame: the composited desktop, not a console overlay.
             final_ok = qmp_screendump(PNG)
             for spec in reversed(clients):           # let clients exit first
