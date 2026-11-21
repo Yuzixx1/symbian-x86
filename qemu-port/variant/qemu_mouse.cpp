@@ -166,6 +166,7 @@ namespace
         // ISR, just like the button mask: a desktop can now redraw its cursor
         // every frame from gSh->mouse_x/y without waiting for a DRAW exec.
         gui_publish_position(gX, gY);
+        wsrv_publish_mouse(gX, gY, gButtons, gButtonSeq);  // window-server ring
         ++gPackets;
         gEventPending = ETrue;
         gPktIdx = 0;

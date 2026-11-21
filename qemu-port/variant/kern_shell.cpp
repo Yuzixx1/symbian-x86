@@ -29,12 +29,42 @@ static void VgaInit();
 
 // exec-268 hand-off state.  While a full-screen GUI program owns the LFB the
 // mirror is muted; a NON-graphics child launched by that GUI program (DESKTOP
-// -> CALC/FILEMGR/...) must get the display back.  Track the GUI owner's pid
-// and the shell's own pid so the mirror can be resumed for the child without
-// letting the shell's own launch chatter paint over the GUI.
-static TUint sGuiMirrorPid = 0;
+// -> CALC/FILEMGR/...) must get the display back.  More than one graphics app
+// may own the screen at once (WINSRV compositor + WSDL windowed client), so
+// track EVERY live GUI owner's pid plus the shell's own pid.  The mirror is
+// resumed only once ALL graphics owners die -- never merely because a second
+// graphics app was launched.
+static const TInt KMaxGuiMirrorPids = 4;
+static TUint sGuiMirrorPids[KMaxGuiMirrorPids] = {0, 0, 0, 0};
+static TInt  sGuiMirrorCount = 0;
 static TUint sMirrorShellPid = 0;
 static volatile TBool sChildTookMirror = EFalse;
+
+static TBool IsGuiMirrorOwner(TUint aPid)
+    {
+    for (TInt i = 0; i < KMaxGuiMirrorPids; ++i)
+        if (sGuiMirrorPids[i] && sGuiMirrorPids[i] == aPid) return ETrue;
+    return EFalse;
+    }
+
+static void AddGuiMirrorOwner(TUint aPid)
+    {
+    if (!aPid || IsGuiMirrorOwner(aPid)) return;
+    for (TInt i = 0; i < KMaxGuiMirrorPids; ++i)
+        if (!sGuiMirrorPids[i])
+            { sGuiMirrorPids[i] = aPid; ++sGuiMirrorCount; return; }
+    }
+
+static TInt ReapGuiMirrorOwners()
+    {
+    TInt reaped = 0;
+    for (TInt i = 0; i < KMaxGuiMirrorPids; ++i)
+        {
+        if (sGuiMirrorPids[i] && E32ProcessDead(sGuiMirrorPids[i]))
+            { sGuiMirrorPids[i] = 0; --sGuiMirrorCount; ++reaped; }
+        }
+    return reaped;
+    }
 
 // Raw char output: COM1 + VGA with NO line ending. Genuine Kern::Printf
 // appends \r\n per call (A::DebugPrint), so per-char echo must bypass it
@@ -162,13 +192,13 @@ namespace
         // A graphical parent (DESKTOP) keeps its own RDebug markers on COM1
         // even after a child has taken the mirror back over.
         TUint pid = 0;
-        if (sGuiMirrorPid)
+        if (sGuiMirrorCount)
             {
             DThread* self = &Kern::CurrentThread();
             if (self && self->iOwningProcess)
                 pid = (TUint)self->iOwningProcess->iId;
             }
-        if (sGuiMirrorPid && pid == sGuiMirrorPid)
+        if (pid && IsGuiMirrorOwner(pid))
             return;
         if (gFbMirrorSuspended)
             {
@@ -924,7 +954,7 @@ static TBool IsGraphicsImage(const char* aName)
     {
     static const char* const kGraphics[] = {
         "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER",
-        "DTCALC", "DTEDIT"
+        "DTCALC", "DTEDIT", "WINSRV", "WSDL"
         };
     if (!aName) return EFalse;
     const char* base = aName;
@@ -1042,7 +1072,7 @@ static void RunImage(const char* aName, const char* aTail)
         {
         sForegroundPid = E32LastPid();
         if (graphics)
-            sGuiMirrorPid = sForegroundPid;   // resume when this process dies
+            AddGuiMirrorOwner(sForegroundPid);   // resume when all owners die
         sJustLaunched = ETrue;   // post-Exec prompt must be deferred if leased
         KPrintf("%s started (user process, pid=%u)\r\n", aName, sForegroundPid);
         }
@@ -2141,9 +2171,8 @@ static void ShellMain(TAny* /*aPtr*/)
         // pixels and repaint the shell prompt. E32ProcessDead() also covers a
         // GUI app that never leased the console, so the mirror is never left
         // muted after it leaves the screen.
-        if (sGuiMirrorPid && E32ProcessDead(sGuiMirrorPid))
+        if (sGuiMirrorCount && ReapGuiMirrorOwners() && !sGuiMirrorCount)
             {
-            sGuiMirrorPid = 0;
             if (sChildTookMirror)
                 {
                 // A non-graphics child already resumed the mirror and painted

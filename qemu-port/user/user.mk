@@ -1352,3 +1352,36 @@ build/user/dtcalc.elf: build/user/start.o build/user/runtime.o build/user/guilib
 build/user/DTCALC.E32: build/user/dtcalc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# WINDOW SERVER E32 (WSV) -- a genuine PE2 E32 process that owns the VBE LFB,
+# composites client windows from the kernel's struct ws_shared (slow execs
+# WS_BASE / WS_SIZE / WS_OP), draws title bars / borders / focus highlight plus
+# a desktop and taskbar, and dispatches MOVE / DOWN / KEY events from the
+# shared input ring.  Falls back to a local shared instance when the kernel
+# window-server executives are unavailable.  Genuine PE2 import of EUSER.DLL
+# ordinal 915 (RDebug::Printf); IAT slot winsrv_printf_slot at 0x408000.
+userland: build/user/WINSRV.E32
+build/user/winsrv.o: user/winsrv.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/winsrv.elf: build/user/start.o build/user/runtime.o build/user/winsrv.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=winsrv_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WINSRV.E32: build/user/winsrv.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
+# WINDOW-SERVER CLIENT LIBRARY + WINDOWED CALCULATOR E32 (WSDL) -- a real
+# client of the window server: wsclient.c draws into private per-window content
+# buffers from variant/qemu_windowsrv.h's struct ws_shared, while wsdl.c opens
+# ONE calculator window and services ws_get_event() mouse/key events.  Genuine
+# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
+# wsdl_printf_slot at 0x408000 (textSize).
+userland: build/user/WSDL.E32
+build/user/wsclient.o: user/wsclient.c user/wsclient.h variant/qemu_windowsrv.h user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/wsdl.o: user/wsdl.c user/wsclient.h user/runtime.h variant/qemu_windowsrv.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/wsdl.elf: build/user/start.o build/user/runtime.o build/user/wsclient.o build/user/wsdl.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=wsdl_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WSDL.E32: build/user/wsdl.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet

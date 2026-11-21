@@ -242,3 +242,26 @@ Both are graphical foreground programs: when launched via exec 268 from
 `DESKTOP` they take over the display and the desktop hands input over to them
 (`DT: handing off`, `DT: DONE`). Run them directly from the `X:/>` shell with
 `DTCALC` / `DTEDIT`, or click the new `DTCALC` / `DTEDIT` icons on the desktop.
+
+## Window system (append-only)
+
+The window server is a new mode alongside the one-app-at-a-time desktop: a
+long-lived server owns the framebuffer and composites private client window
+buffers, so several clients can stay visible at once. Both images are still
+being built by other agents; an entry here lists the intended image, marker
+prefix and harness, and is only "shipped" once its `build/user/<NAME>.E32`
+exists and is packed into `PROGRAMS.IMG`. See
+[`WINDOW_SERVER.md`](WINDOW_SERVER.md) for the full architecture.
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **WINSRV** | Window server: claims the shared window control block, owns the VBE LFB, paints the desktop, routes polled input events to the focused window and composites registered client buffers into one frame per exec 251 submit. Start it first with `winsrv`; Esc/clean exit returns to the shell. | `WSV:` | Std+915 | `r1_window_system_test.py` |
+| **WSDL** | Windowed calculator client: registers a fixed-size window with `WINSRV`, draws a keypad/result field into its private buffer, handles digit/operator keys and clicks through the client event API, and presents dirty frames for the server to composite. Start with `wsdl` while `winsrv` is running. | `WDL:` | Std+915 | `r1_window_system_test.py` |
+
+`tools/r1_window_system_test.py` probes for both E32s, skips gracefully while
+either is missing, stages the present ones with `EUSER.DLL`, boots with
+`-vga std`, feeds `winsrv` then `wsdl` plus a few keys, asserts the `WSV:` and
+`WDL:` markers with no `Exc`/`PanicKernExec`/`FAULT`, and takes a best-effort
+screendump at `/tmp/opencode/window_system.png`. Unlike the old DESKTOP handoff
+(`DT: handing off` -> app takes over -> `desktop` again), the server stays
+resident while clients come and go.

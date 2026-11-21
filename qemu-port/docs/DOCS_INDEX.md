@@ -198,3 +198,23 @@ This brings the indexed Markdown total to **95**.
   dependency for the editor, desktop icon integration and the QEMU proof flow.
 
 This brings the indexed Markdown total to **96**.
+
+## Added — window server (append-only)
+
+- [WINDOW_SERVER.md](WINDOW_SERVER.md) — Architecture of the new window
+  system being built concurrently: why the old standalone/handoff model cannot
+  coexist, the server-owned framebuffer plus private client window buffers,
+  kernel execs and low-RAM shared control block (slots, dirty bits, input ring),
+  server lifecycle, the `user/wsclient.h` client API, input event flow, how to
+  run `winsrv` then `wsdl`, honest limitations (cooperative polling, fixed
+  slots/buffer sizes, no resize/compositor effects), and a comparison with the
+  old DESKTOP. Headers `variant/qemu_windowsrv.h` / `user/wsclient.h` are the
+  authoritative ABI once they land.
+- `tools/r1_window_system_test.py` — consolidated host test that probes
+  `build/user/WINSRV.E32` and `build/user/WSDL.E32`, skips gracefully if either
+  is missing, stages what is present plus `EUSER.DLL` on the GRUB ISO, boots once
+  with `-vga std`, feeds `winsrv` then `wsdl` and a few calculator keys, asserts
+  the `WSV:` / `WDL:` marker families with no `Exc`/`PanicKernExec`/`FAULT`, and
+  grabs a best-effort QMP screendump to `/tmp/opencode/window_system.png`.
+
+This brings the indexed Markdown total to **97**.

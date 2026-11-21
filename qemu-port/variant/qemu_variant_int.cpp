@@ -227,6 +227,7 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
             }
         ++gKbdKeys;
         QemuKbdPush(c);
+        wsrv_publish_key((unsigned int)c);  // window-server event ring
         }
     }
 

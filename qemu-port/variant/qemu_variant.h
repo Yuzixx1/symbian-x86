@@ -180,6 +180,16 @@ TInt audio_tone(TInt aFreq, TInt aMs);              // play one note (freq Hz, m
 // op 0 -> identity-mapped ps_census base (user/pshost.h), op 1 -> refresh.
 TUint PsExecSlot();                                 // == 241, for diagnostics
 
+// Window-server shared memory + slow execs (variant/qemu_windowsrv.cpp).
+// Appended table slots 271 (base) / 272 (size) / 273 (multiplexed ctl);
+// layout + op codes in variant/qemu_windowsrv.h. Boot hook idempotent.
+TInt windowsrv_init();
+TUint32 windowsrv_base();
+TUint windowsrv_size();
+// PS/2 ISR bridges: no-ops until a window server registers via exec 273 op 1.
+void wsrv_publish_mouse(TInt aX, TInt aY, TUint aButtons, TUint aSeq);
+void wsrv_publish_key(TUint aKey);
+
 // ATA PIO driver (variant/qemu_ata.cpp). Devices 0..3 = pri-master,
 // pri-slave, sec-master, sec-slave. LBA28, polled.
 TInt AtaInit();
