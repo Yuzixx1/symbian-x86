@@ -40,7 +40,7 @@ BOOT_TIMEOUT = 55
 # Each entry: accepted marker prefixes. The upper-case program name + ':' is
 # also accepted automatically as a fallback marker.
 PROGRAMS = [
-    ("BREAKOUT", ["BO:", "BR:", "BK:", "BREAKOUT:"]),
+    ("BREAKOUT", ["BRK:", "BO:", "BR:", "BK:", "BREAKOUT:"]),
     ("GUIMENU",  ["GM:", "MENU:", "ML:", "GUIMENU:"]),
     ("GUIHELLO", ["HG:", "GH:", "GUIHELLO:"]),
     ("BASIC",    ["BASIC:", "BA:", "BAS:"]),
