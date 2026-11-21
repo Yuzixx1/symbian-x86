@@ -73,6 +73,7 @@ int  process_wait_exit(unsigned aPid, int* aExitReason, int* aExitType,
 int con_acquire(void);    /* exclusive input lease; KErrInUse if held */
 void con_release(void);
 int con_tryread(void);    /* char 0..255, or negative (empty = KErrNotReady) */
+void con_puts_raw(const char* text);  /* raw echo, NO trailing newline (prompts) */
 int read_line(char* buffer, unsigned capacity, int timeout_ms);
 
 #endif

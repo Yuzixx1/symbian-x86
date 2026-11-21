@@ -221,6 +221,24 @@ int con_tryread(void)
     return result;
 }
 
+/* Raw echo via PortCon exec 3. Genuine DebugPrint (exec 86) terminates every
+   call with \r\n, so print_n() cannot echo one character at a time without
+   stacking input vertically. The lease owner's raw path emits exactly the
+   character supplied, with no line ending; the caller adds a single '\n'
+   only when Enter is read. */
+static void con_echo_char(int c)
+{
+    int handle = con_channel();
+    if (handle < 0) return;
+    exec4(10, handle, 3, (unsigned)c, 0);
+    file_close(handle);
+}
+
+void con_puts_raw(const char* text)
+{
+    while (*text) con_echo_char((unsigned char)*text++);
+}
+
 int read_line(char* buffer, unsigned capacity, int timeout_ms)
 {
     unsigned n = 0;
@@ -232,10 +250,10 @@ int read_line(char* buffer, unsigned capacity, int timeout_ms)
         if (c >= 0)
             {
             if (c == '\r') c = '\n';
-            if (c == '\n') { print_n("\n", 1); break; }
+            if (c == '\n') { con_echo_char('\n'); break; }
             if (c == '\b' || c == 127)
                 {
-                if (n) { --n; print_n("\b \b", 3); }
+                if (n) { --n; con_echo_char('\b'); con_echo_char(' '); con_echo_char('\b'); }
                 continue;
                 }
             if (c < 32 || c > 126) continue;
@@ -243,7 +261,7 @@ int read_line(char* buffer, unsigned capacity, int timeout_ms)
                 {
                 char ch = (char)c;
                 buffer[n++] = ch;
-                print_n(&ch, 1);
+                con_echo_char(c);
                 }
             continue;
             }

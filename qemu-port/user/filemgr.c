@@ -179,7 +179,7 @@ int app_main(void)
 
     for (;;)
         {
-        print("FM> ");
+        con_puts_raw("FM> ");
         r = read_line(line, sizeof(line), 60000);
         if (r < 0) break;               /* timeout / input error -> done */
         if (run_command(line)) break;   /* quit */

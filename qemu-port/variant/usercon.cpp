@@ -7,6 +7,11 @@
 #include <kernel/kern_priv.h>
 #include "qemu_variant.h"
 
+// Raw console output used only for input echo. A::DebugPrint (exec 86) appends
+// \r\n to every call, so echoing one character per print_n stacks input
+// vertically. These emit exactly one character with no line ending.
+namespace QemuUart { void PutC(char aC); }
+
 static TBool sLeased = EFalse;
 static TUint sOwnerTid = 0, sOwnerPid = 0;
 
@@ -32,7 +37,7 @@ public:
         }
     };
 
-TInt DPortCon::Request(TInt aFunction, TAny*, TAny*)
+TInt DPortCon::Request(TInt aFunction, TAny* a1, TAny*)
     {
     DThread& cur = Kern::CurrentThread();
     if (aFunction == 0)
@@ -60,6 +65,18 @@ TInt DPortCon::Request(TInt aFunction, TAny*, TAny*)
         if (!OwnerMatch(cur)) return KErrAccessDenied;
         sLeased = EFalse;
         sOwnerTid = sOwnerPid = 0;
+        return KErrNone;
+        }
+    if (aFunction == 3)
+        {
+        // EchoChar: raw echo of one input character with NO line ending.
+        // Only the lease owner may echo (same fail-closed rule as TryRead),
+        // and the shell is halted while leased, so input is echoed once.
+        // a1 carries the character value in its low byte.
+        if (!sLeased || !OwnerMatch(cur)) return KErrAccessDenied;
+        char c = (char)(TUint)a1;
+        QemuUart::PutC(c);   // COM1 serial log
+        VgaTeletype(c);      // VGA/LFB mirror
         return KErrNone;
         }
     return KErrNotSupported;

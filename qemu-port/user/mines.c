@@ -314,7 +314,7 @@ int app_main(void)
 
     for (;;)
         {
-        print("MS> ");
+        con_puts_raw("MS> ");
         r = read_line(line, sizeof(line), 30000);
         if (r < 0)
             {

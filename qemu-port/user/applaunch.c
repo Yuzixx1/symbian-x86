@@ -216,7 +216,7 @@ int app_main(void)
 
     for (;;)
         {
-        print("APP> ");
+        con_puts_raw("APP> ");
         r = read_line(line, sizeof(line), 60000);
         if (r < 0) break;                 /* timeout / input error -> done */
         if (run_command(line)) break;     /* quit */
