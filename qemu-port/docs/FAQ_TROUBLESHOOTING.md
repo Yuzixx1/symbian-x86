@@ -2,7 +2,7 @@
 
 Practical answers to the questions that actually come up when building and
 running the `qemu-port/` tree. This is a *current-behaviour* document: where a
-symptom was fixed in a past revision (R4/R5), the fix is described so you can
+symptom was fixed in a past revision (R4/R5/R7), the fix is described so you can
 tell a stale guide or an old binary from a real problem. The canonical usage
 recipe is [`r1_boot_and_selftest.md`](r1_boot_and_selftest.md); command details
 are in [`SHELL_REFERENCE.md`](SHELL_REFERENCE.md).
@@ -55,6 +55,30 @@ qemu-system-i386 -M q35 -m 128 -vga std -serial stdio -no-reboot \
 
 If the window appears but stays black, confirm the kernel reached the shell on
 COM1 first; no `EKA2>` on serial means a boot problem, not a display problem.
+
+### Q: The QEMU window keyboard does nothing — typing only works in `-serial stdio`. Why?
+
+**A: Fixed in R7.** The PS/2 IRQ1 line needs re-arming after boot:
+`Asic::Init1` re-masks the whole 8259 after boot constructors run, and a key
+pressed early can strand a scancode in the 8042 output buffer, holding IRQ1
+high so the next low→high edge is never seen. `ShellMain()` now calls
+`QemuKbdArm()` before the input loop (idempotent): it drains stale scancodes,
+re-enables the 8042 keyboard, rebinds/clears IRQ1 and unmasks it via the live
+PIC IMR, so the window and COM1 are both live from the first `EKA2>` prompt.
+Check from the shell with `kbd` — it prints PS/2 IRQ1 ISR/scancode/key counts
+plus the PIC IMR and 8042 status; `kbd arm` re-runs the re-arm sequence if a
+key seems stuck. If `kbd` counts stay at zero while COM1 works, make sure you
+are typing into the QEMU window (not the serial terminal) and try `kbd arm`.
+
+### Q: Backspace moves the cursor but doesn't erase the character. Why?
+
+**A: Fixed in R7.** A lone `0x08` only steps the cursor back on a serial
+terminal — it leaves the glyph on screen. `EmitBackspace()` in
+`variant/kern_shell.cpp` now emits `\b` + space + `\b`, blanking the cell on
+COM1 *and* the VGA/LFB mirrors (the same three-byte sequence is used in
+`console/shell.cpp` and `variant/genuine_console.cpp`). Both `0x08` (BS) and
+`0x7f` (DEL) are handled, and ESC clears the whole line the same way. A guide
+that shows a single `\b` predates R7.
 
 ## Booting, storage & programs
 
@@ -119,6 +143,21 @@ copy lives at
 copy it to `qemu-port/EUSER.DLL` before `make isogrub`. Without it, ordinal 915
 cannot resolve and the app fails at load.
 
+## Networking
+
+### Q: Does `DNSRES` use a loopback responder or a hardcoded `example.com` address?
+
+**A: No — not since R7.** `DNSRES.E32` is built from `user/dnsnet.c`: the
+`build/user/DNSRES.E32` rule in `user/user.mk` simply links `dnsnet.elf`, so it
+is the *same* genuine resolver as `DNSNET`. It ARPs for the SLIRP gateway
+`10.0.2.2`, sends a real RFC1035 UDP/53 A query to SLIRP's DNS proxy `10.0.2.3`
+and parses the real reply from the e1000 netbridge RX ring. `example.com` now
+resolves to a real public address (e.g. `172.66.147.243`) returned by SLIRP —
+not the old hardcoded `93.184.216.34` and not an in-process loopback fake. The
+former `DnsResolverServer`/IPC loopback design survives only in
+`user/dnsresolv.c`, which is historical and **not built**. Any guide or test
+expecting `DNSRES` + a loopback answer / `93.184.216.34` predates R7.
+
 ## Processes & the self-test
 
 ### Q: Why does `KILL 1` say `kill: error`?
@@ -130,6 +169,17 @@ user-space path: `KILLPROC 1` is now blocked by object-identity comparison
 against the kernel process. Previously the self-only numeric check let a ring-3
 caller pass the kernel's pid and fault the kernel while calling `Die()` — that
 was a genuine kernel-fault bug, now fixed in `variant/e32load.cpp` (`E32Kill`).
+
+### Q: `PS` still shows a process I just killed. Why?
+
+**A: Fixed in R7.** A killed/exited process stays in the kernel container as a
+zombie until `E32Reap` drops its code-segment creator reference, but
+`DProcess::Die()` sets `iExitType` synchronously. The `PS` path now filters out
+every entry whose `iExitType != EExitPending`, so killed processes disappear
+from the live census immediately: `kill` → reap → the process exits for good.
+Post-mortem status remains available via `EXITS`, `WAIT` and `REAP` — the
+filtering is purely cosmetic. A transcript that lists a dead PID under `PS`
+was captured before R7.
 
 ### Q: `SELFTEST` FAILs with `ipc` or `netbridge` missing. Is the OS broken?
 
@@ -232,9 +282,11 @@ source cannot be edited. Never commit or push `kernelhwsrv/`.
 **A: Those symptoms were real in earlier revisions and were fixed.** R4 added
 the 2x scaled font/18 px rows and the LFB console mirror; R5 added the GRUB
 `PROGRAMS.IMG` module → dev 8 RAM disk → `X:` auto-mount. Likewise the IPC and
-netbridge self-test gaps were closed, and `KILLPROC 1` was hardened. If you are
-reading an dated design note (many `r1_*_v0` docs were written *before*
-implementation), trust the running code, this FAQ and
+netbridge self-test gaps were closed, and `KILLPROC 1` was hardened. R7 added
+the real `DNSRES` resolver (no loopback fake), a re-armed PS/2 window keyboard,
+a backspace that actually erases, and a `PS` list with dead processes filtered.
+If you are reading a dated design note (many `r1_*_v0` docs were written
+*before* implementation), trust the running code, this FAQ and
 [`r1_boot_and_selftest.md`](r1_boot_and_selftest.md) instead.
 
 ## Quick pointers
@@ -244,6 +296,10 @@ implementation), trust the running code, this FAQ and
 | No programs on `X:` | `make isogrub`, `build/user/*.E32`, `EUSER.DLL`, mtools |
 | `MOUNT` hangs | Don't run it; use `VOL` / `DRIVE` |
 | Blank screen | `-vga std`, no `-display none` |
+| Window keyboard dead | `kbd` for IRQ1 stats; `kbd arm` re-arms PS/2 |
+| Backspace doesn't erase | Fixed in R7 (`\b`, space, `\b`); BS and DEL |
+| `DNSRES` loopback / `93.184.216.34` | Fixed in R7: real DNS via dnsnet.c → 10.0.2.3 |
+| `PS` shows killed process | Fixed in R7: dead filtered; `EXITS`/`REAP` for status |
 | `KILL 1` error | Expected; use `PS` then `KILL <pid>` |
 | `netbridge` selftest fail | e1000 in QEMU args |
 | Selfcheck flaky | Stale `/tmp/opencode/r1_*.img` QEMU; kill and re-run |

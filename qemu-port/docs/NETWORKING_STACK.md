@@ -17,7 +17,7 @@ the genuine kernel are added — two already-invalid slow-exec slots are repurpo
 
 ```
  ring-3 PE2 E32 (user/*.c)           raw Ethernet/IPv4/UDP/TCP/ICMP/ARP frames
-   netbridge_test / dnsnet / dhcpc / ping / httpget / wbrowser / wget / telnet
+   netbridge_test / dnsres / dnsnet / dhcpc / ping / httpget / wbrowser / wget / telnet
         |  exec2(247)=base, exec2(248)=size  ->  gSh = struct nb_shared*
         v
  shared struct nb_shared (low, identity-mapped RAM, U/S=1 in user PDs)
@@ -180,6 +180,14 @@ use the pseudo-header where required.
   `wbrowser.c` adds URL parsing and an HTML-to-text renderer; `wget.c` saves the
   body after the first `\r\n\r\n` to `DOWNLOAD.TXT` via PortFile IPC `file_save`;
   `telnet.c` is an interactive line client on a chosen `host port`.
+
+**DNSRES is real too (R7).** The `build/user/DNSRES.E32` rule in `user/user.mk`
+builds DNSRES from `dnsnet.elf` — i.e. the same `user/dnsnet.c` client described
+above: ARP the `10.0.2.2` gateway, send UDP/53 to SLIRP's DNS proxy `10.0.2.3`
+and parse the reply from the RX ring. `example.com` therefore returns a real
+public A record (e.g. `172.66.147.243`), never a hardcoded `93.184.216.34`.
+The former loopback `DnsResolverServer`/IPC responder in `user/dnsresolv.c` is
+historical and **not built**; any note calling DNSRES a loopback fake is stale.
 
 **Markers** are emitted through genuine `EUSER.DLL` ordinal 915
 (`RDebug::Printf`). Each ELF is linked with

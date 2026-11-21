@@ -4,7 +4,8 @@ _start:
     call app_main
     push %eax
     call process_exit
-    ud2
+    /* process_exit must never return; if it does, spin rather than fault. */
+    jmp .
 
 .section .text,"ax"
 .global ipc_wait_any
@@ -71,5 +72,7 @@ process_exit:
     xor %esi, %esi
     mov $115, %eax
     int $0x21
-    ud2
+    /* exec 115 kills this thread. If a kernel ever returns from it, spin
+       forever instead of falling through into garbage / raising Exc 06. */
+    jmp .
 .section .note.GNU-stack,"",@progbits

@@ -75,7 +75,8 @@ static const TUint8 sTrampExit[] =
     0x31, 0xDB,                    // xor ebx,ebx (reason 0)
     0x31, 0xF6,                    // xor esi,esi (NULL category)
     0xB8, 0x73, 0x00, 0x00, 0x00,  // mov eax,115 (EExecThreadKill)
-    0xCD, 0x21,                    // int 0x21 (never returns)
+    0xCD, 0x21,                    // int 0x21 (kills this thread)
+    0xEB, 0xFE,                    // jmp $ backstop if exec ever returns
     };
 static const TUint8 sTrampPutc[] =
     {

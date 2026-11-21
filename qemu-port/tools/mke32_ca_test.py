@@ -11,7 +11,9 @@ KErrNone into the active's iStatus (offset +4, matching the genuine CActive
 layout: CBase has no data members, TRequestStatus={iStatus,iFlags}) and signals
 the same thread, so WaitForAnyRequest() returns, RunL() is dispatched through
 the active's vptr, RunL() calls Stop() (ordinal 425) and sets the local stop
-word, the loop exits and Start() returns.
+word, the loop exits and Start() returns.  The final marker is followed by a
+direct exec 115 (EExecThreadKill) plus an infinite-loop backstop, so teardown
+never falls through a `ret` into garbage (Exc 06, EIP=0x203).
 
 The genuine EUSER CActiveScheduler::Start() ordinal is imported and bound but
 not called: in this port its TLS/trap-harness state is unavailable to a
@@ -221,9 +223,20 @@ b.code[back_jmp + 1] = (LOOP_START - (back_jmp + 2)) & 0xFF
 
 b.printf(4)                                 # "ca_test: Start() returned"
 b.printf(5)                                 # "ca_test: clean exit"
-b.put(b"\x31\xc0")
-b.put(b"\xc9")
-b.put(b"\xc3")
+# The kernel enters this thread at the E32 entry point with no return address
+# on the user stack (user ESP points at the copied SThreadCreateInfo), so a
+# plain `ret` here pops a create-info field as EIP (0x203) and faults with
+# Exc 06. Kill this thread explicitly with exec 115 (EExecThreadKill) using
+# the same register contract as user/start.S:process_exit and sTrampExit.
+b.put(b"\x31\xc0")                          # xor eax,eax (exit reason)
+b.put(b"\xc9")                              # leave (drop local frame)
+b.put(b"\xb9\x01\x80\xff\xff")              # mov ecx,KCurrentThreadHandle
+b.put(b"\x31\xd2")                          # xor edx,edx (EExitKill)
+b.put(b"\x31\xdb")                          # xor ebx,ebx (reason 0)
+b.put(b"\x31\xf6")                          # xor esi,esi (NULL category)
+b.put(b"\xb8\x73\x00\x00\x00")              # mov eax,115
+b.put(b"\xcd\x21")                          # int 0x21 (never returns)
+b.put(b"\xeb\xfe")                          # jmp $ backstop (no Exc 06)
 CODE_END = b.pos
 
 # RunL(): dispatched by the scheduler loop through the active's vptr
