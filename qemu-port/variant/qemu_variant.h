@@ -48,6 +48,15 @@ extern "C"
     void X86IrqDispatcher();
     // Binds the PIT tick + PS/2 ISRs. Called from Asic::Init1.
     void QemuIrqBindTickKbd();
+    // PS/2 keyboard re-arm (variant/qemu_variant_int.cpp; idempotent).
+    // Mirrors the mouse driver's shell-time re-arm: re-bind IRQ1, flush the
+    // 8042 output buffer (so a stale byte cannot hold the edge-triggered IRQ1
+    // line high), force config bit0 + 0xAE, then unmask IRQ1 via read-modify-
+    // write so no other IRQ is clobbered. Called from Init3 and `kbd arm`.
+    void QemuKbdArm();
+    // Live PS/2 delivery counters + raw PIC/8042 state (diagnostic).
+    void QemuKbdStats(TUint& aIsrCount, TUint& aScancodes, TUint& aKeys,
+                      TUint& aPicMask, TUint& aKbdStatus);
     // RTC seconds since 2000 (variant/qemu_variant_asic.cpp); -1 if bad.
     TInt QemuRtcSeconds();
     // Set RTC from seconds since 2000; negative rejected. Returns Symbian error.

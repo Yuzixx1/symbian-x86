@@ -39,6 +39,17 @@ static void EmitRawS(const char* aS)
     while (*aS) EmitRaw(*aS++);
     }
 
+// Backspace must actually erase on every output path. A lone 0x08 only
+// moves the cursor on a serial terminal (leaving the glyph visible), so
+// follow it with a space to blank the cell and a second 0x08 to step back.
+// VgaTeletype/FbPutC also blank the glyph on 0x08 for the VGA/LFB mirrors.
+static void EmitBackspace()
+    {
+    EmitRaw('\b');
+    EmitRaw(' ');
+    EmitRaw('\b');
+    }
+
 // ---------------------------------------------------------------- VGA teletype
 static volatile unsigned short* const kVram =
     reinterpret_cast<volatile unsigned short*>(0xB8000u);
@@ -344,6 +355,7 @@ static const TCommandHelp kHelp[] =
     {"pci", "PCI", "List PCI devices."},
     {"display", "DISPLAY [TEST]", "Show the VBE framebuffer mode/LFB; TEST clears blue and draws a border + EKA2 GUI banner."},
     {"mouse", "MOUSE [INFO|POLL|TEST]", "Show the PS/2 mouse cursor/buttons/packets; INFO details the device, POLL drains the 8042 once, TEST injects a synthetic packet through IRQ12."},
+    {"kbd", "KBD [ARM]", "Show PS/2 IRQ1 ISR/key counters and PIC/8042 state; ARM rebinds IRQ1, flushes stale 8042 bytes and unmasks it."},
     {"nic", "NIC [ARP [count]]", "Show e1000 link/MAC; NIC ARP sends ARP requests and waits for replies."},
     {"vnet", "VNET [INFO]", "Show virtio-net PCI/MAC/queue state (alternative NIC backend to e1000)."},
     {"netbridge", "NETBRIDGE [ms]", "Pump the kernel<->userland e1000 frame bridge for up to ms milliseconds (default 6000)."},
@@ -923,6 +935,19 @@ static void Exec()
         else
             mouse_info();
         }
+    else if (StrEq(cmd, "kbd"))
+        {
+        if (argc > 1 && StrEq(argv[1], "arm"))
+            QemuKbdArm();
+        TUint isr = 0, sc = 0, keys = 0, imr = 0, st = 0;
+        QemuKbdStats(isr, sc, keys, imr, st);
+        KPrintf("kbd: PS/2 IRQ1 isr=%u scancodes=%u keys=%u\r\n",
+            isr, sc, keys);
+        KPrintf("kbd: PIC IMR=0x%02x IRQ1=%s 8042 status=0x%02x outfull=%d\r\n",
+            imr, (imr & 0x02u) ? "MASKED" : "enabled", st, (st & 0x01u) ? 1 : 0);
+        KPrintf("kbd: input ring head=%u tail=%u (PS/2+COM1+USB)\r\n",
+            sHead, sTail);
+        }
     else if (StrEq(cmd, "nic"))
         {
         TInt r = e1000_init();                       // idempotent boot init
@@ -1063,11 +1088,26 @@ static void Exec()
         KPrintf("PortFile channels: %d\r\n", UserFilesChannelCount());
         DObjectCon* c = K::Containers[EProcess];
         c->Wait();
+        // Show only LIVE processes. A killed/exited process stays in the
+        // container as a zombie until E32Reap drops its code-seg creator ref;
+        // DProcess::Die sets iExitType synchronously, so a non-pending exit
+        // type is the earliest reliable "not live" signal. Post-mortem status
+        // remains available via EXITS / WAIT / REAP.
         TInt n = c->Count();
-        KPrintf("%d processes:\r\n", n);
+        TInt live = 0;
         for (TInt i = 0; i < n; ++i)
             {
             DProcess* p = (DProcess*)(*c)[i];
+            if (p->iExitType != EExitPending)
+                continue;
+            ++live;
+            }
+        KPrintf("%d processes:\r\n", live);
+        for (TInt i = 0; i < n; ++i)
+            {
+            DProcess* p = (DProcess*)(*c)[i];
+            if (p->iExitType != EExitPending)
+                continue;
             TBuf<48> name;
             p->FullName(name);
             char narrow[48];
@@ -1692,6 +1732,11 @@ static void Exec()
 
 static void ShellMain(TAny* /*aPtr*/)
     {
+    // Asic::Init1 re-masks the whole 8259 after boot constructors run, and a
+    // key pressed during boot can strand a scancode in the 8042 output buffer.
+    // Re-arm PS/2 IRQ1 here (idempotent) before the input loop starts so the
+    // QEMU VGA window and COM1 are both live from the first prompt.
+    QemuKbdArm();
     VgaInit();
     TInt files = UserFilesInit();
     if (files != KErrNone)
@@ -1780,13 +1825,13 @@ static void ShellMain(TAny* /*aPtr*/)
             sLen = 0;
             FatPrompt();
             }
-        else if (c == '\b' || c == 127)
+        else if (c == '\b' || c == 127)  // BS or DEL
             {
-            if (sLen > 0) { --sLen; EmitRaw('\b'); }
+            if (sLen > 0) { --sLen; EmitBackspace(); }
             }
-        else if (c == 27)
+        else if (c == 27)                // ESC clears the whole line
             {
-            while (sLen > 0) { --sLen; EmitRaw('\b'); }
+            while (sLen > 0) { --sLen; EmitBackspace(); }
             }
         else if (c >= 32 && c < 127)
             {

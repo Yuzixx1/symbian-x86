@@ -238,13 +238,14 @@ static void ShellMain(TAny* /*aPtr*/)
             sLen = 0;
             KPrintf("EKA2> ");
             }
-        else if (c == '\b' || c == 127)
+        else if (c == '\b' || c == 127)       // BS or DEL
             {
-            if (sLen > 0) { --sLen; KPrintf("\b"); }
+            // A lone 0x08 only backs the cursor up on COM1; blank the cell.
+            if (sLen > 0) { --sLen; KPrintf("\b \b"); }
             }
         else if (c == 27)                     // ESC clears the line
             {
-            while (sLen > 0) { --sLen; KPrintf("\b"); }
+            while (sLen > 0) { --sLen; KPrintf("\b \b"); }
             }
         else if (c >= 32 && c < 127)
             {

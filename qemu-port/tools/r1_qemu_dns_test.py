@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """r1_qemu_dns_test.py -- end-to-end QEMU test for DNSRES.E32.
 
-Builds a 32 MB raw disk with a bootable FAT32 partition, stages DNSRES.E32
-and the genuine EUSER.DLL, boots build/kernfull.elf with QEMU user-mode
-networking, runs `dnsresolv` from the serial shell and checks that:
-  * the PE2 E32 validates and binds EUSER ordinal 915 (RDebug::Printf),
-  * the resolver emits its DNSRES markers on the serial console,
-  * a hostname is resolved through the RFC 1035 UDP/53 query path.
+DNSRES.E32 is now the REAL RFC1035 DNS client (user/dnsnet.c), not the old
+loopback-responder fake.  This test builds a 32 MB raw disk with a bootable
+FAT32 partition, stages DNSRES.E32 and the genuine EUSER.DLL, boots
+build/kernfull.elf with QEMU user-mode networking, and drives the serial shell:
+  * `dnsres`        launches the client (ARP 10.0.2.2, then an A/IN query for
+                    example.com posted into the netbridge TX ring);
+  * `netbridge 25000` pumps the kernel<->userland e1000 frame bridge so the
+                    query reaches SLIRP and the genuine reply lands in RX.
+
+It checks that a real DNS reply (from SLIRP's 10.0.2.3 proxy) crossed the
+bridge, that example.com resolves to a real public IP (NOT the fake hardcoded
+93.184.216.34), and that no loopback-responder marker or guest fault appears.
 
 Usage: python3 tools/r1_qemu_dns_test.py [--e32 E32] [--kernel KERN] [--log LOG]
 """
 import argparse
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -27,6 +34,23 @@ KERNEL_DEFAULT = "build/kernfull.elf"
 MBR_LBA = 2048
 PART_SECTORS = 16384
 FS_SIZE = PART_SECTORS * 512
+
+BOOT_MARKERS = [
+    "BAR0=",                              # NIC discovered at boot (the leading
+                                          # 'e' of e1000 is often eaten by serial)
+    "netbridge: base=",                   # bridge buffer exposed via execs
+    "ord 915",                            # EUSER RDebug::Printf bound
+]
+DNS_MARKERS = [
+    "DNSNET: DNS client over netbridge start",
+    "DNSNET: ARP request for gateway 10.0.2.2 posted",
+    "DNSNET: query sent example.com",
+    "DNSNET: reply from 10.0.2.3",        # REAL reply from SLIRP DNS proxy
+    "DNSNET: example.com -> ",
+    "DNSNET: DONE",
+]
+EXC_KEYS = ("Exc ", "PanicKernExec", "MMU #PF")
+FAKE_KEYS = ("loopback responder", "93.184.216.34")
 
 
 def sh(*args, **kw):
@@ -49,8 +73,8 @@ def build_disk(e32):
     with open(FS_IMG, "wb") as f:
         f.truncate(FS_SIZE)
     sh("mkfs.fat", "-F", "32", FS_IMG, check=True)
-    # 8.3 short name: the shell's FatReadPath cannot match the 9-char long
-    # name "dnsresolv" (stored as DNSRES~1), so stage it as "dnsres".
+    # 8.3 short name: stage as "dnsres" so the shell's FatReadPath finds the
+    # program under the familiar `dnsres` command name.
     for src, name in ((e32, "dnsres"), (EUSER_DLL, "EUSER.DLL")):
         if not os.path.exists(src):
             sys.exit(f"missing {src} (build it first)")
@@ -77,7 +101,7 @@ def build_disk(e32):
 
 def run_qemu(kernel, log):
     qemu = [
-        "timeout", "90", "qemu-system-i386",
+        "timeout", "110", "qemu-system-i386",
         "-M", "q35", "-m", "128",
         "-netdev", "user,id=n0", "-device", "e1000,netdev=n0",
         "-display", "none", "-serial", "stdio",
@@ -86,31 +110,36 @@ def run_qemu(kernel, log):
         "-device", "ich9-ahci,id=sata", "-device", "ide-hd,drive=d0,bus=sata.0",
         "-monitor", "none", "-no-reboot",
     ]
-    # Asic::Init3 already mounts the FAT partition; an explicit `mount`
-    # hangs the shell on the M-03 per-process-page-table kernel.
+    # E32Run returns immediately; pump the bridge while the client waits.
     feeder = ("sleep 1.5; printf '\\n'; "
               "sleep 4.0; printf 'dnsres\\n'; "
-              "sleep 10.0")
+              "sleep 1.5; printf 'netbridge 25000\\n'; "
+              "sleep 30.0")
     cmd = f"{{ {feeder}; }} | {' '.join(shlex.quote(a) for a in qemu)} > {shlex.quote(log)} 2>&1"
     subprocess.run(["bash", "-c", cmd], check=False)
     with open(log, "r", errors="replace") as f:
         return f.read()
 
 
+def resolved_ip(text):
+    m = re.search(r"DNSNET: example\.com -> (\d+\.\d+\.\d+\.\d+)", text)
+    return m.group(1) if m else None
+
+
 def check(text):
-    dns_lines = [ln for ln in text.splitlines() if "DNSRES:" in ln]
-    return {
-        "kernel boot": "EKA2" in text.upper(),
-        "FAT mounted (shell prompt)": "C:/>" in text,
-        "E32 validates (r=0)": "e32run: validate r=0" in text,
-        "EUSER ord 915 bound": "ord 915" in text,
-        "DNSRES process started": "started (user process)" in text,
-        "DNSRES markers emitted": len(dns_lines) >= 3,
-        "DNS start marker": any("DNS resolver" in ln for ln in dns_lines),
-        "DNS over UDP/53": any(":53" in ln or "UDP" in ln for ln in dns_lines),
-        "IP result printed": any("->" in ln or "resolved" in ln
-                                 for ln in dns_lines),
-    }
+    results = {}
+    for m in BOOT_MARKERS + DNS_MARKERS:
+        results[m] = m in text
+    results["E32 validates (r=0)"] = "e32run: validate r=0" in text
+    results["no timeout marker"] = "DNSNET: no reply (timeout)" not in text
+    ip = resolved_ip(text)
+    results["real public IP resolved"] = bool(
+        ip and ip not in ("93.184.216.34", "127.0.0.1")
+        and not ip.startswith("10.") and not ip.startswith("0."))
+    results["no loopback/fake answer"] = not any(k in text for k in FAKE_KEYS)
+    exc = [ln for ln in text.splitlines() if any(k in ln for k in EXC_KEYS)]
+    results["no exception/panic in log"] = not exc
+    return results, exc, ip
 
 
 def main():
@@ -126,17 +155,26 @@ def main():
     text = ""
     for attempt in range(2):                 # busy CI host: retry a cold boot
         text = run_qemu(args.kernel, args.log)
-        if check(text)["DNSRES markers emitted"]:
+        res, _, _ = check(text)
+        if res.get("DNSNET: reply from 10.0.2.3"):
             break
+    results, exc, ip = check(text)
     print("== DNS test results")
     ok = True
-    for name, passed in check(text).items():
+    for name, passed in results.items():
         ok = ok and passed
         print(f"  [{'PASS' if passed else 'FAIL'}] {name}")
+    print(f"resolved example.com -> {ip}")
+    if exc:
+        print("\n== exception/panic lines:")
+        for line in exc:
+            print("   ", line[:220])
     print(f"serial log: {args.log}")
     if not ok:
         for ln in text.splitlines():
-            if any(k in ln.lower() for k in ("dnsres", "e32run", "fault", "panic")):
+            if any(k in ln.lower() for k in
+                   ("dnsnet", "dnsres", "loopback", "93.184.216.34",
+                    "e32run", "fault", "panic")):
                 print("   ", ln[:200])
     print("RESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

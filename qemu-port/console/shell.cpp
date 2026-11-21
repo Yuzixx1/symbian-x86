@@ -143,13 +143,16 @@ static void ShellMain(void* /*aArg*/)
             sLen = 0;
             Prompt();
             }
-        else if (c == '\b' || c == 127)
+        else if (c == '\b' || c == 127)  // BS or DEL
             {
-            if (sLen > 0) { --sLen; Vga::PutC('\b'); }
+            // 0x08 alone only moves the cursor on COM1; blank the glyph too.
+            if (sLen > 0)
+                { --sLen; Vga::PutC('\b'); Vga::PutC(' '); Vga::PutC('\b'); }
             }
         else if (c == 27)  // ESC clears the line
             {
-            while (sLen > 0) { --sLen; Vga::PutC('\b'); }
+            while (sLen > 0)
+                { --sLen; Vga::PutC('\b'); Vga::PutC(' '); Vga::PutC('\b'); }
             }
         else if (c >= 32 && c < 127)
             {

@@ -95,6 +95,10 @@ void QemuVariantAsic::Init3()
     QemuIrq::Enable(0);       // PIT tick -> genuine NTimerQ::Tick
     QemuIrq::Enable(1);       // PS/2 keyboard
     QemuIrq::Enable(4);       // COM1 receive
+    // Re-arm the keyboard after the final PIC remask, exactly like the mouse
+    // driver's shell-time re-arm: rebind IRQ1, flush stale 8042 bytes (so the
+    // edge-triggered line is low), then unmask via read-modify-write.
+    QemuKbdArm();
 
     // K::Init3 already allocated K::HalEntryArray before A::Init3 (sinit.cpp),
     // so the display group can be registered from pure variant code.

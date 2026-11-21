@@ -18,6 +18,15 @@ static inline void Out8(unsigned short aPort, unsigned char aVal)
 static inline unsigned char In8(unsigned short aPort)
     { unsigned char v; __asm__ __volatile__("in %0, %1" : "=a"(v) : "Nd"(aPort)); return v; }
 
+// Direct PIC mask helpers (variant/qemu_assp.cpp).  These read the live IMR
+// and clear/set one bit, unlike Interrupt::Enable's shadow mask (0xFF), which
+// would re-mask the already-live tick and COM1 IRQs.
+namespace QemuIrq
+    {
+    void Enable(int aIrq);
+    void Disable(int aIrq);
+    }
+
 namespace
     {
     struct QBinding
@@ -28,6 +37,13 @@ namespace
     QBinding gBindings[16];
     unsigned char gMasterMask = 0xFF;
     unsigned char gSlaveMask = 0xFF;
+
+    // PS/2 delivery diagnostics (qemu_variant_int.cpp IRQ1 ISR).  Counted
+    // separately from the shell's shared input ring so `kbd` can prove that
+    // window keypresses really arrive through IRQ1 rather than COM1.
+    volatile unsigned int gKbdIsrCount = 0;
+    volatile unsigned int gKbdScancodes = 0;
+    volatile unsigned int gKbdKeys = 0;
 
     void WriteMasks()
         {
@@ -167,6 +183,7 @@ extern "C" void QemuUartIsr(TAny* /*aPtr*/)
     }
 extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
     {
+    ++gKbdIsrCount;
     static const char kMap[128] = {
         0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b', '\t',
         'q','w','e','r','t','y','u','i','o','p','[',']', '\n', 0,
@@ -181,6 +198,7 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         if (!(In8(0x64) & 0x01))
             break;
         unsigned char sc = In8(0x60);
+        ++gKbdScancodes;
         if (sc == 0xE0) { sE0 = 1; continue; }
         if (sE0) { sE0 = 0; continue; }
         if (sc == 0x2A || sc == 0x36) { sShift = 1; continue; }
@@ -207,8 +225,51 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
                 case '/': c='?'; break;
                 }
             }
+        ++gKbdKeys;
         QemuKbdPush(c);
         }
+    }
+
+// Re-arm PS/2 IRQ1 from a shell-safe context.  Asic::Init1 re-masks the whole
+// 8259 after boot constructors run (the mouse driver documents the same trap
+// for IRQ12), so a boot-time unmask alone is not durable.  More importantly,
+// a key pressed before IRQ1 was unmasked can leave a scancode in the 8042
+// output buffer: that holds the edge-triggered IRQ1 line high and the 8259
+// never sees the low->high edge of the next keypress, i.e. the QEMU window
+// looks dead while COM1 still works.  Drain the buffer first, then unmask.
+extern "C" void QemuKbdArm()
+    {
+    QemuIrq::Disable(1);                    // silence IRQ1 while we poke 8042
+    for (int i = 0; i < 32; ++i)            // drop stale scancodes -> line low
+        {
+        if (!(In8(0x64) & 0x01))
+            break;
+        (void)In8(0x60);
+        }
+    Out8(0x64, 0x20);                       // read 8042 config byte
+    for (int i = 0; i < 100000 && !(In8(0x64) & 0x02); ++i) { }
+    unsigned char cfg = In8(0x60);
+    if (!(cfg & 0x01))                      // bit0 = keyboard IRQ enable
+        {
+        Out8(0x64, 0x60);                   // write config
+        for (int i = 0; i < 100000 && (In8(0x64) & 0x02); ++i) { }
+        Out8(0x60, (unsigned char)(cfg | 0x01u));
+        }
+    Out8(0x64, 0xAE);                       // enable keyboard (mouse init
+    for (int i = 0; i < 100000 && (In8(0x64) & 0x02); ++i) { }  // toggles AD/AE)
+    Interrupt::Bind(1, QemuKbdIsr, 0);
+    Interrupt::Clear(1);                    // drop stale request/in-service
+    QemuIrq::Enable(1);                     // read-modify-write: spares IRQs 0/4
+    }
+
+extern "C" void QemuKbdStats(TUint& aIsrCount, TUint& aScancodes, TUint& aKeys,
+                             TUint& aPicMask, TUint& aKbdStatus)
+    {
+    aIsrCount = gKbdIsrCount;
+    aScancodes = gKbdScancodes;
+    aKeys = gKbdKeys;
+    aPicMask = In8(0x21);                   // master 8259 IMR
+    aKbdStatus = In8(0x64);                 // 8042 status register
     }
 
 // Binds the three QEMU IRQs + installs user exec gates (0x20/0x21, DPL3).

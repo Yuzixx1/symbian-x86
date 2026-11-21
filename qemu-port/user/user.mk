@@ -155,16 +155,14 @@ build/user/DHCPC.E32: build/user/dhcpc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
-# R1 DNS resolver E32: RFC1035 UDP/53 client + DnsResolverServer IPC service.
+# R1 DNS resolver E32: the REAL network resolver.  DNSRES.E32 is now the
+# genuine RFC1035 A-record client over the kernel<->user e1000/SLIRP netbridge
+# (user/dnsnet.c): ARP the 10.0.2.2 gateway, send UDP/53 to SLIRP's DNS proxy
+# 10.0.2.3 and parse the real reply from the RX ring.  The old loopback-
+# responder fake survives only as user/dnsresolv.c (historical; NOT built).
 # PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) carries the markers;
-# the IAT slot is the absolute symbol dns_printf_slot at 0x408000 (textSize).
-build/user/dnsresolv.o: user/dnsresolv.c user/runtime.h user/ipc.h | build/user
-	$(CC) $(USER_FLAGS) -c $< -o $@
-
-build/user/dnsresolv.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/dnsresolv.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=dns_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-
-build/user/DNSRES.E32: build/user/dnsresolv.elf tools/elf2e32.py tools/mke32.py
+# the IAT slot is the absolute symbol dnsnet_printf_slot at 0x408000 (textSize).
+build/user/DNSRES.E32: build/user/dnsnet.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
