@@ -36,6 +36,10 @@
 #include <kernel/kernel.h>
 #include "qemu_variant.h"
 
+// Position bridge implemented in variant/qemu_gui_exec.cpp.  Declared locally
+// so the shared variant/qemu_variant.h (owned by another worker) is untouched.
+void gui_publish_position(TInt aX, TInt aY);
+
 // Direct PIC mask helper (variant/qemu_assp.cpp) — see note above.
 namespace QemuIrq
     {
@@ -158,6 +162,10 @@ namespace
         if (gPacketSize == 4)
             gWheel = (gPkt[3] & 0x80u) ? (TInt)gPkt[3] - 256 : (TInt)gPkt[3];
         ClampCursor();
+        // Publish the live pointer position to gui_shared right here in the
+        // ISR, just like the button mask: a desktop can now redraw its cursor
+        // every frame from gSh->mouse_x/y without waiting for a DRAW exec.
+        gui_publish_position(gX, gY);
         ++gPackets;
         gEventPending = ETrue;
         gPktIdx = 0;

@@ -35,7 +35,14 @@
 
 #define GUI_MAGIC               0x47554931u   /* "GUI1" */
 #define GUI_VERSION             1u
-#define GUI_MAX_CMDS            160u
+/* NOTE: this is the kernel<->user ABI capacity (struct gui_shared below) AND
+ * the per-exec command budget checked by qemu_gui_exec.cpp.  One complete
+ * desktop repaint (wallpaper + 8 icons + windows + taskbar + Start menu) is
+ * ~440 commands, far above the old 160.  Keeping it at 160 forced cmd() to
+ * auto-flush 3 lists per frame, so the kernel presented half-painted frames.
+ * Raising it lets a full repaint be submitted in a SINGLE exec (no partial
+ * frames); the extra ~11 KB of gGui/guilib back-buffer is static BSS only. */
+#define GUI_MAX_CMDS            640u
 
 /* Display-list opcodes. */
 #define GC_CLEAR                0u   /* a = 0x00RRGGBB colour                  */

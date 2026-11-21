@@ -150,6 +150,11 @@ static int gDragDX = 0, gDragDY = 0;
 static unsigned gPrevButtons = 0, gPrevSeq = 0;
 static int gLastSec = -1;
 static unsigned gFbBase = 0, gFbSize = 0;
+static int gRepaints = 0;                       /* full-frame repaint counter   */
+/* Software cursor state.  gCurX/Y is where our sprite was last painted;
+ * gRepX/Y throttles the DT: mouse debug marker to real movement only. */
+static int gCurX = -1, gCurY = -1;
+static int gRepX = -1, gRepY = -1;
 
 #define TASKBAR_H 44u
 #define ICON_W 136u
@@ -169,6 +174,29 @@ static int in_rect(int px, int py, unsigned x, unsigned y,
 {
     return px >= (int)x && px < (int)(x + w) &&
            py >= (int)y && py < (int)(y + h);
+}
+
+/* ---- software mouse cursor --------------------------------------------- */
+/* The kernel's crosshair is fragile: each full redraw starts with GC_CLEAR,
+ * which wipes the scanned crosshair, so relying on the kernel's overlay made
+ * the pointer freeze or snap back to centre.  Paint our own sprite from the
+ * kernel-published gSh->mouse_x/y instead.  Because every move triggers a
+ * full redraw (GC_CLEAR first), the previous position is erased for free. */
+static void draw_cursor(int x, int y)
+{
+    unsigned W = (unsigned)gSh->fb_w, H = (unsigned)gSh->fb_h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (W > 16u && x > (int)W - 16) x = (int)W - 16;
+    if (H > 16u && y > (int)H - 16) y = (int)H - 16;
+
+    rect((unsigned)x,      (unsigned)y,      15u, 2u, C_WHITE);  /* top arm  */
+    rect((unsigned)x,      (unsigned)y,      2u, 15u, C_WHITE);  /* left arm */
+    rect((unsigned)x + 2u, (unsigned)y + 2u, 2u, 11u, C_YELLOW); /* shaft    */
+    rect((unsigned)x + 4u, (unsigned)y + 4u, 2u, 9u,  C_CLOSE);  /* tip      */
+    rect((unsigned)x + 7u, (unsigned)y + 7u, 4u, 4u,  C_LIVE);   /* centre   */
+    gCurX = x;
+    gCurY = y;
 }
 
 /* ---- drawing ----------------------------------------------------------- */
@@ -272,6 +300,48 @@ static void draw_taskbar(void)
     text(120u, y0 + 12u, st, C_WHITE, C_TASK);
 }
 
+/* Sparse repaint marker: the first three repaints, then every tenth.  A quiet
+ * desktop produces none at all -- the 1 Hz clock tick uses the small partial
+ * update below, so idle never triggers a full repaint.  The first marker also
+ * reports the full-frame command count (proof it fits in ONE 640-cmd exec). */
+static void mark_repaint(void)
+{
+    char line[64];
+    unsigned n;
+
+    ++gRepaints;
+    if (gRepaints <= 3 || (gRepaints % 10) == 0)
+        {
+        n = append(line, 0, "DT: repaint ");
+        n = dec(line, n, (unsigned)gRepaints);
+        if (gRepaints == 1)
+            { n = append(line, n, " cmds="); n = dec(line, n, gN); }
+        line[n] = 0;
+        marker(line);
+        }
+}
+
+/* Partial taskbar-clock update: overwrite just the eight HH:MM:SS glyph cells
+ * (each GC_PUTC paints its own C_TASK background).  No GC_CLEAR and no icon /
+ * window / taskbar rebuild, so the once-per-second tick no longer blanks and
+ * repaints the whole LFB -- that full-screen clear was the visible flicker. */
+static void draw_clock_only(void)
+{
+    unsigned W = (unsigned)gSh->fb_w;
+    unsigned H = (unsigned)gSh->fb_h;
+    unsigned y0 = H - TASKBAR_H;
+    unsigned sec = (unsigned)time_now() % 86400u;
+    char clk[16];
+    unsigned n = 0;
+
+    gN = 0;
+    n = two_digits(clk, 0, sec / 3600u); clk[n++] = ':';
+    n = two_digits(clk, n, (sec % 3600u) / 60u); clk[n++] = ':';
+    n = two_digits(clk, n, sec % 60u); clk[n] = 0;
+    text(W - 144u, y0 + 12u, clk, C_LIVE, C_TASK);
+    flush();                       /* one small exec: 8 commands, no clear */
+}
+
 static void draw_full(void)
 {
     unsigned W = (unsigned)gSh->fb_w;
@@ -307,7 +377,10 @@ static void draw_full(void)
 
     draw_taskbar();
     if (gMenuOpen) draw_start_menu();
-    flush();
+    /* software cursor at the live kernel-published PS/2 position */
+    draw_cursor(gSh->mouse_x, gSh->mouse_y);
+    mark_repaint();   /* count this frame while gN still holds its cmd total */
+    flush();          /* ONE exec (<=640 cmds): no half-painted frame is shown */
 }
 
 /* ---- trusted slow exec 268 (SvcMgrLaunch) ------------------------------ */
@@ -358,7 +431,19 @@ static void launch(int idx)
     const struct App* app = &kApps[idx];
     char line[128];
     unsigned n = 0;
-    int ret = svc_launch(app);
+    int ret;
+
+    /* Erase our cursor before the launched app takes over the framebuffer /
+     * console; a text-only app may not clear the LFB itself. */
+    if (gCurX >= 0)
+        {
+        gN = 0;
+        rect((unsigned)gCurX, (unsigned)gCurY, 15u, 15u, C_DESKTOP);
+        flush();
+        gCurX = -1; gCurY = -1;
+        }
+
+    ret = svc_launch(app);
 
     n = append(line, 0, "DT: launched ");
     n = append(line, n, app->label);
@@ -574,8 +659,8 @@ static int handle_key(int key)
 int app_main(void)
 {
     char line[96];
-    unsigned n, shb, buttons, seq, dseq;
-    int changed, key, idle, clicked, quit = 0;
+    unsigned n, shb, buttons, seq, dseq, now_sec;
+    int changed, key, idle, clicked, clock_tick, quit = 0;
 
     gFbBase = (unsigned)exec2(QE_EXEC_GUI_FBBASE, 0, 0);
     gFbSize = (unsigned)exec2(QE_EXEC_GUI_FBSIZE, 0, 0);
@@ -670,6 +755,25 @@ int app_main(void)
         gPrevButtons = buttons;
         gPrevSeq = seq;
 
+        /* Track the kernel-published PS/2 position every frame.  The ISR
+         * writes gSh->mouse_x/y straight into gui_shared, so no DRAW exec is
+         * needed to observe movement; a full redraw makes our sprite follow.
+         * Calling exec 251 each time also keeps the kernel crosshair fresh. */
+        if ((int)gSh->mouse_x != gCurX || (int)gSh->mouse_y != gCurY)
+            changed = 1;
+        if (gSh->mouse_x != gRepX || gSh->mouse_y != gRepY)
+            {
+            char ml[64];
+            unsigned mn = append(ml, 0, "DT: mouse x=");
+            mn = dec(ml, mn, (unsigned)gSh->mouse_x);
+            mn = append(ml, mn, " y=");
+            mn = dec(ml, mn, (unsigned)gSh->mouse_y);
+            ml[mn] = 0;
+            marker(ml);
+            gRepX = (int)gSh->mouse_x;
+            gRepY = (int)gSh->mouse_y;
+            }
+
         key = read_key();
         if (key >= 0)
             {
@@ -678,8 +782,14 @@ int app_main(void)
             changed |= r;
             idle = 0;
             }
-        if (time_now() != gLastSec) { gLastSec = time_now(); changed = 1; }
+        /* Clock tick is a CHANGE, but only of the 8 clock glyphs.  Painting
+         * those in a tiny partial list avoids the full-screen GC_CLEAR that
+         * made the whole desktop flash once per second. */
+        now_sec = (unsigned)time_now();
+        clock_tick = ((int)now_sec != gLastSec);
+        if (clock_tick) gLastSec = (int)now_sec;
         if (changed) draw_full();
+        else if (clock_tick) draw_clock_only();
         sleep_ms(30);
         }
 

@@ -23,7 +23,7 @@ extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 
 #define GL_MAGIC            0x47554931u   /* "GUI1" */
 #define GL_VERSION          1u
-#define GL_MAX_CMDS         160u
+#define GL_MAX_CMDS         640u   /* must mirror GUI_MAX_CMDS (shared ABI layout) */
 
 #define GC_CLEAR            0u
 #define GC_RECT             1u

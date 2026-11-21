@@ -108,10 +108,23 @@ namespace
         // first call the mouse driver's cached state is empty so it paints;
         // later calls repaint only if the pointer actually moved.
         mouse_render_cursor();
+        // The IRQ12 ISR now publishes the authoritative pointer position
+        // straight into gGui.mouse_x/y (gui_publish_position), exactly as it
+        // already does for buttons.  Trust those values; the VRAM crosshair
+        // scan is only a fallback for a driver that never published (e.g.
+        // before the first AUX packet).  Using the published coordinates also
+        // avoids the old failure where GC_CLEAR wiped the scanned crosshair
+        // and the cursor snapped back to screen centre.
         TInt mx = gGui.mouse_x, my = gGui.mouse_y;
-        TBool haveMouse = ScanCursor(mx, my);
-        if (haveMouse)
-            { gGui.mouse_x = mx; gGui.mouse_y = my; }
+        if ((mx < 0 || mx >= (TInt)gGui.fb_w ||
+             my < 0 || my >= (TInt)gGui.fb_h))
+            {
+            TInt sx, sy;
+            if (ScanCursor(sx, sy))
+                { mx = sx; my = sy; gGui.mouse_x = mx; gGui.mouse_y = my; }
+            else
+                { mx = (TInt)gGui.fb_w / 2; my = (TInt)gGui.fb_h / 2; }
+            }
 
         // Execute the user's display list in kernel (ring 0) context.
         for (TUint i = 0; i < n; ++i)
@@ -133,9 +146,9 @@ namespace
                 }
             }
 
-        // Overlay our own cursor on top of the freshly drawn desktop.
-        if (!haveMouse)
-            { mx = gGui.fb_w / 2; my = gGui.fb_h / 2; }
+        // Overlay our own cursor on top of the freshly drawn desktop.  The
+        // position is now clamped/published above, so this always tracks the
+        // real pointer instead of freezing at the last scanned crosshair.
         DrawShellCursor(mx, my);
 
         // First frame: read straight back from VRAM (proves real LFB writes,
@@ -192,6 +205,16 @@ void gui_publish_buttons(TUint aButtons, TUint aSeq)
     {
     gGui.buttons = aButtons;
     gGui.button_seq = aSeq;
+    }
+
+// IRQ12 ISR bridge for the pointer position.  Two volatile stores only — safe
+// from interrupt context, and no DRAW exec is needed for a ring-3 desktop to
+// observe mouse movement (the old VRAM crosshair scan was fragile: GC_CLEAR
+// wiped the crosshair, so coordinates went stale between redraws).
+void gui_publish_position(TInt aX, TInt aY)
+    {
+    gGui.mouse_x = aX;
+    gGui.mouse_y = aY;
     }
 
 // Diagnostic readback of exactly the words a user program sees.
