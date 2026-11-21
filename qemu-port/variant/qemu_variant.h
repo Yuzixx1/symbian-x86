@@ -90,11 +90,25 @@ TUint32 display_lfb();               // framebuffer physical base (u32)
 TUint display_fb_size();             // framebuffer byte size
 void display_geometry(TUint& aW, TUint& aH, TUint& aBpp);
 TUint display_getpixel(TUint aX, TUint aY);  // 0x00RRGGBB readback
+void display_mode_list();            // list supported VBE modes + current mode
+TInt display_set_mode(TInt aVbeMode); // reprogram Bochs DISPI to another mode;
+                                     // KErrNone on success, old mode kept on error
+// Mode-switch notifications: modules that cache framebuffer geometry/cursor
+// state must refresh from the updated display_* globals (defined in
+// kern_shell.cpp / qemu_gui_exec.cpp / qemu_mouse.cpp).
+void FbMirrorReset();                // reset the VBE text-mirror cursor/grid
+void GuiGeometryReset();             // refresh guishost shared fb geometry
+void MouseGeometryReset();           // clamp/refresh the PS/2 cursor
 
 // GUI desktop shell exec host (variant/qemu_gui_exec.cpp). Exposes slow execs
 // 249 (fb base), 250 (fb size) and 251 (display-list runner / shared base)
 // to ring-3 E32 programs; layout is in user/guishost.h.
 TInt gui_init();                     // idempotent; installs execs 249/250/251
+// PS/2 button state -> userland bridge (variant/qemu_gui_exec.cpp).  The ISR
+// in qemu_mouse.cpp calls gui_publish_buttons() so gui_shared.buttons is live
+// without a display-list exec; gui_button_state() is the diagnostic readback.
+void gui_publish_buttons(TUint aButtons, TUint aSeq);   // ISR-safe, 2 stores
+void gui_button_state(TUint& aButtons, TUint& aSeq);    // kernel diagnostic
 
 // PS/2 auxiliary (mouse) driver (variant/qemu_mouse.cpp). IRQ12 ISR updates a
 // clamped software cursor; the crosshair is painted through display_rect().
@@ -103,6 +117,8 @@ void mouse_info();                   // print x/y/buttons/packets/id/pktsize
 void mouse_render_cursor();          // draw/move the crosshair on the framebuffer
 void mouse_poll();                   // polled fallback: drain 8042 output once
 TInt mouse_test();                   // inject one synthetic packet; verify ISR path
+TInt mouse_inject_buttons(TUint aMask); // inject synthetic packet with button bits
+                                    // (1=L,2=R,4=M) to drive ISR->shared path
 
 // e1000 (82540EM) polled Ethernet driver (variant/qemu_nic.cpp).
 TInt e1000_init();                                  // boot/hot init; idempotent

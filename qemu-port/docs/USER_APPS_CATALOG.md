@@ -207,3 +207,19 @@ stages each program plus `EUSER.DLL`, feeds its name at the `EKA2>` prompt, and
 asserts a known marker and no `Exc`/`PanicKernExec`. See
 [`GUI_PROGRAMMING.md`](GUI_PROGRAMMING.md) for the display-list API and
 [`COMPLEX_PROGRAMS.md`](COMPLEX_PROGRAMS.md) for the porting constraints.
+
+## Graphical desktop entry (append-only)
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **DESKTOP** | The consolidated full-screen graphical desktop: title bar, windows and taskbar painted on the VBE LFB through exec 251 display lists; W/S/A/D navigation, Enter to activate, Esc to return to the shell | `DT:` | Std+915 | `r1_graphical_desktop_test.py` |
+
+`DESKTOP.E32` is still being built by another agent; until it exists in
+`build/user/`, GUISHELL (`GUI:`) is the shipped desktop-equivalent program. The
+consolidated test `tools/r1_graphical_desktop_test.py` probes for DESKTOP and
+the existing graphical apps (GUIMENU `GM:`, BREAKOUT `BRK:`, GUIHELLO `GH:`,
+GUISHELL `GUI:`, SAVER `SV:`), stages the present ones on the GRUB ISO, boots
+with `-vga std`, feeds each name plus a few keys and Esc, and asserts the right
+marker with no `Exc`/`PanicKernExec` (plus best-effort screendumps). Missing
+programs are skipped, not failed. See [`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md)
+for the full desktop architecture and usage guide.

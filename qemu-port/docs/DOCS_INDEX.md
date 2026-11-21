@@ -167,3 +167,22 @@ canonical boot doc are authoritative.
 These two documents bring the indexed Markdown total to **94**. Also added:
 `tools/r1_gui_regression.py`, one host test that probes for and verifies
 BREAKOUT, GUIMENU, GUIHELLO and BASIC when present.
+
+## Added — graphical desktop (append-only)
+
+- [GRAPHICAL_DESKTOP.md](GRAPHICAL_DESKTOP.md) — User-facing guide to the
+  graphical desktop: VBE 2.0 mode 0x118 / LFB, slow execs 249/250/251 and the
+  display-list protocol, why the console is text drawn on the LFB, what
+  DESKTOP / GUISHELL / GUIMENU / BREAKOUT / GUIHELLO / SAVER render, mouse
+  cursor (but not clicks), keyboard controls (WASD/Enter/Esc; PS/2 E0 arrows
+  are dropped), launching and quitting, boot-to-desktop, screenshots, and the
+  honest gap: a cooperative single-app-at-a-time desktop, not a preemptive
+  multi-window compositor.
+- `tools/r1_graphical_desktop_test.py` — one consolidated host test that probes
+  `build/user/*.E32` for all six graphical programs (DESKTOP, GUIMENU,
+  BREAKOUT, GUIHELLO, GUISHELL, SAVER), skips missing ones, stages the rest on
+  the GRUB ISO's `/PROGRAMS.IMG`, boots once with `-vga std`, feeds each name,
+  a few keys and Esc, asserts its marker (`DT:`, `GM:`, `BRK:`, `GH:`, `GUI:`,
+  `SV:`) with no `Exc`/`PanicKernExec`, and takes QMP screendumps when possible.
+
+This brings the indexed Markdown total to **95**.

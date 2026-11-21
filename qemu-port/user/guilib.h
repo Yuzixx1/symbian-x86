@@ -23,7 +23,8 @@
  * Input: gui_key() drains the PortCon lease set up by gui_init().  PS/2 in
  * this port drops extended scancodes, so ANSI escape arrows arriving on the
  * serial stream (ESC [ A/B/C/D) are decoded into GUI_KEY_UP/... values.
- * gui_mouse() reads the kernel crosshair position published in gui_shared.
+ * gui_mouse() reads the kernel crosshair position and the live PS/2 button
+ * mask published in gui_shared (1=left, 2=right, 4=middle).
  * ------------------------------------------------------------------------ */
 
 /* Freestanding types: no hosted stdint.h is available to PE2 programs. */

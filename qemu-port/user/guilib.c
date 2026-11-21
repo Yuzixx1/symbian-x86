@@ -1,11 +1,12 @@
 /*
  * guilib.c -- reusable PE2 GUI toolkit for the R1 QEMU port.
  *
- * Self-contained display-list transport (layout copied from user/guishost.h,
- * which is deliberately left untouched): exec 249 = LFB base, 250 = LFB size,
- * 251(0) = address of struct gl_shared, 251(n>0) = execute n commands and
- * refresh the PS/2 mouse crosshair.  All rendering is done in kernel context
- * by variant/qemu_gui_exec.cpp; this file never touches VRAM directly.
+ * Self-contained display-list transport (layout mirrors user/guishost.h):
+ * exec 249 = LFB base, 250 = LFB size, 251(0) = address of struct gl_shared,
+ * 251(n>0) = execute n commands and refresh the PS/2 mouse crosshair.  All
+ * rendering is done in kernel context by variant/qemu_gui_exec.cpp; this file
+ * never touches VRAM directly.  The PS/2 ISR publishes buttons/button_seq
+ * straight into that shared struct, so gui_mouse() reports real click state.
  *
  * No hosted libc is used.  Serial markers are the caller's responsibility
  * (see guihello.c); this library is intentionally silent.
@@ -40,8 +41,9 @@ struct gl_shared {
     volatile unsigned draw_calls;
     volatile int      fb_w, fb_h;
     volatile int      mouse_x, mouse_y;
-    volatile unsigned reserved;
+    volatile unsigned buttons;        /* kernel: PS/2 mask 1=L 2=R 4=M       */
     struct gl_cmd     cmds[GL_MAX_CMDS];
+    volatile unsigned button_seq;     /* kernel: increments on button change */
 };
 
 /* ---- state -------------------------------------------------------------- */
@@ -149,8 +151,8 @@ void gui_mouse(int* x, int* y, int* buttons)
 {
     if (x) *x = sSh ? (int)sSh->mouse_x : 0;
     if (y) *y = sSh ? (int)sSh->mouse_y : 0;
-    /* gui_shared publishes the crosshair position only; no button word. */
-    if (buttons) *buttons = 0;
+    /* Published by the IRQ12 PS/2 ISR directly into the shared struct. */
+    if (buttons) *buttons = sSh ? (int)sSh->buttons : 0;
 }
 
 /* ---- primitives --------------------------------------------------------- */

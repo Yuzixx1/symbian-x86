@@ -22,8 +22,12 @@
 // a fresh edge.  `mouse poll` is a polled fallback; `mouse test` injects a
 // synthetic AUX packet to verify the IRQ12 path end-to-end.
 //
+// On every decoded packet the ISR publishes gButtons/gButtonSeq into the
+// userland-visible gui_shared via gui_publish_buttons() (qemu_gui_exec.cpp),
+// so ring-3 desktops can read clicks without issuing a display-list exec.
+//
 // Public API (qemu_variant.h): mouse_init / mouse_info / mouse_render_cursor /
-// mouse_poll / mouse_test.
+// mouse_poll / mouse_test / mouse_inject_buttons.
 
 #include <x86.h>
 #include <e32hal.h>
@@ -56,6 +60,7 @@ namespace
 
     volatile TInt   gX = kScreenW / 2, gY = kScreenH / 2;
     volatile TUint  gButtons = 0;          // bit0=L, bit1=R, bit2=M
+    volatile TUint  gButtonSeq = 0;        // increments on each button change
     volatile TUint  gPackets = 0;
     volatile TInt   gWheel = 0;
     volatile TUint8 gMouseId = 0;
@@ -142,7 +147,12 @@ namespace
         TUint8 flags = gPkt[0];
         TInt dx = (gPkt[1] & 0x80u) ? (TInt)gPkt[1] - 256 : (TInt)gPkt[1];
         TInt dy = (gPkt[2] & 0x80u) ? (TInt)gPkt[2] - 256 : (TInt)gPkt[2];
-        gButtons = (TUint)(flags & 0x07u);
+        TUint newButtons = (TUint)(flags & 0x07u);
+        if (newButtons != gButtons)
+            { gButtons = newButtons; ++gButtonSeq; }
+        // Publish to the userland-visible shared struct right here in IRQ12
+        // context: a click must not depend on anybody running a DRAW exec.
+        gui_publish_buttons(gButtons, gButtonSeq);
         gX += dx;
         gY -= dy;                             // PS/2 +dy is "up" on screen
         if (gPacketSize == 4)
@@ -184,8 +194,11 @@ TInt mouse_init()
     {
     if (gInited)
         {
-        if (gArmed)
-            return KErrNone;                   // already armed in shell context
+        // Re-arm on EVERY call, not just the first.  Init1/Init3 remap and
+        // re-mask the PIC after the HwInit0 constructors, so the boot-time
+        // arm (including gui_init()'s call) is always undone.  A one-shot
+        // guard used to let that boot call consume the only re-arm and leave
+        // IRQ12 masked for the whole session — no packets, no clicks.
         gArmed = ETrue;
         // Re-arm path (shell-time call).  Init1 remasked the PIC after the
         // boot constructor ran, so re-bind and re-unmask IRQ12 here.  Drain
@@ -254,6 +267,10 @@ TInt mouse_init()
 
 void mouse_render_cursor()
     {
+    // Re-publish on every kernel-side touch too: gui_init() zeroes the shared
+    // region at boot, so this restores the button word even if no packet has
+    // arrived since then (and even when the cursor did not move below).
+    gui_publish_buttons(gButtons, gButtonSeq);
     TInt x = (TInt)gX, y = (TInt)gY;
     if (gCursorDrawn)
         {
@@ -265,6 +282,20 @@ void mouse_render_cursor()
     gPrevX = x;
     gPrevY = y;
     gCursorDrawn = ETrue;
+    }
+
+// Called by display_set_mode() after a VBE switch: the old crosshair was
+// wiped by display_clear(), so forget its cached position and clamp the
+// logical pointer into the new geometry (ISR clamping still uses 0x118 bounds).
+void MouseGeometryReset()
+    {
+    TUint w = 0, h = 0, b = 0;
+    display_geometry(w, h, b);
+    if (!w || !h)
+        return;
+    if (gX >= (TInt)w) gX = (TInt)(w / 2);
+    if (gY >= (TInt)h) gY = (TInt)(h / 2);
+    gCursorDrawn = EFalse;
     }
 
 void mouse_info()
@@ -282,6 +313,11 @@ void mouse_info()
         gIrqBound ? "bound" : "unbound", kScreenW, kScreenH);
     KPrintf("mouse: isr=%u isrbytes=%u\r\n",
         (TUint)gIsrCount, (TUint)gIsrBytes);
+    TUint sharedBtns = 0, sharedSeq = 0;
+    gui_button_state(sharedBtns, sharedSeq);
+    KPrintf("mouse: shared buttons=%u seq=%u (driver buttons=%u seq=%u) %s\r\n",
+        sharedBtns, sharedSeq, (TUint)gButtons, (TUint)gButtonSeq,
+        (sharedBtns == (TUint)gButtons && sharedSeq == gButtonSeq) ? "OK" : "STALE");
     }
 
 // Polled fallback / diagnostic: drain the 8042 output buffer once with IRQ12
@@ -331,6 +367,34 @@ TInt mouse_test()
         before, (TUint)gPackets, (TInt)gX, (TInt)gY, (TUint)gIsrCount,
         ok ? "OK" : "FAIL");
     return ok ? KErrNone : KErrGeneral;
+    }
+
+// Inject one synthetic 3-byte AUX packet with the supplied button bits held
+// (0x08 = always-on sync bit, OR the button mask).  Drives the real IRQ12 ISR
+// -> gui_shared.buttons path from the shell so it can be tested without a
+// physical pointer.  mask: 1=left, 2=right, 4=middle.
+TInt mouse_inject_buttons(TUint aMask)
+    {
+    mouse_init();
+    TUint beforeSeq = gButtonSeq;
+    const TUint8 pkt[3] = {(TUint8)(0x08u | (aMask & 0x07u)), 0x00u, 0x00u};
+    for (TInt j = 0; j < 3; ++j)
+        {
+        KbcWaitInput();
+        Out8(0x64, 0xD3u);                    // write byte as if from the mouse
+        KbcWaitInput();
+        Out8(0x60, pkt[j]);
+        for (volatile TInt k = 0; k < 200000; ++k) { }
+        }
+    mouse_render_cursor();
+    TUint sharedBtns = 0, sharedSeq = 0;
+    gui_button_state(sharedBtns, sharedSeq);
+    KPrintf("MOUSE PRESS: mask=%u packets=%u driver buttons=%u seq=%u->%u "
+        "shared buttons=%u seq=%u %s\r\n",
+        aMask, (TUint)gPackets, (TUint)gButtons, beforeSeq, (TUint)gButtonSeq,
+        sharedBtns, sharedSeq,
+        (sharedBtns == (TUint)gButtons && sharedSeq == gButtonSeq) ? "OK" : "FAIL");
+    return (sharedBtns == (TUint)gButtons) ? KErrNone : KErrGeneral;
     }
 
 // Boot hook: HwInit0 walks .init_array after paging + ROM are ready.  Safe and

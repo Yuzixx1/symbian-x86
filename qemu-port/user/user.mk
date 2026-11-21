@@ -1302,3 +1302,19 @@ build/user/guimenu.elf: build/user/start.o build/user/runtime.o build/user/guime
 build/user/GUIMENU.E32: build/user/guimenu.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# GRAPHICAL DESKTOP / WINDOW MANAGER E32 -- a genuine PE2 E32 program that
+# paints the VBE LFB through GUI slow execs 249/250/251: wallpaper, 8 clickable
+# app icons, taskbar with a live clock, Start menu and draggable/focusable
+# windows.  Click (gui_shared button word) or W/S/A/D + ENTER selects/launches
+# via trusted exec 268; ESC returns to the shell.  Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot desktop_printf_slot at
+# 0x408000 (textSize).
+userland: build/user/DESKTOP.E32
+build/user/desktop.o: user/desktop.c user/runtime.h user/guishost.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/desktop.elf: build/user/start.o build/user/runtime.o build/user/desktop.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=desktop_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DESKTOP.E32: build/user/desktop.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet

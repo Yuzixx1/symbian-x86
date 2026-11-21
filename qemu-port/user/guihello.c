@@ -125,6 +125,13 @@ int app_main(void)
         }
 
         gui_mouse(&mx, &my, &mb);
+        if (tick == 0) {
+            k = append(line, 0, "GH: mouse buttons=");
+            k = dec(line, k, (unsigned)mb);
+            k = append(line, k, " (1=L 2=R 4=M)");
+            line[k] = 0;
+            marker(line);
+        }
 
         /* ---- draw one complete frame into the toolkit's back buffer ---- */
         gui_clear(GUI_NAVY);
@@ -179,6 +186,8 @@ int app_main(void)
     k = dec(line, k, (unsigned)mx);
     k = append(line, k, " y=");
     k = dec(line, k, (unsigned)my);
+    k = append(line, k, " buttons=");
+    k = dec(line, k, (unsigned)mb);
     line[k] = 0;
     marker(line);
 

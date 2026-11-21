@@ -205,6 +205,50 @@ namespace
             return (TUint)p[0] | ((TUint)p[1] << 8) | ((TUint)p[2] << 16);
         return *p;
         }
+
+    // Runtime-selectable VBE modes.  0x118 stays the boot default so existing
+    // 1024x768 screenshots/tests are unchanged.  The 0x115/0x117 labels follow
+    // the QEMU port's VBE naming; geometry is what actually gets programmed
+    // into the Bochs DISPI registers.
+    struct TDisplayMode
+        {
+        TUint iMode;
+        TUint iW, iH, iBpp;
+        const char* iDesc;
+        };
+    static const TDisplayMode kModes[] =
+        {
+        {0x118u, 1024u, 768u, 32u, "1024x768x32"},
+        {0x115u,  800u, 600u, 32u, "800x600x32"},
+        {0x117u, 1280u,1024u, 24u, "1280x1024x24"}
+        };
+
+    const TDisplayMode* FindMode(TUint aMode)
+        {
+        for (TUint i = 0; i < sizeof(kModes) / sizeof(kModes[0]); ++i)
+            if (kModes[i].iMode == aMode)
+                return &kModes[i];
+        return 0;
+        }
+
+    // Program a geometry into DISPI and verify the hardware accepted it.
+    // No framebuffer clear and no global updates: used for both real switches
+    // and non-destructive capability probes.
+    TBool DispiProgram(TUint aW, TUint aH, TUint aBpp)
+        {
+        if (gDispiId < kDispiIdMin || gDispiId > kDispiIdMax)
+            return EFalse;
+        DispiWrite(kIdxEnable, 0);
+        DispiWrite(kIdxXRes, aW);
+        DispiWrite(kIdxYRes, aH);
+        DispiWrite(kIdxBpp, aBpp);
+        DispiWrite(kIdxBank, 0);
+        DispiWrite(kIdxVirtWidth, aW);
+        DispiWrite(kIdxYOffset, 0);
+        DispiWrite(kIdxEnable, kEnEnable | kEnLfb | kEnNoClear);
+        return DispiRead(kIdxXRes) == aW && DispiRead(kIdxYRes) == aH &&
+               DispiRead(kIdxBpp) == aBpp;
+        }
     }
 
 TInt display_init()
@@ -261,6 +305,65 @@ void display_info()
     KPrintf("display: VBE DISPI id=0x%x (%s), %s\r\n", gDispiId,
         gDispiId ? "Bochs VBE" : "legacy VGA",
         gBpp == 32 ? "32bpp RGBX" : "8bpp palette");
+    }
+
+void display_mode_list()
+    {
+    display_init();
+    KPrintf("VBE: modes (current 0x%x %ux%ux%u LFB=0x%08x pitch=%u):\r\n",
+        gMode, gWidth, gHeight, gBpp, (TUint)gLfb, gPitch);
+    for (TUint i = 0; i < sizeof(kModes) / sizeof(kModes[0]); ++i)
+        {
+        const TDisplayMode& m = kModes[i];
+        TBool avail = (gDispiId >= kDispiIdMin && gDispiId <= kDispiIdMax);
+        if (avail && m.iMode == 0x117u && gMode != m.iMode)
+            {
+            // Probe 24bpp support without disturbing the current framebuffer.
+            avail = DispiProgram(m.iW, m.iH, m.iBpp);
+            DispiProgram(gWidth, gHeight, gBpp);   // restore current mode
+            }
+        KPrintf("VBE:   0x%03x %s %s%s\r\n", m.iMode, m.iDesc,
+            m.iMode == gMode ? "<current>" : "",
+            !avail ? "(unavailable)" : "");
+        }
+    }
+
+TInt display_set_mode(TInt aVbeMode)
+    {
+    TInt r = display_init();
+    if (r != KErrNone || !gReady)
+        return r != KErrNone ? r : KErrNotSupported;
+    const TDisplayMode* m = FindMode((TUint)aVbeMode);
+    if (!m)
+        return KErrNotSupported;
+    if (gDispiId < kDispiIdMin || gDispiId > kDispiIdMax)
+        return KErrNotSupported;   // no VBE switching on the mode-13h fallback
+    if (gMode == m->iMode)
+        return KErrNone;
+
+    const TUint oldW = gWidth, oldH = gHeight, oldBpp = gBpp;
+    if (!DispiProgram(m->iW, m->iH, m->iBpp))
+        {
+        DispiProgram(oldW, oldH, oldBpp);   // keep the old mode on failure
+        KPrintf("VBE: SWITCH FAIL mode=0x%x (kept 0x%x)\r\n",
+            (TUint)aVbeMode, gMode);
+        return KErrNotSupported;
+        }
+
+    // Commit the new geometry to every global that readers consult.
+    gLfb = (TUint8* volatile)VgaLfbBase();
+    gWidth = m->iW; gHeight = m->iH; gBpp = m->iBpp;
+    gPitch = gWidth * (gBpp >> 3);
+    gMode = m->iMode;
+
+    display_clear(0u);                 // blank the new framebuffer
+    FbMirrorReset();                   // console text grid/cursor -> new geometry
+    GuiGeometryReset();                // guishost fb_w/fb_h + cursor
+    MouseGeometryReset();              // PS/2 crosshair clamp
+
+    KPrintf("VBE: SWITCH OK mode=0x%x %ux%ux%u LFB=0x%08x pitch=%u\r\n",
+        gMode, gWidth, gHeight, gBpp, (TUint)gLfb, gPitch);
+    return KErrNone;
     }
 
 void display_clear(TUint aColor)

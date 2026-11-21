@@ -317,3 +317,19 @@ Related reading: [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md),
 [`NETWORK_TESTING.md`](NETWORK_TESTING.md),
 [`GUI_AUDIO.md`](GUI_AUDIO.md),
 [`DOCS_INDEX.md`](DOCS_INDEX.md).
+
+### Q: How do I get a *real* graphical desktop? Why is the console text-based?
+
+**A: VBE graphics mode is already active** — the port boots into VBE 2.0 mode
+0x118 (1024x768x32) on QEMU's standard VGA, and the `EKA2>`/`X:/>` console you
+see is *text drawn onto that same linear framebuffer* by the kernel teletype
+(`display_putc()`), not a separate text mode. To get a real graphical desktop,
+type `desktop` (once `DESKTOP.E32` is built), `guimenu` or `breakout` at the
+prompt; `guishell`, `guihello` and `saver` are also full-screen graphical
+programs. Alternatively, boot the desktop GRUB entry if your ISO offers one
+(current `mkgrubiso.py` ships only the full-kernel and nanokernel entries, so
+launching from the shell is the supported path). Use `-vga std` — without it
+the Bochs VBE path is unavailable and you fall back to 320x200x8. Quit with Esc
+where supported. See [`GRAPHICAL_DESKTOP.md`](GRAPHICAL_DESKTOP.md) for details,
+and note the honest limitation: this is a cooperative single-app-at-a-time
+desktop, not a preemptive multi-window compositor.

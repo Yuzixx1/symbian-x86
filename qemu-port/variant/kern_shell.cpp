@@ -12,6 +12,7 @@
 #include <kernel/kern_priv.h>
 #include <memmodel.h>
 #include "qemu_variant.h"
+#include "bootinfo.h"
 
 static inline void Out8(unsigned short aPort, unsigned char aVal)
     { __asm__ __volatile__("out %1, %0" : : "a"(aVal), "Nd"(aPort)); }
@@ -97,7 +98,7 @@ namespace
     // 8px glyph as before.  The FB grid is derived from the framebuffer size
     // (64x42 at 1024x768) so large text never runs off the right edge.
     const TUint kFxCellW = QEMU_DISPLAY_CELL_W, kFxCellH = QEMU_DISPLAY_CELL_H;
-    TUint gFbW = 0, gFbH = 0, gFxCol = 0, gFxRow = 0;
+    TUint gFbW = 0, gFbH = 0, gFbBpp = 0, gFxCol = 0, gFxRow = 0;
     TUint gFxCols = 0, gFxRows = 0;
     TBool gFxReady = EFalse;
     // Genuine KPrintf appends "\r\n" to every line, so most shell lines arrive
@@ -113,7 +114,7 @@ namespace
         display_geometry(w, h, b);
         if (!w || !h)
             return;
-        gFbW = w; gFbH = h;
+        gFbW = w; gFbH = h; gFbBpp = b;
         gFxCols = w / kFxCellW;
         gFxRows = h / kFxCellH;
         gFxReady = ETrue;
@@ -127,7 +128,7 @@ namespace
         {
         volatile unsigned char* fb =
             (volatile unsigned char*)display_lfb();
-        TUint pitch = gFbW * 4;
+        TUint pitch = gFbW * (gFbBpp ? (gFbBpp >> 3) : 4u);
         if (!fb || !pitch)
             return;
         for (TUint y = kFxCellH; y < gFbH; ++y)
@@ -193,6 +194,14 @@ void VgaTeletype(char aC)
         NewLine();
     else
         MoveCursor();
+    }
+
+// Called by display_set_mode() after a VBE switch: drop the cached LFB grid
+// so FbEnsure() re-reads the new display_geometry() and the next character
+// starts at (0,0) on the freshly cleared framebuffer.
+void FbMirrorReset()
+    {
+    gFxCol = 0; gFxRow = 0; gFxReady = EFalse; gFxLineFresh = ETrue;
     }
 
 static void VgaInit()
@@ -340,6 +349,32 @@ static TBool Same(const char* a, const char* b)
     return *a == *b;
     }
 
+// VBE mode numbers are hexadecimal (e.g. 115, 118, 117); accept an optional
+// 0x prefix.  Returns EFalse on empty/invalid input.
+static TBool ParseVbeMode(const char* aText, TInt& aMode)
+    {
+    if (!aText || !*aText)
+        return EFalse;
+    if (aText[0] == '0' && (aText[1] == 'x' || aText[1] == 'X'))
+        aText += 2;
+    if (!*aText)
+        return EFalse;
+    TInt v = 0;
+    while (*aText)
+        {
+        char c = *aText++;
+        TInt d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+        else return EFalse;
+        v = v * 16 + d;
+        if (v > 0xFFFF) return EFalse;
+        }
+    aMode = v;
+    return ETrue;
+    }
+
 struct TCommandHelp { const char* name; const char* usage; const char* detail; };
 static const TCommandHelp kHelp[] =
     {
@@ -371,7 +406,9 @@ static const TCommandHelp kHelp[] =
     {"threads", "THREADS", "List kernel threads."},
     {"pci", "PCI", "List PCI devices."},
     {"display", "DISPLAY [TEST]", "Show the VBE framebuffer mode/LFB; TEST clears blue and draws a border + EKA2 GUI banner."},
-    {"mouse", "MOUSE [INFO|POLL|TEST]", "Show the PS/2 mouse cursor/buttons/packets; INFO details the device, POLL drains the 8042 once, TEST injects a synthetic packet through IRQ12."},
+    {"vbe", "VBE [mode]", "List supported VBE graphics modes (0x118 default 1024x768x32); with a hex mode (e.g. 115, 118, 117) reprogram Bochs DISPI and switch."},
+    {"mouse", "MOUSE [INFO|POLL|TEST|SHARED|PRESS [mask]]", "Show the PS/2 mouse cursor/buttons/packets; INFO details the device, POLL drains the 8042 once, TEST injects a synthetic packet, SHARED shows the button word userland reads, PRESS injects a button packet (mask 1=L 2=R 4=M)."},
+
     {"kbd", "KBD [ARM]", "Show PS/2 IRQ1 ISR/key counters and PIC/8042 state; ARM rebinds IRQ1, flushes stale 8042 bytes and unmasks it."},
     {"nic", "NIC [ARP [count]]", "Show e1000 link/MAC; NIC ARP sends ARP requests and waits for replies."},
     {"vnet", "VNET [INFO]", "Show virtio-net PCI/MAC/queue state (alternative NIC backend to e1000)."},
@@ -406,7 +443,7 @@ static void PrintHelp(const char* aName)
         KPrintf("Drives:   MOUNT  VOL  DRIVE  X:  FORMAT\r\n");
         KPrintf("System:   VERSION  DATE  UPTIME  MEMINFO  PS  THREADS  KILL  ABORT  REAP  EXITS  WAIT  REBOOT\r\n");
         KPrintf("Programs: type a file name to run it, e.g. CALC.EXE, CALC.E32 or CALC args\r\n");
-        KPrintf("Hardware: PCI  DISPLAY  MOUSE  IDE  AHCI  VBLK  RNG  AUDIO  USB  EHCI  XHCI  XHCIPORTS  NIC  VNET\r\n");
+        KPrintf("Hardware: PCI  DISPLAY  VBE  MOUSE  IDE  AHCI  VBLK  RNG  AUDIO  USB  EHCI  XHCI  XHCIPORTS  NIC  VNET\r\n");
         KPrintf("Paths: X:name selects a mounted drive; quote names containing spaces.\r\n");
         return;
         }
@@ -1098,6 +1135,25 @@ static void Exec()
         else
             display_info();
         }
+    else if (StrEq(cmd, "vbe"))
+        {
+        if (argc < 2)
+            display_mode_list();
+        else
+            {
+            TInt mode = 0;
+            if (!ParseVbeMode(argv[1], mode))
+                KPrintf("vbe: invalid mode '%s' (try 118, 115, 117)\r\n", argv[1]);
+            else
+                {
+                TInt r = display_set_mode(mode);
+                if (r == KErrNone)
+                    display_info();
+                else
+                    KPrintf("vbe: cannot switch to 0x%x (r=%d)\r\n", mode, r);
+                }
+            }
+        }
     else if (StrEq(cmd, "mouse"))
         {
         if (argc > 1 && StrEq(argv[1], "poll"))
@@ -1106,6 +1162,19 @@ static void Exec()
             {
             TInt r = mouse_test();
             KPrintf("mouse test: %s\r\n", r == KErrNone ? "PASS" : "FAIL");
+            }
+        else if (argc > 1 && StrEq(argv[1], "shared"))
+            {
+            TUint b = 0, s = 0;
+            gui_button_state(b, s);
+            KPrintf("mouse shared: buttons=%u (1=L 2=R 4=M) button_seq=%u\r\n", b, s);
+            }
+        else if (argc > 1 && StrEq(argv[1], "press"))
+            {
+            TUint mask = 1u;   /* default: left button */
+            if (argc > 2 && argv[2][0] >= '0' && argv[2][0] <= '7')
+                mask = (TUint)(argv[2][0] - '0');
+            mouse_inject_buttons(mask);
             }
         else
             mouse_info();
@@ -1905,6 +1974,41 @@ static void Exec()
         RunImage(progName, execTail);
     }
 
+// ------------------------------------------------------------ boot-to-desktop
+// GRUB's "Symbian EKA2 Desktop (graphical)" entry boots with
+//   multiboot /boot/kernfull.elf desktop=1
+// so Multiboot1 flags bit 2 is set and MBI+16 points at the NUL-terminated
+// command line. BootInfo::Capture() saved the MBI pointer in HwInit0; latch
+// the token in a constructor (also run from HwInit0) so it is stable before
+// SVCMGR or the user-page allocator can recycle GRUB's low-memory strings.
+static TBool sBootDesktop = EFalse;
+
+static TBool CmdlineHasToken(const char* aCmd, const char* aToken)
+    {
+    if (!aCmd) return EFalse;
+    for (const char* p = aCmd; *p; ++p)
+        {
+        const char* t = aToken;
+        const char* q = p;
+        while (*t && Up(*q) == Up(*t)) { ++q; ++t; }
+        if (!*t) return ETrue;
+        }
+    return EFalse;
+    }
+
+static TBool ReadBootDesktopFlag()
+    {
+    TUint mbi = BootInfo::infoAddr;
+    if (mbi < 0x1000u) return EFalse;
+    if (!(*(volatile TUint*)mbi & 0x04u)) return EFalse;  // MBI cmdline present
+    TUint cp = *(volatile TUint*)(mbi + 16);
+    if (cp < 0x1000u) return EFalse;
+    return CmdlineHasToken((const char*)cp, "desktop");
+    }
+
+__attribute__((constructor)) static void LatchBootDesktopFlag()
+    { sBootDesktop = ReadBootDesktopFlag(); }
+
 static void ShellMain(TAny* /*aPtr*/)
     {
     // Asic::Init1 re-masks the whole 8259 after boot constructors run, and a
@@ -1919,6 +2023,14 @@ static void ShellMain(TAny* /*aPtr*/)
     TInt con = UserConInit();
     if (con != KErrNone)
         { KPrintf("PortCon init failed %d\r\n", con); return; }
+    // GRUB "Desktop (graphical)" entry: pass desktop=1 on the Multiboot
+    // cmdline to auto-run DESKTOP.E32 (from the same FAT32 programs image)
+    // instead of waiting at the text-shell prompt.
+    if (sBootDesktop)
+        {
+        KPrintf("Boot desktop: starting DESKTOP.E32...\r\n");
+        RunImage("DESKTOP", "");
+        }
     KPrintf("Symbian EKA2 x86 full kernel -- interactive console\r\n");
     KPrintf("sched by TheScheduler, IRQs via genuine vectors + variant Bind\r\n");
     FatPrompt();

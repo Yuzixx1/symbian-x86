@@ -15,7 +15,8 @@ ISO layout:
         names so GRUB's /boot/kernfull.elf lookups hit exactly.
   UEFI: El Torito EFI entry -> FAT image with GRUB x86_64-efi BOOTX64.EFI
         + grub.cfg + both kernels (own copies, no ISO9660 driver needed).
-Both menus offer full kernel + nanokernel.
+Both menus offer full kernel, nanokernel, and a "Desktop (graphical)" entry
+that passes `desktop=1` on the Multiboot cmdline so the shell auto-runs DESKTOP.E32.
 Usage: mkgrubiso.py [out.iso]
 """
 import os
@@ -188,6 +189,17 @@ menuentry "Symbian EKA2 nanokernel" {
     multiboot /boot/nano.elf
     boot
 }
+# Boot straight into the graphical desktop: GRUB puts `desktop=1` in the
+# Multiboot1 cmdline (MBI flags bit 2, string at MBI+16). The shell latches
+# that token early and auto-runs DESKTOP.E32 instead of waiting at the prompt.
+# Default stays entry 0 so existing shell-based tests are unaffected.
+menuentry "Symbian EKA2 Desktop (graphical)" {
+    set gfxpayload=text
+    echo Booting Symbian EKA2 Desktop...
+    multiboot /boot/kernfull.elf desktop=1
+@PROGRAMSMOD@    echo Multiboot ok, booting...
+    boot
+}
 """
 
 EFI_CFG = """set timeout=10
@@ -202,6 +214,11 @@ menuentry "Symbian EKA2 nanokernel" {
     echo Booting nanokernel...
     multiboot /boot/nano.elf
     boot
+}
+menuentry "Symbian EKA2 Desktop (graphical)" {
+    echo Booting Symbian EKA2 Desktop...
+    multiboot /boot/kernfull.elf desktop=1
+@PROGRAMSMOD@    boot
 }
 """
 

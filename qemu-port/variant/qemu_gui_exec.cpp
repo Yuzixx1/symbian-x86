@@ -12,6 +12,8 @@
 //   250 -> framebuffer byte size (u32)
 //   251 -> arg1==0: return the gui_shared address; arg1>0: run a display list,
 //          refresh the PS/2 mouse crosshair and publish its scanned x/y.
+//          The PS/2 IRQ12 ISR (qemu_mouse.cpp) also publishes button state
+//          directly into gui_shared.buttons/button_seq via the bridge below.
 //
 // kernelhwsrv/ is read-only; the genuine EpocSlowExecTable is patched at boot
 // just like SvcMgr (268/269/270) and netbridge (247/248).  Idempotent.
@@ -93,7 +95,10 @@ namespace
     static TInt GuiDrawExec(TInt aArg, TInt)
         {
         if (aArg == 0)
+            {
+            mouse_init();                       // re-arm IRQ12 after PIC remap
             return (TInt)&gGui;                 // shared display-list buffer
+            }
 
         TUint n = (TUint)aArg;
         if (n > GUI_MAX_CMDS)
@@ -180,6 +185,22 @@ namespace
         }
     }  // namespace
 
+// IRQ12 ISR bridge: publish the decoded PS/2 button mask into the same shared
+// struct userland maps via exec 251(0).  Two volatile stores only — safe from
+// interrupt context, and no display-list exec is required to see a click.
+void gui_publish_buttons(TUint aButtons, TUint aSeq)
+    {
+    gGui.buttons = aButtons;
+    gGui.button_seq = aSeq;
+    }
+
+// Diagnostic readback of exactly the words a user program sees.
+void gui_button_state(TUint& aButtons, TUint& aSeq)
+    {
+    aButtons = gGui.buttons;
+    aSeq = gGui.button_seq;
+    }
+
 TInt gui_init()
     {
     if (gInstalled)
@@ -212,6 +233,22 @@ TInt gui_init()
         (TUint)QE_EXEC_GUI_DRAW, display_lfb(), display_fb_size(),
         w, h, bpp, (TUint)&gGui);
     return KErrNone;
+    }
+
+// Called by display_set_mode() after a VBE switch: the guishost shared block
+// (user/guishost.h) must advertise the new geometry and a valid cursor pos.
+void GuiGeometryReset()
+    {
+    TUint w = 0, h = 0, bpp = 0;
+    display_geometry(w, h, bpp);
+    gGui.fb_w = (TInt)w;
+    gGui.fb_h = (TInt)h;
+    if (!w || !h)
+        return;
+    if ((TUint)gGui.mouse_x >= w)
+        gGui.mouse_x = (TInt)(w / 2);
+    if ((TUint)gGui.mouse_y >= h)
+        gGui.mouse_y = (TInt)(h / 2);
     }
 
 // Boot hook: HwInit0 walks .init_array after paging + ROM are ready.

@@ -19,6 +19,14 @@
  *          arg1 == 0 : return the address of struct gui_shared (low phys)
  *          arg1  > 0 : execute arg1 display-list commands, refresh the PS/2
  *                      mouse crosshair and publish its x/y in the struct.
+ *
+ * Mouse buttons are published by the IRQ12 PS/2 ISR (variant/qemu_mouse.cpp)
+ * straight into gui_shared.buttons / gui_shared.button_seq; no exec call is
+ * needed to observe a press.  buttons is a bitmask (1=left,2=right,4=middle);
+ * button_seq increments on every button-state change so a desktop can detect
+ * a click even if press+release happen between two polls.  Both fields re-use
+ * the old reserved word / a tail slot, so every pre-existing field keeps its
+ * offset and GUI_VERSION stays 1.
  * ------------------------------------------------------------------------ */
 
 #define QE_EXEC_GUI_FBBASE      249u
@@ -46,8 +54,12 @@ struct gui_shared {
     volatile unsigned draw_calls;     /* kernel: number of DRAW execs served  */
     volatile int      fb_w, fb_h;     /* kernel: framebuffer geometry         */
     volatile int      mouse_x, mouse_y; /* kernel: PS/2 cursor (GC exec scan) */
-    volatile unsigned reserved;
+    volatile unsigned buttons;        /* kernel: PS/2 button mask 1=L 2=R 4=M */
+                                      /* (re-used old `reserved` word: no     */
+                                      /*  offset change for existing fields) */
     struct gui_cmd    cmds[GUI_MAX_CMDS];
+    volatile unsigned button_seq;     /* kernel: increments on button change  */
+                                      /* (tail append: cmds offset unchanged) */
 };
 
 #endif /* QPORT_USER_GUIHOST_H */
