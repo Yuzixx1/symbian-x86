@@ -176,6 +176,70 @@ void audio_info();                                  // BARS, vendor ID, codec st
 TInt audio_play_test();                             // play a 1kHz test tone
 TInt audio_tone(TInt aFreq, TInt aMs);              // play one note (freq Hz, ms)
 
+// Unified AC'97 queue/pool (variant/qemu_audio.cpp). 8 x 16 KiB low-RAM slots
+// feed the SAME multi-descriptor DMA engine as audio_pcm_play(); there is only
+// one BDL and one completion poller. Drop-on-saturation (KErrInUse) is counted
+// in stats. Small buffers (<= 16 KiB) are copied into a slot so the caller may
+// reuse its buffer immediately; oversized ones go straight to the engine.
+TInt audio_pool_init();                             // idempotent boot/hot init
+TInt audio_pool_poll();                             // reclaim done, kick next
+void audio_pcm_stats(TUint& aPlayed, TUint& aDropped, TUint& aBusy,
+                     TUint& aCompleted);
+TUint audio_pcm_busy();
+void audio_pool_info();                             // print "AU: stats ..."
+
+// --- AC'97 PCM sample playback (async, multi-descriptor BDL) ---------------
+// THE canonical play API (the only audio_pcm_play overload). It copies/converts
+// a user PCM buffer into the one internal 16-bit stereo DMA buffer, arms the
+// one PCM-OUT BDL and returns IMMEDIATELY (async). Poll audio_pcm_status() for
+// consumption / completion; audio_pcm_stop() halts and flushes the queue.
+//   aBuf      : linear address of the source bytes (low, identity-mapped RAM).
+//   aBytes    : source length in bytes.
+//   aRate     : 11025 / 22050 / 44100 / 48000 Hz (front DAC is set to match).
+//   aChannels : packed format -- low 16 bits = channel count (1 mono, 2 stereo),
+//               high 16 bits = bits/sample (8 unsigned or 16 signed, 0 => 16).
+// Supported inputs: 8-bit unsigned / 16-bit signed, mono / stereo.  Output is
+// always 16-bit signed stereo (mono is duplicated to both channels).
+TInt audio_pcm_play(const void* aBuf, TUint aBytes, TUint aRate, TUint aChannels);
+TInt audio_pcm_selftest();                          // 1 s 440 Hz 16-bit stereo selftest
+
+// Status/control transport shared with ring 3 (see qemu_audio_exec.cpp).
+struct au_pcm_req
+    {
+    TUint32 iBuf;      // linear address of user PCM data (low RAM)
+    TUint32 iBytes;    // source length in bytes
+    TUint32 iRate;     // sample rate in Hz
+    TUint32 iFormat;   // (bits<<16) | channels
+    };
+struct au_pcm_stat
+    {
+    TUint32 iState;    // 0 = idle, 1 = DMA busy
+    TUint32 iPosition; // bytes consumed so far
+    TUint32 iTotal;    // total bytes submitted
+    };
+struct au_pcm_stats
+    {
+    TUint32 iPlayed;    // buffers armed on the DMA engine
+    TUint32 iDropped;   // rejected on queue saturation
+    TUint32 iBusy;      // queued + in-flight slots
+    TUint32 iCompleted; // buffers reclaimed after DMA completion
+    };
+TInt audio_pcm_status(au_pcm_stat* aStat);          // KErrNone fills *aStat
+TInt audio_pcm_stop();                              // halt PCM-OUT DMA, flush queue
+
+// Slow exec 240 op selectors: the high bit of a1 selects the new PCM ops;
+// legacy calls (a1 = Hz < 0x80000000) keep driving audio_tone() unchanged.
+// a1 = AU_PCM_PLAY     -> a2 = linear address of struct au_pcm_req
+// a1 = AU_PCM_STATUS   -> a2 = linear address of struct au_pcm_stat
+// a1 = AU_PCM_STOP     -> a2 ignored
+// a1 = AU_PCM_SELFTEST -> a2 ignored (kernel-generated 440 Hz buffer)
+// a1 = AU_PCM_STATS    -> a2 = linear address of struct au_pcm_stats
+#define AU_PCM_PLAY     ((TInt)0x80000001u)
+#define AU_PCM_STATUS   ((TInt)0x80000002u)
+#define AU_PCM_STOP     ((TInt)0x80000003u)
+#define AU_PCM_SELFTEST ((TInt)0x80000004u)
+#define AU_PCM_STATS    ((TInt)0x80000005u)
+
 // Process-viewer census exec (variant/qemu_ps_exec.cpp). Slow exec slot 241:
 // op 0 -> identity-mapped ps_census base (user/pshost.h), op 1 -> refresh.
 TUint PsExecSlot();                                 // == 241, for diagnostics

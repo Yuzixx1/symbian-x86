@@ -407,6 +407,19 @@ build/user/SOUNDPLR.E32: build/user/soundplr.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
+# PCM sample playback proof E32: generates 1 s of 44.1 kHz 16-bit stereo 440 Hz
+# audio in user low RAM, submits it via exec 240 op AU_PCM_PLAY (async), polls
+# AU_PCM_STATUS until DMA completion, then AU_PCM_STOP. Genuine PE2 import of
+# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot audiopcm_printf_slot == 0x408000.
+userland: build/user/AUDIOPCM.E32
+build/user/audiopcm.o: user/audiopcm.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/audiopcm.elf: build/user/start.o build/user/runtime.o build/user/audiopcm.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=audiopcm_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/AUDIOPCM.E32: build/user/audiopcm.elf tools/elf2e32.py tools/mke32.py
+	python3 tools/elf2e32.py $< $@ --euser-import 915
+	python3 tools/e32read.py $@ --quiet
+
 # APPLICATION LAUNCHER / BOOT MENU: numbered E32 app list, PortCon selection,
 # launches via trusted exec 268 (SvcMgrLaunch). Genuine PE2 import of EUSER.DLL
 # ordinal 915 (RDebug::Printf) for markers; IAT slot applaunch_printf_slot.
@@ -1611,3 +1624,17 @@ build/user/zmachine32.elf: build/user/start.o build/user/runtime.o build/zmachin
 build/user/ZMACHINE.E32: build/user/zmachine32.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
+
+# ---------------------------------------------------------------------------
+# REAL DOOM SOUND (append-only).  i_e32sound.c supplies DG_sound_module and
+# DG_music_module for FEATURE_SOUND (enabled in ports/doom/doomfeatures.h):
+# DMX sound lumps -> 16-bit stereo PCM -> AC97 exec 240, plus a small MUS synth.
+# The new object is added as an extra prerequisite of doome32.elf; the original
+# rules above stay untouched.  Mix_Flush() in e32_platform.c (owned by another
+# agent) may call E32Snd_Pump()/E32Snd_Flush() from this module.
+build/user/doom_i_e32sound.o: ports/doom/i_e32sound.c ports/doom/e32_audio.h \
+		ports/doom/i_sound.h ports/doom/e32_shim.h ports/doom/w_wad.h \
+		ports/doom/sounds.h user/runtime.h | build/user
+	$(CC) $(DOOM_FLAGS) -c $< -o $@
+
+build/user/doome32.elf: build/user/doom_i_e32sound.o

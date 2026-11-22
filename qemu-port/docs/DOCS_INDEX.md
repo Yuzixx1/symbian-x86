@@ -274,3 +274,24 @@ This brings the indexed Markdown total to **99**.
   `FDOOM1.WAD` (28,795,076 B) among 87 files with ~16.8 MB free. Kernel-side
   blockers (streaming WAD reads, fbblit, DOOM.E32) remain. `kernelhwsrv/`
   untouched; no commits or pushes.
+
+## Added — Audio subsystem / DOOM audio (append-only)
+
+- [AUDIO_SUBSYSTEM.md](AUDIO_SUBSYSTEM.md) — the full AC97 PCM-OUT audio stack:
+  PCI class 04.01 enumeration and the `8384:7600` codec vendor ID, NAM/NAB BARs
+  and PCM-OUT BDL/PICB DMA registers, the 48 kHz stereo signed-16-bit buffer
+  format, the polled `audio_play_test()` / `audio_tone()` kernel API, the
+  slow-exec 240 tone bridge and the new PCM enqueue/flush ops, how DOOM's
+  `i_mysound.c` mixer shim feeds a 32-buffer ring, synchronous/polled operation
+  and why `-audiodev none` keeps guest DMA alive, the memory budget (<1 MiB),
+  current limitations (no kernel mixer, one stream, poor music, 44.1 vs 48 kHz,
+  no audible headless check) and the test commands. Complements §6 of
+  [GUI_AUDIO.md](GUI_AUDIO.md).
+- `tools/r1_doom_audio_test.py` — end-to-end DOOM + audio harness. Reuses
+  `r1_doom_test.py`'s asset staging/WAD recovery and boots the GRUB ISO with
+  `-audiodev none,id=a0 -device AC97,audiodev=a0`, launches `doom`, presses
+  Enter to start, and asserts the AC97 boot banner (vendor `8384:7600`), the
+  `SND:` INIT/sfx/play and kernel `AU:` PCM-play marker families, `DOOM: TITLE`
+  / `DOOM: FRAME` and no `Exc`/`PanicKernExec`/`FAULT`. Missing assets →
+  `RESULT: SKIP`; a held-open QMP screendump is best-effort and never gates the
+  result.

@@ -294,3 +294,28 @@ program's name and a basic command (`print(1+2)`, `look`/`quit`, a zip listing,
 `/tmp/opencode/r1_ported_<app>.log`. Run it with
 `python3 tools/r1_ported_software_test.py`; exit 0 means every available port
 passed (or all four were still missing).
+
+## Audio-capable apps (append-only)
+
+The audio path is driven by the AC97 PCM-OUT driver (`variant/qemu_audio.cpp`),
+the slow-exec 240 tone bridge plus the new PCM ops
+(`variant/qemu_audio_exec.cpp`) and, for DOOM, the `i_mysound.c` mixer shim.
+See [AUDIO_SUBSYSTEM.md](AUDIO_SUBSYSTEM.md) for the hardware, buffer format,
+memory budget, limitations and QEMU flags. All entries need
+`-audiodev none,id=a0 -device AC97,audiodev=a0`; the tone apps rely on exec 240
+and ord-915 via `EUSER.DLL`.
+
+| E32 | Description | Markers | Build | QEMU test |
+|-----|-------------|---------|-------|-----------|
+| **SOUNDPLR** | Plays a C4–E4–G4–C5 tone sequence through exec 240 (`audio_tone`). | `audio tone:` | Std+915 | `r1_soundplr_test.py` |
+| **MORSE** | `encode`/`play`/`selftest`: 600 Hz dot/dash tones via exec 240, degrades gracefully if the exec is absent. | `MORS:` | Std+915 | `r1_morse_test.py` |
+| **MUSIC** | `scale`/`play`/`selftest`: equal-temperament C4–B4 scale (A4=440 Hz), 150 ms/note via exec 240. | `MUS:` | Std+915 | `r1_music_test.py` |
+| **DOOM** (audio run) | The real freedoom1 port started with Enter; its `SND:` SFX/music path renders a 32-buffer stereo ring flushed to the kernel's `AU:` PCM-OUT path. | `SND:` / `AU:` / `DOOM:` | Std+915 | `r1_doom_audio_test.py` |
+
+`tools/r1_doom_audio_test.py` stages `DOOM.E32` + `EUSER.DLL` + `FDOOM1.WAD`
+(recovering the WAD from the build ISO when absent), boots the GRUB ISO with the
+AC97 device attached, feeds `doom` then Enter, and checks the `8384:7600`
+banner, the `SND:` INIT/sfx/play and `AU:` PCM-play marker families, a rendered
+`DOOM: TITLE`/`FRAME` and a fault-free log. It skips cleanly while assets are
+missing and its held-open-QMP screendump never fails the run. The driver-only
+check is `tools/r1_qemu_audio_test.py`.

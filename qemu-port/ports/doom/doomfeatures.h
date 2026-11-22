@@ -31,9 +31,9 @@
 
 #undef FEATURE_MULTIPLAYER
 
-// Enables sound output
-
-//#undef FEATURE_SOUND
+// Enables sound output.  The E32 port supplies DG_sound_module /
+// DG_music_module in i_e32sound.c (AC97 PCM exec 240).
+#define FEATURE_SOUND 1
 
 #endif /* #ifndef DOOM_FEATURES_H */
 

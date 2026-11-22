@@ -1947,11 +1947,18 @@ static default_t *GetDefaultForName(char *name)
         result = SearchCollection(&extra_defaults, name);
     }
 
-    // Not found? Internal error.
+    // Not found?  Do not abort.  A variable can be compiled into one
+    // translation unit (e.g. i_sound.c binds use_libsamplerate when
+    // FEATURE_SOUND is set) while a stale/defaults-table object compiled
+    // with different feature flags has no matching entry.  Treat that as a
+    // skipped binding and keep the engine alive; all other callers already
+    // check for a NULL result.
 
     if (result == NULL)
     {
-        I_Error("Unknown configuration variable: '%s'", name);
+        printf("CFG: warning: unknown configuration variable '%s' (skipped)\n",
+               name);
+        return NULL;
     }
 
     return result;
@@ -1966,6 +1973,13 @@ void M_BindVariable(char *name, void *location)
     default_t *variable;
 
     variable = GetDefaultForName(name);
+
+    if (variable == NULL)
+    {
+        // No defaults-table entry for this name -- skip the binding instead
+        // of dereferencing NULL or killing DOOM at startup.
+        return;
+    }
 
     variable->location = location;
     variable->bound = true;
