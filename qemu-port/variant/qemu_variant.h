@@ -73,7 +73,10 @@ TBool PciFindClass(unsigned int aClass, unsigned int aSub,
                    unsigned int* aBus, unsigned int* aDev, unsigned int* aFn);
 
 // VBE linear framebuffer + display HAL (variant/qemu_display.cpp).
-TInt display_init();                 // idempotent; sets 1024x768x32 LFB (or 8bpp fallback)
+TInt display_init();                 // idempotent; boot-time VBE bookkeeping + DISPLAY: markers
+                                     // (the shell parks the hardware in text mode 3 afterwards)
+void display_ensure_graphics();      // canonical lazy VBE 0x118 activation; safe/idempotent
+                                     // from any kernel exec handler or the shell launch path
 void display_info();                 // print mode / LFB base / geometry
 void display_clear(TUint aColor);    // 0x00RRGGBB
 void display_rect(TUint aX, TUint aY, TUint aW, TUint aH, TUint aColor);

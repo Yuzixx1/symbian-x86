@@ -14,8 +14,12 @@
 // 0xE0000000 on q35); 0xE0000000 is used as a last-resort default.
 //
 // Public API (qemu_variant.h): display_init / display_info / display_clear /
-// display_rect / display_putc / display_test / QemuDisplayRegisterHal.
-// A static constructor makes display_init() idempotent at boot.
+// display_rect / display_putc / display_test / QemuDisplayRegisterHal /
+// display_ensure_graphics. A static constructor makes display_init() idempotent
+// at boot. display_init() only publishes the framebuffer *bookkeeping* (DISPLAY:
+// markers, geometry, LFB base) — the shell parks the hardware in VGA text mode 3
+// before the prompt. display_ensure_graphics() is the lazy, idempotent switch
+// that re-asserts the 0x118 LFB when a graphical exec needs real pixels.
 
 #include <x86.h>
 #include <e32hal.h>
@@ -295,6 +299,40 @@ TInt display_init()
     return KErrNone;
     }
 
+// Canonical lazy graphics activation, shared by the shell's launch path and by
+// every kernel-side GUI / fbblit exec handler (SvcMgr 268 bypasses RunImage).
+//
+// idempotent by reading the actual DISPI enable bit back from the hardware:
+//   * boot: display_init() enabled the LFB, then the shell's VgaForceText3()
+//     rewrote index 4 to 0 -> the bit is clear, so the first exec re-enables it;
+//   * after the shell's EnsureVbeGraphics() (or a previous exec) switched it on,
+//     the bit is already set -> no reprogramming, no framebuffer clear, no flicker.
+// A sticky software flag would be wrong here: the boot hook runs before the
+// shell parks the LFB, so it would suppress the very switch execs need.
+void display_ensure_graphics()
+    {
+    if (!gReady)
+        {
+        TInt r = display_init();          // publish bookkeeping if no boot hook ran
+        if (r != KErrNone || !gReady)
+            return;
+        }
+    if (gDispiId < kDispiIdMin || gDispiId > kDispiIdMax)
+        return;                           // legacy mode-13h fallback is already graphics
+    if (DispiRead(kIdxEnable) & kEnEnable)
+        return;                           // already active -> nothing to do
+    DispiWrite(kIdxEnable, 0);            // disable while reprogramming
+    DispiWrite(kIdxXRes, 1024);
+    DispiWrite(kIdxYRes, 768);
+    DispiWrite(kIdxBpp, 32);
+    DispiWrite(kIdxBank, 0);
+    DispiWrite(kIdxVirtWidth, 1024);
+    DispiWrite(kIdxYOffset, 0);
+    DispiWrite(kIdxEnable, kEnEnable | kEnLfb);
+    KPrintf("DISPLAY: lazy VBE 0x118 enabled LFB=0x%08x 1024x768x32\r\n",
+        (TUint)gLfb);
+    }
+
 void display_info()
     {
     TInt r = display_init();
@@ -434,18 +472,19 @@ TInt display_test()
     return KErrNone;
     }
 
-// Read-only accessors for the GUI desktop shell (variant/qemu_gui_exec.cpp).
-// They expose the already-initialised framebuffer to kernel-side exec handlers;
-// userland reaches them only through the dedicated slow execs, never directly
-// (the LFB sits in the U/S=0 high half of the flat PDE map).
+// Read-only bookkeeping accessors for the GUI shell, mouse and fbblit execs.
+// They deliberately do NOT call display_init(): during the boot text-mode phase
+// the DISPI LFB is parked off, and an accessor must never flip the hardware back
+// to VBE as a side effect. The boot hook already published these globals; exec
+// handlers that need real pixels call display_ensure_graphics() explicitly.
 TUint32 display_lfb()
-    { display_init(); return (TUint32)gLfb; }
+    { return (TUint32)gLfb; }
 
 TUint display_fb_size()
-    { display_init(); return gReady ? gWidth * gHeight * (gBpp >> 3) : 0; }
+    { return gReady ? gWidth * gHeight * (gBpp >> 3) : 0; }
 
 void display_geometry(TUint& aW, TUint& aH, TUint& aBpp)
-    { display_init(); aW = gWidth; aH = gHeight; aBpp = gBpp; }
+    { aW = gWidth; aH = gHeight; aBpp = gBpp; }
 
 TUint display_getpixel(TUint aX, TUint aY)
     { return gReady ? GetPixel(aX, aY) : 0; }

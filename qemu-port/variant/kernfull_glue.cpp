@@ -128,6 +128,11 @@ extern "C" void HwInit0()
     QemuUart::Puts("\r\nSuperPageAddress = ");
     QemuUart::PutHex((unsigned)SuperPageAddress);
     QemuUart::Puts("\r\n");
+    // Deliberately NO display_init() here: the boot console is GRUB's real VGA
+    // mode 3 (80x25 text at 0xB8000). Some variant boot constructors still
+    // probe display_geometry()/display_init(); the shell re-asserts the mode-3
+    // scanout (VgaForceText3) before its first prompt and only promotes to the
+    // VBE LFB when a graphical E32 image is actually launched.
     for (CtorFn* p = __init_array_start; p != __init_array_end; ++p)
         (*p)();
     }

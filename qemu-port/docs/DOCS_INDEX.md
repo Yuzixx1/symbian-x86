@@ -295,3 +295,29 @@ This brings the indexed Markdown total to **99**.
   / `DOOM: FRAME` and no `Exc`/`PanicKernExec`/`FAULT`. Missing assets →
   `RESULT: SKIP`; a held-open QMP screendump is best-effort and never gates the
   result.
+
+## Added — boot-in-text-mode architecture (append-only)
+
+- [TEXT_MODE.md](TEXT_MODE.md) — reader-facing guide to the new display
+  architecture: boot in genuine VGA mode 3 (80x25 cells at 0xB8000, 16-colour
+  attribute bytes, CRTC cursor, hardware scrolling) so `version`/`help` and all
+  text E32 apps render crisply on COM1 and on screen; the *lazy* switch to VBE
+  2.0 0x118 (1024x768x32 LFB, DISPI 0x1CE/0x1CF, PCI-BAR base, 4096-byte pitch)
+  only when a known graphical E32 launches, including `display_set_mode()`,
+  the `FbMirrorReset()` / `GuiGeometryReset()` / `MouseGeometryReset()` hooks and
+  the `VBE: SWITCH OK` marker; why this replaces bitmap-font text emulation and
+  its flicker; an honest account of app exit (no int-10 switch-back — the
+  console mirror resumes on the LFB, so screendumps stay 1024x768); unchanged
+  GUI display-list/exec protocol, mirror-owner bookkeeping, QEMU `-vga std`
+  flags, shell verbs and the test plan. Notes that the implementation is
+  landing in parallel and `r1_textmode_test.py` is the acceptance gate.
+- `tools/r1_textmode_test.py` — host acceptance test for that architecture.
+  Boots the GRUB ISO with `-vga std -serial stdio`, uses the held-open QMP
+  screendump session from `r1_doom_audio_test.py`, and asserts the prompt screen
+  is a real 80x25 text mode (720x400 or 640x400, <=32 colours, banded glyph rows,
+  not 1024x768); feeds `version` + `help` and requires both serial output and a
+  changed on-screen text region; launches DOOM or `--app guishell` and asserts a
+  1024x768 VBE framebuffer; fails on `Exc`/`PanicKernExec`/`FAULT`. Missing
+  assets => `RESULT: SKIP`; flaky screendumps are reported as INFO, never fatal.
+
+This brings the indexed Markdown total to **100**.

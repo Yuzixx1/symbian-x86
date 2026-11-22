@@ -35,13 +35,15 @@ namespace
     // Cursor colour painted by the PS/2 mouse driver (qemu_mouse.cpp).
     const TUint kCursorYellow = 0x00FFFF00u;
 
-    // exec 249: framebuffer physical base.
+    // exec 249: framebuffer physical base. SvcMgr/exec-268 callers and direct
+    // test E32s reach here without the shell's RunImage switch, so activate the
+    // LFB on first use (idempotent, no-op once the shell already switched).
     static TInt GuiFbBaseExec(TInt, TInt)
-        { return (TInt)display_lfb(); }
+        { display_ensure_graphics(); return (TInt)display_lfb(); }
 
     // exec 250: framebuffer byte size.
     static TInt GuiFbSizeExec(TInt, TInt)
-        { return (TInt)display_fb_size(); }
+        { display_ensure_graphics(); return (TInt)display_fb_size(); }
 
     // Find the PS/2 crosshair by looking for its yellow horizontal and
     // vertical arms in VRAM.  Returns ETrue when a plausible crosshair is
@@ -156,6 +158,7 @@ namespace
     // exec 251: multiplexed GUI host.
     static TInt GuiDrawExec(TInt aArg, TInt)
         {
+        display_ensure_graphics();   // first display list may be the first graphics use
         if (aArg == 0)
             {
             mouse_init();                       // re-arm IRQ12 after PIC remap
@@ -301,6 +304,11 @@ TInt gui_init()
     TInt r = display_init();
     if (r != KErrNone)
         return r;
+    // At boot this is a no-op: display_init just enabled the DISPI LFB (or the
+    // display boot hook did), so the enable bit reads back set. The shell then
+    // parks the LFB in text mode; the exec handlers above re-enable it lazily
+    // by reading that same bit, which is why no sticky "activated" flag is used.
+    display_ensure_graphics();
     mouse_init();                                 // idempotent; ensures a cursor
 
     // Zero the shared region, then publish its header.

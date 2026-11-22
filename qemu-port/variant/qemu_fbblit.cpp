@@ -65,9 +65,12 @@ TUint display_pitch()
     return w * (b >> 3);
     }
 
-// ctl op 2: return framebuffer geometry to a user struct.
+// ctl op 2: return framebuffer geometry to a user struct. Exec-270 callers
+// (and direct test programs) bypass the shell's RunImage switch, so lazily
+// activate the LFB here before publishing its geometry.
 TInt fbblit_info_exec(TInt aArg)
     {
+    display_ensure_graphics();
     if (!UserRange((TUint)aArg, sizeof(struct fbblit_info)))
         return KErrArgument;
     struct fbblit_info info;
@@ -86,9 +89,12 @@ TInt fbblit_info_exec(TInt aArg)
     }
 
 // ctl op 3: copy a user frame into the LFB rectangle (x,y,w,h).  This runs in
-// kernel context from exec 270, so the U/S=0 framebuffer is writable.
+// kernel context from exec 270, so the U/S=0 framebuffer is writable. Activate
+// on first use: DOOM can call blit without ever going through the shell's
+// graphical-launch path (e.g. a nested/direct E32 launch).
 TInt fbblit_blit_exec(TInt aArg)
     {
+    display_ensure_graphics();
     if (!UserRange((TUint)aArg, sizeof(struct fbblit_req)))
         return KErrArgument;
     struct fbblit_req r;
@@ -172,6 +178,9 @@ TInt FbBlitInit()
     if (((TUint)&tab[552]) == (TUint)EpocFastExecTable)
         KPrintf("FBBLIT: slots 274/275 overlap EpocFastExecTable; routed\r\n");
 
+    // Boot-time bookkeeping only: do NOT call display_ensure_graphics() here.
+    // The shell parks the DISPI LFB in text mode 3 just after boot; the exec
+    // handlers above are the sole lazy activation points.
     TUint w = 0, h = 0, b = 0;
     display_geometry(w, h, b);
     KPrintf("FBBLIT: ready execs=274/275\r\n");

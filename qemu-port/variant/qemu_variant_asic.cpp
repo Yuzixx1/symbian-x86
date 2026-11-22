@@ -155,6 +155,8 @@ void QemuVariantAsic::DebugOutput(TUint aChar)
     {
     char c = (char)(aChar & 0xFF);
     QemuUart::PutC(c);
+    // VgaTeletype honours the console mode gate: kVram only at the boot text
+    // prompt, plus the LFB mirror once a graphical app has switched VBE on.
     VgaTeletype(c);
     }
 
