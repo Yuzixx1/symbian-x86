@@ -84,7 +84,6 @@ static int find_iwad(void)
 int app_main(void)
 {
     char *argv[4];
-    unsigned ticks = 0;
 
     doom_shim_init();
     doom_marker("DOOM: start");
@@ -105,12 +104,15 @@ int app_main(void)
      * DG_Init(), then runs D_DoomMain() (which paints the first frame). */
     doomgeneric_Create(3, argv);
 
-    /* Standard doomgeneric platform loop.  Bound the run so a serial test
-     * always observes an orderly DOOM: DONE rather than a killed process. */
+    /* Standard doomgeneric platform loop.  There is deliberately NO frame or
+     * time cap: DOOM runs until the user explicitly quits (Esc is reported by
+     * DG_GetKey via doom_quit_requested(), or DOOM's "Quit Game" menu calls
+     * I_Quit -> exit()).  A serial test that needs to stop the guest sends Esc
+     * itself; it must never rely on the engine exiting on its own. */
     for (;;)
         {
         doomgeneric_Tick();
-        if (++ticks >= 420u) break;          /* ~12 s at 35 tics/s */
+        if (doom_quit_requested()) break;
         }
 
     doom_marker("DOOM: DONE");

@@ -21,4 +21,8 @@ int e32_vformat(char *buf, int cap, const char *fmt, va_list ap);
 /* Called once before doomgeneric_Create (resets errno, IAT sanity). */
 void doom_shim_init(void);
 
+/* Set by the platform key layer when the user presses Esc; the app_main loop
+ * polls this after every tick so DOOM exits only on an explicit user quit. */
+int doom_quit_requested(void);
+
 #endif /* E32_DOOM_SHIM_H */

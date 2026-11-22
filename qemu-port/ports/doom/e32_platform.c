@@ -37,9 +37,32 @@ const char *doom_iwad_path = "X:/FDOOM1.WAD";
 static unsigned sXOff, sYOff;
 static unsigned sFrames;
 static int sPaletteMarked;
-static int sKeyMarked;
 static int sKeyRaw;
 static int sKeyPending;          /* pending synthetic key-up */
+static int sHoldSkip;            /* DG_GetKey calls to defer the key-up */
+static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
+
+/* app_main polls this once per doomgeneric_Tick().  Without it the engine has
+ * no way to leave its loop: I_Quit() is compiled out of this DOOM build and
+ * a killed QEMU would only release the console lease with no DOOM: DONE. */
+int doom_quit_requested(void) { return sQuitRequested; }
+
+/* --- serial input state ---------------------------------------------------
+ * The kernel PS/2 ISR drops E0-extended scancodes, so hardware arrow keys
+ * never reach userland.  Serial clients (the QEMU console) can still send
+ * ANSI ESC [ A/B/C/D sequences; decode them here instead of the old bogus
+ * '[' / ']' stand-ins, which stole those characters for arrow keys. */
+static int sPeek = -1;           /* one-byte pushback after a bare ESC */
+static int sEscAwait;            /* saw ESC [ , waiting for the final byte */
+static unsigned sEscAt;          /* DG_GetTicksMs() when the sequence began */
+
+/* A macro (quick start / skill select) is a short list of DOOM keycodes fed
+ * through the same press+release path as real keystrokes. */
+#define KEYQ_MAX 16
+static unsigned char sKeyQ[KEYQ_MAX];
+static unsigned sKeyQHead, sKeyQLen;
+static unsigned sKeyCount;       /* for sparse DOOM: KEY markers */
+static int sEnterSeen;           /* first Enter fast-starts through the menus */
 
 void DG_Init(void)
 {
@@ -57,12 +80,21 @@ void DG_Init(void)
 
     sFrames = 0;
     sPaletteMarked = 0;
-    sKeyMarked = 0;
     sKeyPending = 0;
+    sHoldSkip = 0;
     sKeyRaw = 0;
+    sQuitRequested = 0;
+    sPeek = -1;
+    sEscAwait = 0;
+    sEscAt = 0;
+    sKeyQHead = 0;
+    sKeyQLen = 0;
+    sKeyCount = 0;
+    sEnterSeen = 0;
 
     doom_marker("DOOM: INIT");
     doom_marker("DOOM: ENGINE READY");
+    doom_marker("DOOM: CONTROLS: Enter=select Esc=quit arrows/WASD=move space=fire 1-5=skill");
     (void)con_acquire();
 }
 
@@ -113,6 +145,9 @@ void DG_DrawFrame(void)
         doom_marker("DOOM: FRAME");
         doom_marker_n("DOOM: frame ", 1);
         }
+    else if (sFrames == 1000u)
+        { doom_marker_n("DOOM: frame ", sFrames);
+          doom_marker("DOOM: still running"); }
     else if ((sFrames % 35u) == 0u)
         doom_marker_n("DOOM: frame ", sFrames);
 
@@ -152,41 +187,188 @@ uint32_t DG_GetTicksMs(void)
     return fallback;
 }
 
-static int map_key(int raw)
+static void keyq_push(unsigned char k)
 {
-    if (raw == '\r' || raw == '\n') return KEY_ENTER;
-    if (raw == 27) return KEY_ESCAPE;
-    if (raw == 8 || raw == 127) return KEY_BACKSPACE;
-    if (raw == '\t') return KEY_TAB;
+    if (sKeyQLen >= KEYQ_MAX) return;
+    sKeyQ[(sKeyQHead + sKeyQLen) % KEYQ_MAX] = k;
+    ++sKeyQLen;
+}
+
+static int keyq_pop(void)
+{
+    int k;
+    if (!sKeyQLen) return -1;
+    k = sKeyQ[sKeyQHead];
+    sKeyQHead = (sKeyQHead + 1u) % KEYQ_MAX;
+    --sKeyQLen;
+    return k;
+}
+
+static void keyq_push_n(unsigned char k, unsigned n)
+{
+    while (n--) keyq_push(k);
+}
+
+/* Emit sparse key diagnostics: every key early on (proves input is live),
+ * then at most one in twenty so a long game does not flood the serial log. */
+static void mark_key(unsigned k)
+{
+    ++sKeyCount;
+    if (sKeyCount <= 6u || (sKeyCount % 20u) == 0u)
+        doom_marker_n("DOOM: KEY ", k);
+}
+
+/* First Enter on the title screen walks the vanilla menu chain
+ * (title -> main -> new game -> episode -> skill) so a serial user can reach
+ * the level with one keystroke.  Later Enters behave normally.  Digits 1-5
+ * enqueue the same walk and select the matching skill; 5 needs a "y" on the
+ * nightmare warning.  NewDef.lastOn defaults to "hurt me plenty" (skill 3). */
+static void queue_quickstart(void)
+{
+    sEnterSeen = 1;               /* queued Enters must not re-trigger this */
+    keyq_push_n(KEY_ENTER, 3);
+    doom_marker("DOOM: QUICKSTART");
+}
+
+static void queue_skill(int skill)
+{
+    int i, target = skill - 1;   /* menu index 0..4 */
+    queue_quickstart();
+    for (i = 2; i < target; ++i) keyq_push(KEY_DOWNARROW);
+    for (i = 2; i > target; --i) keyq_push(KEY_UPARROW);
+    keyq_push(KEY_ENTER);        /* confirm skill / start the level */
+    if (skill == 5) keyq_push('y');
+}
+
+/* Map a raw console byte to a DOOM keycode.  DOOM's defaults bind movement
+ * to KEY_UPARROW/... (see m_controls.c), so WASD must be translated; space is
+ * rebound to KEY_FIRE since a serial client has no Ctrl key. */
+static int map_raw(int raw)
+{
+    switch (raw)
+        {
+    case '\r': case '\n': return KEY_ENTER;
+    case '\t': return KEY_TAB;
+    case 8: case 127: return KEY_BACKSPACE;
+    case ' ': return KEY_FIRE;
+    case 'w': case 'W': return KEY_UPARROW;
+    case 'a': case 'A': return KEY_LEFTARROW;
+    case 's': case 'S': return KEY_DOWNARROW;
+    case 'd': case 'D': return KEY_RIGHTARROW;
+    case 'e': case 'E': return KEY_USE;
+        }
     if (raw >= 'A' && raw <= 'Z') return raw + 32;
-    if (raw == '[') return KEY_LEFTARROW;    /* no E0 decode in the ISR; */
-    if (raw == ']') return KEY_RIGHTARROW;   /* bracket stand-ins documented */
     if (raw < 32 || raw > 126) return 0;
-    return raw;
+    return raw;                  /* digits, y/n and other menu alpha keys */
+}
+
+static int ansi_arrow(int c)
+{
+    switch (c)
+        {
+    case 'A': return KEY_UPARROW;
+    case 'B': return KEY_DOWNARROW;
+    case 'C': return KEY_RIGHTARROW;
+    case 'D': return KEY_LEFTARROW;
+        }
+    return 0;
+}
+
+static int next_raw(void)
+{
+    int c = sPeek;
+    if (c >= 0) { sPeek = -1; return c; }
+    return con_tryread();
+}
+
+static int decode_byte(int c)
+{
+    if (sEscAwait)                    /* final byte of ESC [ X */
+        {
+        sEscAwait = 0;
+        return ansi_arrow(c);
+        }
+    if (c == 27)
+        {
+        int n = con_tryread();
+        if (n == '[' || n == 'O')
+            {
+            int f = con_tryread();
+            if (f >= 0) return ansi_arrow(f);
+            sEscAwait = 1;            /* sequence split across ticks */
+            sEscAt = DG_GetTicksMs();
+            return 0;
+            }
+        if (n >= 0) sPeek = n;        /* bare ESC: keep the following byte */
+        return KEY_ESCAPE;
+        }
+    return map_raw(c & 0xff);
 }
 
 int DG_GetKey(int *pressed, unsigned char *key)
 {
-    if (sKeyPending)
+    int k;
+
+    /* Abandon a truncated ANSI sequence instead of injecting a stale arrow. */
+    if (sEscAwait && (unsigned)(DG_GetTicksMs() - sEscAt) > 400u)
+        sEscAwait = 0;
+
+    if (sKeyPending)                  /* paired synthetic key-up */
         {
+        /* I_GetEvent() posts a press and then immediately calls DG_GetKey
+         * again for the release.  Returning 0 here ends that tic early so the
+         * engine sees gamekeydown[fire/move] == true while it builds the
+         * ticcmd; the release is delivered on a later tic. */
+        if (sHoldSkip > 0) { --sHoldSkip; return 0; }
         sKeyPending = 0;
         *pressed = 0;
         *key = (unsigned char)sKeyRaw;
         return 1;
         }
+
     for (;;)
         {
-        int c = con_tryread();
-        int k;
-        if (c < 0) return 0;               /* no input */
-        k = map_key(c & 0xff);
-        if (!k) continue;                  /* discard unmappable scan */
+        int c = keyq_pop();           /* macro events take priority */
+        int queued = c >= 0;
+        if (!queued) c = next_raw();
+        if (c < 0) return 0;          /* input ring empty */
+
+        if (!queued)
+            {
+            /* Skill shortcut: consume the digit, feed the menu-walk events. */
+            if (!sEscAwait && c >= '1' && c <= '5')
+                {
+                queue_skill(c - '0');
+                mark_key((unsigned)c);
+                continue;
+                }
+            k = decode_byte(c);
+            }
+        else k = c;                   /* already a DOOM keycode */
+        if (!k) continue;             /* drop unmappable / incomplete scans */
+
+        if (k == KEY_ENTER && !sEnterSeen)
+            {
+            sEnterSeen = 1;
+            queue_quickstart();
+            }
+
+        /* Esc is still delivered to DOOM as a normal key event so its menus
+         * see it, but is also latched here for app_main to leave the tick loop
+         * with DOOM: DONE.  Only a genuine Esc reaches this branch: ANSI
+         * ESC [ X sequences decode to arrow keycodes and never match. */
+        if (k == KEY_ESCAPE)
+            {
+            sQuitRequested = 1;
+            doom_marker("DOOM: ESC quit requested");
+            }
+
         sKeyRaw = k;
         sKeyPending = 1;
+        sHoldSkip = 2;          /* hold ~2 tics so taps register in game */
         *pressed = 1;
         *key = (unsigned char)k;
-        if (!sKeyMarked)
-            { sKeyMarked = 1; doom_marker_n("DOOM: KEY ", (unsigned)k); }
+        mark_key((unsigned)k);
         return 1;
         }
 }
