@@ -40,6 +40,10 @@
 #include "net_sdl.h"
 #include "net_loop.h"
 
+// i_timer.c: wait until an absolute I_GetTimeMS() value.  Kept local to
+// avoid widening the engine's public timer header for this port-only fix.
+void I_WaitUntil(int targetMs);
+
 // The complete set of data for a particular tic.
 
 typedef struct
@@ -766,6 +770,8 @@ void TryRunTics (void)
 
     while (!PlayersInGame() || lowtic < gametic/ticdup + counts)
     {
+        int nowTic, targetMs;
+
 	NetUpdate ();
 
         lowtic = GetLowTic();
@@ -776,12 +782,20 @@ void TryRunTics (void)
         // Don't stay in this loop forever.  The menu is still running,
         // so return to update the screen
 
-	if (I_GetTime() / ticdup - entertic > 0)
+        nowTic = I_GetTime();
+	if (nowTic / ticdup - entertic > 0)
 	{
 	    return;
 	}
 
-        I_Sleep(1);
+        // Pace to the next 35 Hz tic boundary in one shot.  The old code
+        // called I_Sleep(1) ~28 times per frame: at 4 kernel execs per
+        // sleep_ms(1) that was >100 execs/frame, ~4,000 execs/sec.  One
+        // I_WaitUntil does a single timer sleep plus a few clock polls,
+        // while NetUpdate()/input handling still run once per boundary.
+        targetMs = (((nowTic / ticdup) + 1) * ticdup * 1000 + TICRATE - 1)
+                   / TICRATE;
+        I_WaitUntil(targetMs);
     }
 
     // run the count * ticdup dics

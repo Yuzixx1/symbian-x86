@@ -57,17 +57,19 @@ static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
  *   DOWN --quiet HOLD_RELEASE_MS--> COOL: emit one press=0 so the latch clears
  *         promptly, then ignore stale makes for HOLD_COOLDOWN_MS.
  *   COOL --expired--> IDLE: only a genuinely new press may arm the key again.
+ * The cooldown stays short (120 ms) so a genuine re-press is never mistaken
+ * for a stale bounce byte; the 60 ms debounce alone filters contact bounce.
  *
  * Repeated makes inside 60 ms of the previous one are debounced.  This keeps
  * gamekeydown[] latched for the whole hold instead of clearing it two tics
  * after every press (the old stuttering single-tap bug).
  */
-#define HOLD_RELEASE_MS 600u      /* release 600 ms after the last make/repeat */
+#define HOLD_RELEASE_MS 350u      /* release 350 ms after the last make/repeat */
 #define HOLD_INITIAL_MS 280u      /* first software repeat after 280 ms */
 #define HOLD_REPEAT_MS  80u       /* typematic repeat interval */
 #define HOLD_MAX_MS     900u      /* stop repeating after 900 ms of hold */
 #define HOLD_DEBOUNCE_MS 60u      /* ignore same-key make this soon after one */
-#define HOLD_COOLDOWN_MS 400u     /* ignore stale makes after a release */
+#define HOLD_COOLDOWN_MS 120u     /* ignore stale makes after a release */
 
 /* All time comparisons use wrap-safe signed deltas: DG_GetTicksMs() is a
  * 32-bit ms counter with no epoch guarantee. */
@@ -142,7 +144,11 @@ void DG_Init(void)
     sKeyQHead = 0;
     sKeyQLen = 0;
     sKeyCount = 0;
-    sEnterSeen = 0;
+    /* -warp (user/doome32.c) starts straight into the level, so there is no
+     * title/menu walk to fast-forward.  Keep the flag set so the first real
+     * Enter in the game (or a menu the user opens with Esc) is passed through
+     * untouched instead of queuing three extra Enters. */
+    sEnterSeen = 1;
     for (i = 0; i < HOLD_KEY_COUNT; ++i)
         {
         sHold[i].state = HOLD_IDLE;
@@ -289,7 +295,7 @@ static void mark_key(unsigned k)
   *   - while DOWN, software typematic presses are generated every 80 ms
   *     (first at 280 ms) until HOLD_MAX_MS since the first press,
   *   - once makes stop for HOLD_RELEASE_MS after the last make/repeat a
-  *     single press=0 ends the hold and the key enters COOL for 400 ms so
+  *     single press=0 ends the hold and the key enters COOL for 120 ms so
   *     stale/bounced bytes cannot re-arm it,
   *   - repeated makes of a DOWN key are debounced for 60 ms.
   */

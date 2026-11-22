@@ -83,7 +83,7 @@ static int find_iwad(void)
 
 int app_main(void)
 {
-    char *argv[4];
+    char *argv[9];
 
     doom_shim_init();
     doom_marker("DOOM: start");
@@ -98,11 +98,23 @@ int app_main(void)
     argv[0] = (char *)"doom";
     argv[1] = (char *)"-iwad";
     argv[2] = sWadPath;
-    argv[3] = 0;
+    /* Start straight into E1M1 at skill 2 ("not too rough").  Without this
+     * DOOM shows the title/menu and M_Responder eats the movement keys before
+     * they ever reach G_Responder/gamekeydown[] (the "unresponsive" bug).
+     * -warp sets startepisode/startmap+autostart; -skill sets startskill
+     * (the third number sometimes quoted for -warp is NOT parsed by d_main.c). */
+    argv[3] = (char *)"-skill";
+    argv[4] = (char *)"2";
+    argv[5] = (char *)"-warp";
+    argv[6] = (char *)"1";
+    argv[7] = (char *)"1";
+    argv[8] = 0;
+
+    doom_marker("DOOM: WARP E1M1 skill 2");
 
     /* doomgeneric_Create saves argv, allocates DG_ScreenBuffer, calls
-     * DG_Init(), then runs D_DoomMain() (which paints the first frame). */
-    doomgeneric_Create(3, argv);
+     * DG_Init(), then runs D_DoomMain() (which warps straight into the level). */
+    doomgeneric_Create(8, argv);
 
     /* Standard doomgeneric platform loop.  There is deliberately NO frame or
      * time cap: DOOM runs until the user explicitly quits (Esc is reported by

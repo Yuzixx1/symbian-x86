@@ -71,14 +71,48 @@ int I_GetTimeMS(void)
     return ticks - basetime;
 }
 
-// Sleep for a specified number of ms
+// Sleep for a specified number of ms.
+//
+// On E32, DG_SleepMs(1) is a fresh RTimer (exec 133) + TimerAfter (exec 53)
+// + ipc_wait + close (exec 106): four kernel execs for ONE millisecond.
+// The old D_Doom pacing loop slept ~28 times per frame (>4,000 execs/sec),
+// starving the rest of the system.  Wait in ONE timer sleep for the bulk and
+// use the cheap microsecond clock (exec 68, one exec per poll) only for the
+// sub-millisecond tail.  A tight spin on DG_GetTicksMs() is bounded so a
+// fast-trapping kernel cannot turn the tail into hundreds of execs.
+
+#define I_SPIN_POLLS 4
+
+// Wait until an absolute I_GetTimeMS() value (same basetime as I_GetTime).
+void I_WaitUntil(int targetMs)
+{
+    int left = targetMs - I_GetTimeMS();
+    int polls = 0;
+
+    if (left <= 0)
+        return;
+
+    // Bulk of the wait: one genuine timer sleep, regardless of length.
+    if (left > 1)
+        DG_SleepMs((uint32_t)(left - 1));
+
+    // Fine tail: a handful of high-resolution clock polls (one exec each),
+    // then let the kernel timer finish if the clock has not ticked over.
+    while ((left = targetMs - I_GetTimeMS()) > 0)
+    {
+        if (polls++ < I_SPIN_POLLS)
+            continue;
+        DG_SleepMs((uint32_t)left);
+        break;
+    }
+}
 
 void I_Sleep(int ms)
 {
-    //SDL_Delay(ms);
-    //usleep (ms * 1000);
+    if (ms <= 0)
+        return;
 
-	DG_SleepMs(ms);
+    I_WaitUntil(I_GetTimeMS() + ms);
 }
 
 void I_WaitVBL(int count)

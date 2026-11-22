@@ -133,12 +133,20 @@ TInt fbblit_blit_exec(TInt aArg)
         TUint n = rowBytes < remain ? rowBytes : remain;
         if (srcBytes == dstBytes)
             {
-            for (TUint i = 0; i < n; ++i)
-                dst[i] = src[i];
+            // Bulk copy the scanline.  The old byte-by-byte volatile loop
+            // emitted one 8-bit load/store per byte (1,024,000 iterations for
+            // DOOM's 640x400x32 frame).  The kernel's machine-coded memcpy is
+            // an opaque external call built on `rep movsl`, so it copies one
+            // dword per iteration (256,000) and the LFB stores cannot be
+            // dead-store-eliminated by the compiler.  Row-by-row preserves the
+            // exact destination addresses when pitch != width*dstBytes (e.g.
+            // a 640x400 blit into a 1024x768, pitch=4096 LFB).
+            memcpy((void*)dst, (const void*)src, n);
             }
         else
             {
-            // 8bpp indexed source -> 32bpp RGBX destination.
+            // 8bpp indexed source -> 32bpp RGBX destination.  Already dword
+            // granular: one TUint32 store per source byte.  Keep as-is.
             TUint32* out = (TUint32*)dst;
             for (TUint i = 0; i < n; ++i)
                 out[i] = Expand8(src[i]);

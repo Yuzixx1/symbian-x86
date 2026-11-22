@@ -9,9 +9,9 @@
  * but it is not an OPL/AdLib emulator.
  *
  * Markers (EUSER.DLL ordinal 915 via doom_marker):
- *   SND: SOUND INIT / SND: abi mode=<n> play=<n> status=<n>
+ *   SND: SOUND INIT / SND: abi pcm=<n> play=<n>
  *   SND: sfx <name> <len> rate=<n>
- *   SND: play r=<n>
+ *   SND: play r=<n>                 (first play, then every 32nd)
  *   SND: music <name>
  *   SND: DONE
  *
@@ -93,14 +93,27 @@ static unsigned sSfxFrames[SFX_SLOTS];
 static unsigned sSfxRate[SFX_SLOTS];
 static unsigned sSfxChannel[SFX_SLOTS];
 static unsigned sSfxHead, sSfxTail, sSfxQueued;
+static unsigned sPlayCount;            /* sparse "SND: play" marker counter */
+static int sNeedsService;              /* set by I_StartSound for a fresh SFX */
 
-/* Playback is serialised: one DMA at a time, the rest waits in the ring. */
-static void SubmitNext(void)
+/* Playback is serialised by the kernel's own 8-slot PCM queue: each small
+ * buffer is copied on submit, so the user ring never needs a per-frame STATUS
+ * trap.  The one probe below is paid only when a new SFX is actually being
+ * submitted (needs_service); the tic path drains the ring without exec 240
+ * STATUS and does nothing at all when the queue is empty. */
+static void SubmitBuffer(int probe_status)
     {
     int r;
 
-    if (!sSfxQueued || E32Snd_Busy())
+    if (!sSfxQueued)
         return;
+    if (probe_status)
+        {
+        if (sPcmEnabled)
+            (void)E32Snd_Busy();        /* exec 240 STATUS: once per new SFX */
+        sNeedsService = 0;              /* serviced: no further probe this batch */
+        }
+
     if (sPcmEnabled)
         r = PcmSubmitReq(sSfxPcm[sSfxTail],
                          sSfxFrames[sSfxTail] * 2u * sizeof(short),
@@ -115,13 +128,23 @@ static void SubmitNext(void)
         r = exec2(QE_EXEC_AUDIO, hz, 50u);
         }
 
-    sndf("SND: play r=%d", r);
+    /* Keep the first play (harnesses assert it) then go sparse: a per-play
+     * marker was ~500 B/s of blocking serial traffic for very little value. */
+    if (sPlayCount++ % 32u == 0u)
+        sndf("SND: play r=%d", r);
     sSfxTail = (sSfxTail + 1u) % SFX_SLOTS;
     --sSfxQueued;
     }
 
+static void SubmitNext(void)
+    {
+    while (sSfxQueued)
+        SubmitBuffer(sNeedsService);
+    }
+
 /* Non-zero while the codec is still draining the last buffer.  The legacy
- * tone exec is polled/synchronous, so it never reports busy. */
+ * tone exec is polled/synchronous, so it never reports busy.  Exported for
+ * diagnostics; the DOOM tic path no longer calls this every frame. */
 int E32Snd_Busy(void)
     {
     struct e32_pcm_stat st;
@@ -295,6 +318,8 @@ static boolean E32_InitSound(boolean use_sfx_prefix)
     memset(sSfxPcm, 0, sizeof(sSfxPcm));
     memset(sSfxFrames, 0, sizeof(sSfxFrames));
     sSfxHead = sSfxTail = sSfxQueued = 0u;
+    sNeedsService = 0;
+    sPlayCount = 0u;
     sSoundUp = 1;
     doom_marker("SND: SOUND INIT");
     ProbeAbi();
@@ -320,7 +345,10 @@ static int E32_GetSfxLumpNum(sfxinfo_t *sfx)
 static void E32_UpdateSound(void)
     {
     MusicTick();
-    SubmitNext();
+    /* Empty ring: zero execs.  Queued buffers drain without a STATUS trap;
+     * only a fresh I_StartSound request turns on the one-shot busy probe. */
+    if (sSfxQueued)
+        SubmitNext();
     }
 
 static void E32_UpdateSoundParams(int channel, int vol, int sep)
@@ -389,6 +417,7 @@ static int E32_StartSound(sfxinfo_t *sfx, int channel, int vol, int sep)
 
     if (sfx_seen++ < 6u)
         sndf("SND: sfx %s %u rate=%u", s->name, frames, rate);
+    sNeedsService = 1;          /* I_StartSound: arm the single STATUS probe */
     SubmitNext();
     return channel;
     }

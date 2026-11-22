@@ -33,13 +33,43 @@ extern void (*doom_printf_slot)(const char *);
 int errno = 0;
 int math_errhandling = 0;
 
+/* ------------------------------------------------------------ serial output
+ * DebugPrint (exec 86) appends CR/LF to every call and moves at most 256 bytes
+ * per trap.  DOOM emits a line per frame plus sfx/marker chatter, so batch
+ * complete lines into one print_n() per (<=240 byte) transport and let the
+ * kernel add the final newline.  Ordering is preserved within the stream;
+ * fflush()/exit() flush the tail so no harness marker is lost. */
+#define SERIAL_BATCH 240u
+static char sSerialBuf[SERIAL_BATCH + 2u];
+static unsigned sSerialLen;
+
+static void serial_flush(void)
+{
+    if (sSerialLen)
+        {
+        print_n(sSerialBuf, sSerialLen);
+        sSerialLen = 0u;
+        }
+}
+
+static void serial_append(const char *s, unsigned n)
+{
+    while (n--)
+        {
+        if (sSerialLen >= SERIAL_BATCH) serial_flush();
+        sSerialBuf[sSerialLen++] = *s++;
+        }
+}
+
+static void serial_line(const char *text);   /* defined below with the stdio block */
+
 /* ------------------------------------------------------------------ markers */
 void doom_marker(const char *text)
 {
     unsigned fn = *(volatile unsigned *)(void *)&doom_printf_slot;
     if (fn != 915u && fn != 0u)
         ((void (*)(const char *))fn)(text);   /* EUSER.DLL ordinal 915 */
-    print(text);                              /* DebugPrint fallback */
+    serial_line(text);                        /* batched DebugPrint fallback */
 }
 
 void doom_marker_n(const char *prefix, unsigned value)
@@ -237,17 +267,22 @@ int e32_vformat(char *buf, int cap, const char *fmt, va_list ap)
 /* ------------------------------------------------------------------- stdio */
 static void serial_line(const char *text)
 {
-    char buf[600];
-    unsigned n = 0;
+    char line[600];
+    unsigned n = 0, i;
     if (!text) text = "";
-    while (*text && n < sizeof(buf) - 2u)
-        {
-        if (*text == '\r') { ++text; continue; }
-        buf[n++] = *text++;
+    for (i = 0; text[i] && n < sizeof(line) - 2u; ++i)
+        if (text[i] != '\r') line[n++] = text[i];
+    while (n && line[n - 1u] == '\n') --n;   /* DebugPrint supplies the newline */
+    if (n >= SERIAL_BATCH)
+        {                                    /* overlong line: flush + own transport */
+        serial_flush();
+        print_n(line, n);
+        return;
         }
-    while (n && buf[n - 1] == '\n') --n;   /* print() supplies the newline */
-    buf[n] = 0;
-    print(buf);
+    /* Never split a line across two exec-86 calls (each adds CR/LF). */
+    if (sSerialLen && sSerialLen + 1u + n > SERIAL_BATCH) serial_flush();
+    if (sSerialLen) serial_append("\n", 1u);  /* separator from the previous line */
+    serial_append(line, n);
 }
 
 int printf(const char *fmt, ...)
@@ -320,7 +355,7 @@ int putchar(int c)
     serial_line(b);
     return c;
 }
-int fflush(FILE *stream) { (void)stream; return 0; }
+int fflush(FILE *stream) { (void)stream; serial_flush(); return 0; }
 void perror(const char *s) { if (s) { char b[160]; unsigned n = 0;
     while (*s && n < sizeof(b) - 20u) b[n++] = *s++;
     b[n++] = ':';
@@ -514,6 +549,7 @@ int asprintf(char **ret, const char *fmt, ...)
 void exit(int status)
 {
     doom_marker("DOOM: DONE");
+    serial_flush();
     process_exit(status);
 }
 void abort(void) { exit(-1); }
