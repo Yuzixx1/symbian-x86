@@ -8,8 +8,10 @@
  * exec-251 GC_RECT display list is used as a fallback.
  *
  * Input: PS/2/serial keys are polled with con_tryread() under the PortCon
- * lease and mapped to DOOM keycodes; each press is paired with a synthetic
- * release on the next call because I_GetEvent() expects both.
+ * lease and mapped to DOOM keycodes.  Menu taps get a paired synthetic
+ * release; continuous keys (move/fire/use) use a per-key hold table so a
+ * held key keeps gamekeydown[] latched until a timed release, with typematic
+ * repeats generated here because kernel break scancodes are discarded.
  *
  * Timing: exec 68 (EExecTimeNow) microseconds, rebased to the 2000 epoch.
  */
@@ -41,6 +43,56 @@ static int sKeyRaw;
 static int sKeyPending;          /* pending synthetic key-up */
 static int sHoldSkip;            /* DG_GetKey calls to defer the key-up */
 static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
+
+/* --- per-key hold / typematic state ----------------------------------------
+ * The kernel PS/2 ISR throws away break (key-up) scancodes and serial only
+ * delivers make bytes, so userland never sees a genuine key release.  QEMU's
+ * 8042 may emit typematic make bytes while a physical key is held; a serial
+ * client does not.  We therefore emulate both repeat and release with a
+ * per-key state machine:
+ *
+ *   IDLE --make--> DOWN: emit press=1, latch in gamekeydown[].
+ *   DOWN: software typematic presses every 80 ms (first at 280 ms) up to
+ *         HOLD_MAX_MS; genuine QEMU make bytes, when present, replace these.
+ *   DOWN --quiet HOLD_RELEASE_MS--> COOL: emit one press=0 so the latch clears
+ *         promptly, then ignore stale makes for HOLD_COOLDOWN_MS.
+ *   COOL --expired--> IDLE: only a genuinely new press may arm the key again.
+ *
+ * Repeated makes inside 60 ms of the previous one are debounced.  This keeps
+ * gamekeydown[] latched for the whole hold instead of clearing it two tics
+ * after every press (the old stuttering single-tap bug).
+ */
+#define HOLD_RELEASE_MS 600u      /* release 600 ms after the last make/repeat */
+#define HOLD_INITIAL_MS 280u      /* first software repeat after 280 ms */
+#define HOLD_REPEAT_MS  80u       /* typematic repeat interval */
+#define HOLD_MAX_MS     900u      /* stop repeating after 900 ms of hold */
+#define HOLD_DEBOUNCE_MS 60u      /* ignore same-key make this soon after one */
+#define HOLD_COOLDOWN_MS 400u     /* ignore stale makes after a release */
+
+/* All time comparisons use wrap-safe signed deltas: DG_GetTicksMs() is a
+ * 32-bit ms counter with no epoch guarantee. */
+static int ms_since(unsigned now, unsigned then) { return (int)(now - then); }
+
+#define HOLD_IDLE 0u              /* no hold active */
+#define HOLD_DOWN 1u              /* press emitted, key latched in gamekeydown */
+#define HOLD_COOL 2u              /* just released; ignore stale makes */
+
+#define HOLD_KEY_COUNT 6
+static const unsigned char sHoldKeys[HOLD_KEY_COUNT] = {
+    KEY_UPARROW, KEY_DOWNARROW, KEY_LEFTARROW, KEY_RIGHTARROW,
+    KEY_FIRE, KEY_USE
+};
+
+struct hold_key {
+    unsigned char state;          /* HOLD_IDLE / HOLD_DOWN / HOLD_COOL */
+    unsigned char marked;         /* first-repeat HOLD marker already sent */
+    unsigned char saw_repeat;     /* a hardware typematic byte was observed */
+    unsigned last_make;           /* DG_GetTicksMs() of last make byte */
+    unsigned next_repeat;         /* next software-generated press time */
+    unsigned start;               /* first make byte of this hold */
+    unsigned released_at;         /* COOL starts here */
+};
+static struct hold_key sHold[HOLD_KEY_COUNT];
 
 /* app_main polls this once per doomgeneric_Tick().  Without it the engine has
  * no way to leave its loop: I_Quit() is compiled out of this DOOM build and
@@ -91,6 +143,16 @@ void DG_Init(void)
     sKeyQLen = 0;
     sKeyCount = 0;
     sEnterSeen = 0;
+    for (i = 0; i < HOLD_KEY_COUNT; ++i)
+        {
+        sHold[i].state = HOLD_IDLE;
+        sHold[i].marked = 0;
+        sHold[i].saw_repeat = 0;
+        sHold[i].last_make = 0;
+        sHold[i].next_repeat = 0;
+        sHold[i].start = 0;
+        sHold[i].released_at = 0;
+        }
 
     doom_marker("DOOM: INIT");
     doom_marker("DOOM: ENGINE READY");
@@ -218,6 +280,121 @@ static void mark_key(unsigned k)
         doom_marker_n("DOOM: KEY ", k);
 }
 
+/* --- hold-state helpers ----------------------------------------------------
+  * Only real console bytes (not macro-queue events) use the hold path: menu
+  * walks must keep their short press/release taps.
+  *
+  * Per-key state machine: IDLE -> DOWN -> COOL -> IDLE.
+  *   - a fresh make in IDLE emits press=1 and marks DOWN,
+  *   - while DOWN, software typematic presses are generated every 80 ms
+  *     (first at 280 ms) until HOLD_MAX_MS since the first press,
+  *   - once makes stop for HOLD_RELEASE_MS after the last make/repeat a
+  *     single press=0 ends the hold and the key enters COOL for 400 ms so
+  *     stale/bounced bytes cannot re-arm it,
+  *   - repeated makes of a DOWN key are debounced for 60 ms.
+  */
+static int hold_index(unsigned k)
+{
+    int i;
+    for (i = 0; i < HOLD_KEY_COUNT; ++i)
+        if (sHoldKeys[i] == (unsigned char)k) return i;
+    return -1;
+}
+
+static void hold_mark_repeat(unsigned k)
+{
+    int i = hold_index(k);
+    if (i < 0 || sHold[i].marked) return;
+    sHold[i].marked = 1;
+    doom_marker_n("DOOM: HOLD ", k);   /* sparse: first repeat of this hold */
+}
+
+/* Record a make byte for a holdable key.
+ * Returns 1 for a fresh press (IDLE->DOWN), 2 for an accepted repeat while
+ * DOWN, 0 for a non-holdable key, or -1 when the byte was debounced / fell in
+ * the cooldown window and must be swallowed by the caller. */
+static int hold_note_press(unsigned k, unsigned now)
+{
+    int i = hold_index(k);
+    struct hold_key *h;
+    if (i < 0) return 0;
+    h = &sHold[i];
+
+    if (h->state == HOLD_COOL)
+        {
+        if (ms_since(now, h->released_at) < (int)HOLD_COOLDOWN_MS) return -1;
+        h->state = HOLD_IDLE;         /* cooldown over: a new press can arm */
+        }
+
+    if (h->state == HOLD_DOWN)
+        {
+        /* A real make byte while down is a hardware typematic repeat (or a
+         * contact bounce).  Ignore it inside the debounce window; otherwise
+         * refresh the release timer and report a repeat to the caller. */
+        if (ms_since(now, h->last_make) < (int)HOLD_DEBOUNCE_MS) return -1;
+        h->last_make = now;
+        h->saw_repeat = 1;            /* real makes replace SW repeats */
+        return 2;
+        }
+
+    h->state = HOLD_DOWN;
+    h->marked = 0;
+    h->saw_repeat = 0;
+    h->start = h->last_make = now;
+    h->next_repeat = now + HOLD_INITIAL_MS;
+    return 1;
+}
+
+/* Called before fresh input each DG_GetKey.  Produces either a typematic
+  * repeat press, the single delayed key-up that ends a hold, or nothing.
+  * Returns 1 when an event was emitted. */
+static int hold_tick(int *pressed, unsigned char *key)
+{
+    unsigned now = DG_GetTicksMs();
+    int i;
+
+    for (i = 0; i < HOLD_KEY_COUNT; ++i)
+        {
+        struct hold_key *h = &sHold[i];
+
+        if (h->state == HOLD_COOL)
+            {
+            if (ms_since(now, h->released_at) >= (int)HOLD_COOLDOWN_MS)
+                h->state = HOLD_IDLE;
+            continue;
+            }
+        if (h->state != HOLD_DOWN) continue;
+
+        /* No make (real or software repeat) for the release window: end the
+         * hold now instead of waiting a whole max+release interval, so the
+         * gamekeydown[] latch clears promptly after the key is let go. */
+        if (ms_since(now, h->last_make) >= (int)HOLD_RELEASE_MS)
+            {
+            h->state = HOLD_COOL;
+            h->released_at = now;
+            doom_marker_n("DOOM: RELEASE ", sHoldKeys[i]);
+            *pressed = 0;
+            *key = sHoldKeys[i];
+            return 1;
+            }
+
+        /* Software typematic repeats until the bounded hold window ends.
+         * Genuine hardware repeats (saw_repeat) suppress these. */
+        if (!h->saw_repeat &&
+            ms_since(now, h->next_repeat) >= 0 &&
+            ms_since(now, h->start) < (int)HOLD_MAX_MS)
+            {
+            h->last_make = now;
+            h->next_repeat = now + HOLD_REPEAT_MS;
+            hold_mark_repeat(sHoldKeys[i]);
+            *pressed = 1;
+            *key = sHoldKeys[i];
+            return 1;
+            }
+        }
+    return 0;
+}
+
 /* First Enter on the title screen walks the vanilla menu chain
  * (title -> main -> new game -> episode -> skill) so a serial user can reach
  * the level with one keystroke.  Later Enters behave normally.  Digits 1-5
@@ -326,6 +503,10 @@ int DG_GetKey(int *pressed, unsigned char *key)
         return 1;
         }
 
+    /* Typematic repeats / timed releases are due before fresh input.  One
+     * event per DG_GetKey call keeps I_GetEvent()'s press->keyup loop sane. */
+    if (hold_tick(pressed, key)) return 1;
+
     for (;;)
         {
         int c = keyq_pop();           /* macro events take priority */
@@ -361,6 +542,22 @@ int DG_GetKey(int *pressed, unsigned char *key)
             {
             sQuitRequested = 1;
             doom_marker("DOOM: ESC quit requested");
+            }
+
+        if (!queued && hold_index((unsigned)k) >= 0)
+            {
+            /* Continuous key: press stays latched in gamekeydown[] until the
+             * hold times out.  No per-byte synthetic release, so no 1-tic
+             * gaps in movement/fire while the key is held. */
+            int r = hold_note_press((unsigned)k, DG_GetTicksMs());
+            if (r < 0) continue;       /* debounced / cooldown make: swallow */
+            if (r == 2) hold_mark_repeat((unsigned)k);  /* HW typematic byte */
+            sKeyPending = 0;
+            sHoldSkip = 0;
+            *pressed = 1;
+            *key = (unsigned char)k;
+            mark_key((unsigned)k);
+            return 1;
             }
 
         sKeyRaw = k;

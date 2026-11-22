@@ -954,7 +954,12 @@ static TBool IsGraphicsImage(const char* aName)
     {
     static const char* const kGraphics[] = {
         "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER",
-        "DTCALC", "DTEDIT", "WINSRV", "WSDL"
+        "DTCALC", "DTEDIT", "WINSRV", "WSDL",
+        // DOOM.E32 renders full-screen via the LFB and floods the console
+        // with engine printf/DebugPrint during startup. Without this the
+        // LFB mirror scrolls text over the game and flickers. DOOM is a
+        // single process (no helper), so one owner slot suffices.
+        "DOOM"
         };
     if (!aName) return EFalse;
     const char* base = aName;
