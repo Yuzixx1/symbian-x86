@@ -104,9 +104,53 @@ def first_existing(paths):
     return None
 
 
+def recover_wad_from_iso():
+    """Best-effort: if the IWAD is missing, extract FDOOM1.WAD from the build
+    ISO's /PROGRAMS.IMG using pycdlib + mcopy (no network). Never raises; the
+    caller re-checks WAD_CANDIDATES afterwards. The ISO's FAT partition starts
+    at OFFSET (LBA 2048), so mcopy must use the @@offset syntax.
+    """
+    if first_existing(WAD_CANDIDATES):
+        return None
+    iso_path = os.path.join(REPO, "build/symbian-grub.iso")
+    if not os.path.isfile(iso_path) or not shutil.which("mcopy"):
+        return None
+    try:
+        from pycdlib import PyCdlib
+    except ImportError:
+        print("[WARN] pycdlib missing; cannot auto-recover WAD from ISO")
+        return None
+    img = TMP + "/fdoom_recovered.img"
+    dest = os.path.join(TMP, "doom/freedoom-0.13.0/freedoom1.wad")
+    try:
+        iso = PyCdlib()
+        iso.open(iso_path)
+        try:
+            iso.get_file_from_iso(img, iso_path="/PROGRAMS.IMG;1")
+        finally:
+            iso.close()
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        r = sh("mcopy", "-i", f"{img}@@{OFFSET}", "::FDOOM1.WAD", dest,
+               capture_output=True, text=True)
+        if r.returncode != 0:
+            print("[WARN] ISO WAD auto-recovery mcopy failed: "
+                  + (r.stderr or r.stdout).strip()[:160])
+            return None
+        if os.path.getsize(dest) != int(WAD_SIZE):
+            print(f"[WARN] ISO-recovered WAD size {os.path.getsize(dest)} "
+                  f"!= {WAD_SIZE}")
+            return None
+        print(f"[INFO] recovered WAD from ISO -> {dest}")
+        return dest
+    except Exception as exc:
+        print(f"[WARN] ISO WAD auto-recovery failed: {exc}")
+        return None
+
+
 def check_assets():
     """Return (e32, wad, dll) or None -- the graceful SKIP gate."""
     e32 = first_existing(E32_CANDIDATES)
+    recover_wad_from_iso()
     wad = first_existing(WAD_CANDIDATES)
     if not e32:
         print("[SKIP] DOOM.E32 not present (looked in build/user/DOOM.E32).")
