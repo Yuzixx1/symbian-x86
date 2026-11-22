@@ -726,6 +726,16 @@ static volatile TUint sHead = 0, sTail = 0;
 static volatile TBool sAbortPending = EFalse;
 static TUint sForegroundPid = 0;
 
+// Strong definition of the gating hook declared weak in qemu_variant_int.cpp.
+// In text mode the shell line editor relies on hardware typematic for Backspace
+// repeat, so keep it.  Once a graphical E32 app (DOOM) has switched VBE on,
+// suppress kernel-level repeats: they would fill the 256-byte input ring and
+// delay the key-up byte.  DOOM supplies its own software typematic anyway.
+extern "C" int QemuKbdTypematicSuppress()
+    {
+    return gTextMode ? 0 : 1;
+    }
+
 extern "C" void QemuKbdPush(char aC)
     {
     if ((unsigned char)aC == 0x03) { sAbortPending = ETrue; return; }

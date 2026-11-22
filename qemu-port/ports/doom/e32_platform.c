@@ -10,8 +10,10 @@
  * Input: PS/2/serial keys are polled with con_tryread() under the PortCon
  * lease and mapped to DOOM keycodes.  Menu taps get a paired synthetic
  * release; continuous keys (move/fire/use) use a per-key hold table so a
- * held key keeps gamekeydown[] latched until a timed release, with typematic
- * repeats generated here because kernel break scancodes are discarded.
+ * held key keeps gamekeydown[] latched until it is released.  The kernel now
+ * forwards break (key-up) scancodes as high-bit bytes (0x80 | ascii), which
+ * release the key immediately.  A short timed release remains as a fallback
+ * for serial-fed input that never carries a key-up byte.
  *
  * Timing: exec 68 (EExecTimeNow) microseconds, rebased to the 2000 epoch.
  */
@@ -45,31 +47,36 @@ static int sHoldSkip;            /* DG_GetKey calls to defer the key-up */
 static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
 
 /* --- per-key hold / typematic state ----------------------------------------
- * The kernel PS/2 ISR throws away break (key-up) scancodes and serial only
- * delivers make bytes, so userland never sees a genuine key release.  QEMU's
- * 8042 may emit typematic make bytes while a physical key is held; a serial
- * client does not.  We therefore emulate both repeat and release with a
- * per-key state machine:
+ * The kernel PS/2 ISR now forwards break (key-up) scancodes as high-bit bytes
+ * (0x80 | ascii) so a physical release reaches userland immediately.  Serial
+ * clients still deliver makes only, so release is also emulated by a timer.
+ * QEMU's 8042 may emit typematic makes while a key is held; a serial client
+ * does not.  The per-key state machine:
  *
  *   IDLE --make--> DOWN: emit press=1, latch in gamekeydown[].
- *   DOWN: software typematic presses every 80 ms (first at 280 ms) up to
+ *   DOWN: software typematic presses every 80 ms (first at 60 ms) up to
  *         HOLD_MAX_MS; genuine QEMU make bytes, when present, replace these.
- *   DOWN --quiet HOLD_RELEASE_MS--> COOL: emit one press=0 so the latch clears
- *         promptly, then ignore stale makes for HOLD_COOLDOWN_MS.
- *   COOL --expired--> IDLE: only a genuinely new press may arm the key again.
- * The cooldown stays short (120 ms) so a genuine re-press is never mistaken
- * for a stale bounce byte; the 60 ms debounce alone filters contact bounce.
- *
- * Repeated makes inside 60 ms of the previous one are debounced.  This keeps
- * gamekeydown[] latched for the whole hold instead of clearing it two tics
- * after every press (the old stuttering single-tap bug).
+ *   DOWN --break byte--> COOL: emit press=0 at once, clear the latch; this is
+ *         the authoritative release.  Duplicate breaks within 50 ms are
+ *         swallowed.  Makes belonging to the pre-break hardware backlog are
+ *         then ignored until a HOLD_QUIET_GAP_MS lull with no makes at all --
+ *         so they cannot re-arm the latch and keep the key "stuck down".
+ *   DOWN --quiet HOLD_RELEASE_MS--> COOL: fallback press=0 for serial input
+ *         that never sends a break; short enough (200 ms guest) to feel quick
+ *         even with the slow guest clock under QEMU.
+ *   COOL --quiet HOLD_QUIET_GAP_MS--> IDLE: only a genuinely new press (one
+ *         arriving after the gap) may arm the key again.
+ * The 60 ms debounce alone filters make-contact bounce.
  */
-#define HOLD_RELEASE_MS 350u      /* release 350 ms after the last make/repeat */
-#define HOLD_INITIAL_MS 280u      /* first software repeat after 280 ms */
+#define HOLD_RELEASE_MS 200u      /* fallback release after the last make/repeat */
+#define HOLD_INITIAL_MS 60u       /* first software repeat (before fallback release) */
 #define HOLD_REPEAT_MS  80u       /* typematic repeat interval */
 #define HOLD_MAX_MS     900u      /* stop repeating after 900 ms of hold */
 #define HOLD_DEBOUNCE_MS 60u      /* ignore same-key make this soon after one */
-#define HOLD_COOLDOWN_MS 120u     /* ignore stale makes after a release */
+#define HOLD_BREAK_COOL_MS 50u    /* ignore duplicate key-up bytes this soon */
+#define HOLD_QUIET_GAP_MS 150u    /* after a break, ignore makes until this much
+                                   * quiet time (no makes) has elapsed; filters
+                                   * any trailing hardware-typematic backlog. */
 
 /* All time comparisons use wrap-safe signed deltas: DG_GetTicksMs() is a
  * 32-bit ms counter with no epoch guarantee. */
@@ -93,6 +100,11 @@ struct hold_key {
     unsigned next_repeat;         /* next software-generated press time */
     unsigned start;               /* first make byte of this hold */
     unsigned released_at;         /* COOL starts here */
+    unsigned break_at;            /* last accepted key-up byte (dedup) */
+    unsigned quiet_at;            /* quiet-gap anchor for COOL: time of the
+                                     break or the last make seen afterwards;
+                                     a make is suppressed until no makes have
+                                     been seen for HOLD_QUIET_GAP_MS */
 };
 static struct hold_key sHold[HOLD_KEY_COUNT];
 
@@ -116,6 +128,7 @@ static unsigned sEscAt;          /* DG_GetTicksMs() when the sequence began */
 static unsigned char sKeyQ[KEYQ_MAX];
 static unsigned sKeyQHead, sKeyQLen;
 static unsigned sKeyCount;       /* for sparse DOOM: KEY markers */
+static unsigned sBreakCount;     /* for sparse DOOM: BREAK markers */
 static int sEnterSeen;           /* first Enter fast-starts through the menus */
 
 void DG_Init(void)
@@ -144,6 +157,7 @@ void DG_Init(void)
     sKeyQHead = 0;
     sKeyQLen = 0;
     sKeyCount = 0;
+    sBreakCount = 0;
     /* -warp (user/doome32.c) starts straight into the level, so there is no
      * title/menu walk to fast-forward.  Keep the flag set so the first real
      * Enter in the game (or a menu the user opens with Esc) is passed through
@@ -158,6 +172,8 @@ void DG_Init(void)
         sHold[i].next_repeat = 0;
         sHold[i].start = 0;
         sHold[i].released_at = 0;
+        sHold[i].break_at = 0;
+        sHold[i].quiet_at = 0;
         }
 
     doom_marker("DOOM: INIT");
@@ -293,10 +309,12 @@ static void mark_key(unsigned k)
   * Per-key state machine: IDLE -> DOWN -> COOL -> IDLE.
   *   - a fresh make in IDLE emits press=1 and marks DOWN,
   *   - while DOWN, software typematic presses are generated every 80 ms
-  *     (first at 280 ms) until HOLD_MAX_MS since the first press,
-  *   - once makes stop for HOLD_RELEASE_MS after the last make/repeat a
-  *     single press=0 ends the hold and the key enters COOL for 120 ms so
-  *     stale/bounced bytes cannot re-arm it,
+  *     (first at 60 ms) until HOLD_MAX_MS since the first press,
+  *   - a high-bit break byte emits press=0 at once and enters COOL; this is
+  *     the authoritative release (duplicates within 50 ms are ignored),
+  *   - without a break, silence for HOLD_RELEASE_MS (200 ms) after the last
+  *     make/repeat emits the fallback press=0 and enters COOL,
+  *   - COOL ignores stale makes for 120 ms so they cannot re-arm the key,
   *   - repeated makes of a DOWN key are debounced for 60 ms.
   */
 static int hold_index(unsigned k)
@@ -328,8 +346,20 @@ static int hold_note_press(unsigned k, unsigned now)
 
     if (h->state == HOLD_COOL)
         {
-        if (ms_since(now, h->released_at) < (int)HOLD_COOLDOWN_MS) return -1;
-        h->state = HOLD_IDLE;         /* cooldown over: a new press can arm */
+        /* Quiet-gap filter.  A hardware hold emits typematic makes for as long
+         * as the key is physically down; the ones still in the kernel ring when
+         * the break arrives are from that same hold and must NOT re-arm the
+         * latch (that is what made movement linger after release).  Swallow any
+         * make that arrives before HOLD_QUIET_GAP_MS of silence for this key,
+         * pushing the anchor out on every make we see.  Only a make arriving
+         * after a genuine 150 ms lull is accepted as a deliberate re-press;
+         * that gap is short enough for micro-adjustments. */
+        if (ms_since(now, h->quiet_at) < (int)HOLD_QUIET_GAP_MS)
+            {
+            h->quiet_at = now;
+            return -1;
+            }
+        h->state = HOLD_IDLE;         /* quiet gap over: a new press can arm */
         }
 
     if (h->state == HOLD_DOWN)
@@ -351,8 +381,48 @@ static int hold_note_press(unsigned k, unsigned now)
     return 1;
 }
 
+/* Consume a key-up byte (0x80 | ascii) from the kernel PS/2 path.  The mapped
+ * DOOM keycode is released immediately, with no time-based waiting, and its
+ * hold state is cleared.  Returns 1 when a press=0 event was emitted, or 0
+ * when the byte was a duplicate break inside the short filter window. */
+static int hold_note_break(unsigned k, unsigned now,
+                           int *pressed, unsigned char *key)
+{
+    int i = hold_index(k);
+    struct hold_key *h = i < 0 ? 0 : &sHold[i];
+    int was_down = 0;
+
+    if (h)
+        {
+        if (h->break_at && ms_since(now, h->break_at) < (int)HOLD_BREAK_COOL_MS)
+            return 0;                       /* duplicate break: swallow */
+        h->break_at = now;
+        h->quiet_at = now;                  /* start quiet-gap window here */
+        was_down = (h->state == HOLD_DOWN);
+        if (was_down)
+            {
+            h->state = HOLD_COOL;            /* authoritative release */
+            h->released_at = now;
+            }
+        else if (h->state == HOLD_COOL)
+            h->released_at = now;            /* keep stale makes filtered */
+        }
+
+    ++sBreakCount;
+    if (sBreakCount <= 8u)
+        doom_marker_n("DOOM: BREAK ", k);    /* sparse: key-up consumed */
+
+    if (was_down)
+        doom_marker_n("DOOM: RELEASE ", k);  /* immediate, not timer-driven */
+
+    *pressed = 0;
+    *key = (unsigned char)k;
+    return 1;
+}
+
 /* Called before fresh input each DG_GetKey.  Produces either a typematic
-  * repeat press, the single delayed key-up that ends a hold, or nothing.
+  * repeat press or the fallback delayed key-up that ends a serial-only hold.
+  * A real break byte is handled synchronously in DG_GetKey instead.
   * Returns 1 when an event was emitted. */
 static int hold_tick(int *pressed, unsigned char *key)
 {
@@ -365,19 +435,23 @@ static int hold_tick(int *pressed, unsigned char *key)
 
         if (h->state == HOLD_COOL)
             {
-            if (ms_since(now, h->released_at) >= (int)HOLD_COOLDOWN_MS)
+            /* Stay suppressed until a full quiet gap with no makes for this
+             * key: only then may a fresh press re-arm the latch. */
+            if (ms_since(now, h->quiet_at) >= (int)HOLD_QUIET_GAP_MS)
                 h->state = HOLD_IDLE;
             continue;
             }
         if (h->state != HOLD_DOWN) continue;
 
-        /* No make (real or software repeat) for the release window: end the
-         * hold now instead of waiting a whole max+release interval, so the
-         * gamekeydown[] latch clears promptly after the key is let go. */
+        /* Fallback for serial-fed makes only: no make (real or software
+         * repeat) for the short release window, so clear gamekeydown[].  A
+         * genuine break byte will have already released the key synchronously
+         * and moved it to COOL, so it never reaches this branch. */
         if (ms_since(now, h->last_make) >= (int)HOLD_RELEASE_MS)
             {
             h->state = HOLD_COOL;
             h->released_at = now;
+            h->quiet_at = now;
             doom_marker_n("DOOM: RELEASE ", sHoldKeys[i]);
             *pressed = 0;
             *key = sHoldKeys[i];
@@ -509,7 +583,7 @@ int DG_GetKey(int *pressed, unsigned char *key)
         return 1;
         }
 
-    /* Typematic repeats / timed releases are due before fresh input.  One
+    /* Software typematic / fallback releases are due before fresh input.  One
      * event per DG_GetKey call keeps I_GetEvent()'s press->keyup loop sane. */
     if (hold_tick(pressed, key)) return 1;
 
@@ -519,6 +593,20 @@ int DG_GetKey(int *pressed, unsigned char *key)
         int queued = c >= 0;
         if (!queued) c = next_raw();
         if (c < 0) return 0;          /* input ring empty */
+
+        if (!queued && (c & 0x80))
+            {
+            /* Kernel PS/2 ISR forwards a key-up as 0x80 | ascii.  Decode the
+             * ascii through the SAME map_raw() as make bytes and release the
+             * key immediately -- no debounce timeout, no wait for a fallback.
+             * Break bytes cannot be part of an ESC [ X arrow sequence. */
+            int bk = map_raw(c & 0x7f);
+            sEscAwait = 0;
+            if (bk && hold_note_break((unsigned)bk, DG_GetTicksMs(),
+                                      pressed, key))
+                return 1;
+            continue;                 /* unmapped or duplicate break: drop */
+            }
 
         if (!queued)
             {
@@ -552,9 +640,10 @@ int DG_GetKey(int *pressed, unsigned char *key)
 
         if (!queued && hold_index((unsigned)k) >= 0)
             {
-            /* Continuous key: press stays latched in gamekeydown[] until the
-             * hold times out.  No per-byte synthetic release, so no 1-tic
-             * gaps in movement/fire while the key is held. */
+            /* Continuous key: press stays latched in gamekeydown[] until a
+             * break byte (or, for serial input, the fallback timer) releases
+             * it.  No per-byte synthetic release on make, so no 1-tic gaps in
+             * movement/fire while the key is held. */
             int r = hold_note_press((unsigned)k, DG_GetTicksMs());
             if (r < 0) continue;       /* debounced / cooldown make: swallow */
             if (r == 2) hold_mark_repeat((unsigned)k);  /* HW typematic byte */

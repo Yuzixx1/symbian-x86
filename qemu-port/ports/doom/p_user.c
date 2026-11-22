@@ -22,6 +22,7 @@
 
 
 #include "doomdef.h"
+#include "doomfeatures.h"
 #include "d_event.h"
 
 #include "p_local.h"
@@ -161,6 +162,26 @@ void P_MovePlayer (player_t* player)
     {
 	P_SetMobjState (player->mo, S_PLAY_RUN1);
     }
+
+#ifdef EKA2_CRISP_STOP
+    /* EKA2 port-specific crisp stop (see doomfeatures.h).  On key-up the
+     * ticcmd carries no planar input while momx/momy from earlier thrusts are
+     * still non-zero.  Vanilla would coast these to zero via FRICTION over
+     * ~0.3 s and keep the walking bob alive the whole time; here we kill them
+     * on the first such tic so motion AND view bob (computed from momx/momy in
+     * P_CalcHeight) stop immediately.  Undefine for authentic momentum. */
+    if (cmd->forwardmove == 0 && cmd->sidemove == 0
+        && (player->mo->momx || player->mo->momy))
+    {
+        /* Mirror vanilla's STOPSPEED path: leave the walking frame when the
+         * player is grounded, so the run animation does not freeze mid-stride. */
+        if (onground &&
+            (unsigned)((player->mo->state - states) - S_PLAY_RUN1) < 4)
+            P_SetMobjState (player->mo, S_PLAY);
+        player->mo->momx = 0;
+        player->mo->momy = 0;
+    }
+#endif
 }	
 
 

@@ -27,6 +27,13 @@ namespace QemuIrq
     void Disable(int aIrq);
     }
 
+// Gating hook for the shell line editor.  Default ON (graphics apps need
+// typematic suppression); a strong definition in kern_shell.cpp may return
+// gTextMode ? 0 : 1 so holding Backspace in the shell still repeats.  Weak
+// => link-safe until that hook lands.  Exact signature:
+// extern "C" int QemuKbdTypematicSuppress(void).
+extern "C" __attribute__((weak)) int QemuKbdTypematicSuppress() { return 1; }
+
 namespace
     {
     struct QBinding
@@ -44,6 +51,20 @@ namespace
     volatile unsigned int gKbdIsrCount = 0;
     volatile unsigned int gKbdScancodes = 0;
     volatile unsigned int gKbdKeys = 0;
+
+    // Typematic suppression.  QEMU's 8042 emits ~30 make scancodes/s while a
+    // key is physically held; left unfiltered they fill the 256-byte shell
+    // ring with ~24 makes for an 800 ms hold, so a userland consumer (DOOM)
+    // spends ~0.7 s draining them before it even sees the break -- on-screen
+    // movement therefore lingers long after the physical release.  Dropping
+    // a repeated make of the SAME scancode inside a short window leaves just
+    // the first make + the break in the ring; DOOM's own software typematic
+    // (80 ms) sustains the hold.  NTickCount() (nk_priv.h:487) is the genuine
+    // TheTimerQ.iMsCount, driven by the 1 ms PIT tick -- real wall time even
+    // under QEMU.
+    const unsigned int kTypematicGapMs = 100u;
+    unsigned char sLastMakeSc = 0;   // last accepted make scancode
+    unsigned int  sLastMakeAt = 0;   // NTickCount() of that make
 
     void WriteMasks()
         {
@@ -203,9 +224,13 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         if (sE0) { sE0 = 0; continue; }
         if (sc == 0x2A || sc == 0x36) { sShift = 1; continue; }
         if (sc == 0xAA || sc == 0xB6) { sShift = 0; continue; }
-        if (sc & 0x80) continue;
-        if (sc >= 128) continue;
-        char c = kMap[sc];
+        // Set-1 break scancodes have bit 7 set; the matching make scancode is
+        // sc & 0x7F.  Decode it with the same table + shift rules as a make so
+        // the low 7 bits of the key-up byte equal the make byte, then tag bit 7
+        // to form a distinct, shell-inert key-release byte (0x80 | c).  Both
+        // line editors ignore bytes outside 32..126 (kern_shell.cpp:2775,
+        // runtime.c:259); COM1, mouse and USB input are untouched.
+        char c = kMap[sc & 0x7F];
         if (!c) continue;
         if (sShift)
             {
@@ -225,6 +250,22 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
                 case '/': c='?'; break;
                 }
             }
+        if (sc & 0x80)
+            {
+            // A physical release ends the hold: reset the typematic filter so
+            // the next genuine press of the same key is never swallowed.
+            sLastMakeSc = 0;
+            QemuKbdPush((char)(0x80u | (unsigned char)c));  // key-up: 0x80 | ascii
+            continue;
+            }
+        // Drop hardware typematic repeats (same make scancode inside the
+        // short window).  Only the first make + the break reach the ring, so
+        // a held key cannot build a backlog that outlives its release.
+        if (QemuKbdTypematicSuppress() && sc == sLastMakeSc &&
+            (unsigned int)(NTickCount() - sLastMakeAt) < kTypematicGapMs)
+            continue;
+        sLastMakeSc = sc;
+        sLastMakeAt = NTickCount();
         ++gKbdKeys;
         QemuKbdPush(c);
         wsrv_publish_key((unsigned int)c);  // window-server event ring
