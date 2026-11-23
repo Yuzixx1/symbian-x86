@@ -52,31 +52,57 @@ namespace
     volatile unsigned int gKbdScancodes = 0;
     volatile unsigned int gKbdKeys = 0;
 
-    // Typematic suppression.  QEMU's 8042 emits ~30 make scancodes/s while a
-    // key is physically held; left unfiltered they fill the 256-byte shell
-    // ring with ~24 makes for an 800 ms hold, so a userland consumer (DOOM)
-    // spends ~0.7 s draining them before it even sees the break -- on-screen
-    // movement therefore lingers long after the physical release.  Dropping
-    // a repeated make of the SAME scancode inside a short window leaves just
-    // the first make + the break in the ring; DOOM's own software typematic
-    // (80 ms) sustains the hold.  NTickCount() (nk_priv.h:487) is the genuine
-    // TheTimerQ.iMsCount, driven by the 1 ms PIT tick -- real wall time even
-    // under QEMU.
-    const unsigned int kTypematicGapMs = 100u;
-    unsigned char sLastMakeSc = 0;   // last accepted make scancode
-    unsigned int  sLastMakeAt = 0;   // NTickCount() of that make
+    // Per-key typematic suppression.  QEMU's 8042 emits its first hardware
+    // typematic make ~500 ms after a physical press and then every ~100 ms.
+    // A time-gap filter cannot work: kTypematicGapMs=100 ms is SHORTER than
+    // the 500 ms initial delay, so the first repeat was never suppressed and
+    // every ~3rd following repeat leaked through.  A 700 ms hold pushed 2-3
+    // extra makes into the ring; after the break those queued makes re-armed
+    // DOOM's DOWN latch with no physical press behind it -> stuck key.
+    //
+    // Fix: track DOWN STATE per scancode.  The first make of a press sets
+    // sKeyDown[sc] and is forwarded; any later make of the SAME scancode while
+    // the bit is still set is a hardware repeat and is DROPPED (no push, no
+    // counter).  The matching break clears the bit.  In graphics mode each
+    // physical press therefore yields exactly ONE make + ONE break, zero
+    // backlog, zero re-arm; independent bits make multi-key holds work.
+    // Gated by QemuKbdTypematicSuppress() so the text-mode shell still gets
+    // its hardware typematic (Backspace / arrow-key repeat).
+    unsigned char sKeyDown[128] = {0};   // 1 = this make scancode is held down
 
-    // Post-break guard.  A physical release arms a short suppression window
-    // for that key's MAKE code: a typematic make still queued in the 8042
-    // output buffer when the break was read (and delivered just after it)
-    // must not be forwarded as a fake press -- that re-latches DOOM's DOWN
-    // latch with no physical press behind it and produces a stuck key.  The
-    // table is per-scancode (index = make code 0..127) so releasing one key
-    // never masks a genuine press of a different key.  Suppression is gated
-    // by the same hook as the make filter, so text-mode shell repeats are
-    // unchanged.
+    // Post-break guard (secondary filter, kept).  A physical release arms a
+    // short suppression window for that key's MAKE code: a typematic make
+    // still queued in the 8042 output buffer when the break was read (and
+    // delivered just after it) must not be forwarded as a fake press.  The
+    // bitmap above clears on break, so this guard closes the small window
+    // between the break and such a stray make.  Per-scancode, gated by the
+    // same hook; text-mode shell repeats are unchanged.
     const unsigned int kPostBreakGapMs = 100u;
     unsigned int sLastBreakAt[128] = {0};   // NTickCount() of last break per key
+
+    // Sparse ISR-safe diagnostic: prove repeats are actually being filtered.
+    // Direct COM1 port I/O only -- no KPrintf/formatter/VGA teletype in IRQ
+    // context.  First few drops only, so the serial log stays quiet.
+    const int kMaxRepeatDropMarks = 32;
+    int sRepeatDropMarks = 0;
+
+    static void KbdSerialChar(unsigned char aC)
+        {
+        while (!(In8(0x3FD) & 0x20)) { }    // COM1 LSR.THRE
+        Out8(0x3F8, aC);
+        }
+
+    static void KbdRepeatDropMark(unsigned char aSc)
+        {
+        if (sRepeatDropMarks >= kMaxRepeatDropMarks) return;
+        ++sRepeatDropMarks;
+        static const char kMsg[] = "KBD: repeat dropped ";
+        for (const char* p = kMsg; *p; ++p) KbdSerialChar((unsigned char)*p);
+        KbdSerialChar((unsigned char)('0' + ((aSc >> 4) & 0x0F)));
+        KbdSerialChar((unsigned char)('0' + (aSc & 0x0F)));
+        KbdSerialChar('\r');
+        KbdSerialChar('\n');
+        }
 
     void WriteMasks()
         {
@@ -267,33 +293,34 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
             }
         if (sc & 0x80)
             {
-            // A physical release ends the hold.  Arm the post-break guard for
-            // this key so a queued typematic make delivered just after the
-            // break is dropped instead of becoming a fake press.  Refresh the
-            // make filter too: clearing sLastMakeSc to 0 (the old behaviour)
-            // disabled suppression for exactly the key that needs it.
-            unsigned int now = NTickCount();
+            // A physical release ends the hold: clear the per-key DOWN bit so
+            // the next genuine make of this scancode is accepted again, and
+            // arm the post-break guard for any queued stray make.  Forwarding
+            // of the break byte itself is unchanged.
             unsigned char mk = (unsigned char)(sc & 0x7F);
-            if (mk < 128) sLastBreakAt[mk] = now;
-            sLastMakeSc = mk;
-            sLastMakeAt = now;
+            if (mk < 128)
+                {
+                sKeyDown[mk] = 0;
+                sLastBreakAt[mk] = NTickCount();
+                }
             QemuKbdPush((char)(0x80u | (unsigned char)c));  // key-up: 0x80 | ascii
             continue;
             }
-        // Drop hardware typematic repeats (same make scancode inside the
-        // short window).  Only the first make + the break reach the ring, so
-        // a held key cannot build a backlog that outlives its release.
-        if (QemuKbdTypematicSuppress() && sc == sLastMakeSc &&
-            (unsigned int)(NTickCount() - sLastMakeAt) < kTypematicGapMs)
-            continue;
+        const int suppress = QemuKbdTypematicSuppress();
         // Post-break guard: swallow any make of this key that arrives inside
         // the window opened by its last break (typically a typematic make
-        // that was queued ahead of the break in the 8042 buffer).
-        if (QemuKbdTypematicSuppress() && sc < 128 && sLastBreakAt[sc] &&
+        // queued ahead of the break in the 8042 buffer).  This runs BEFORE the
+        // DOWN bit is set so a stray repeat cannot latch it and re-arm DOOM.
+        if (suppress && sc < 128 && sLastBreakAt[sc] &&
             (unsigned int)(NTickCount() - sLastBreakAt[sc]) < kPostBreakGapMs)
-            continue;
-        sLastMakeSc = sc;
-        sLastMakeAt = NTickCount();
+            { KbdRepeatDropMark((unsigned char)sc); continue; }
+        // Per-key DOWN bitmap: a second make of a scancode that is already
+        // down is a hardware typematic repeat -> DROP it (no push, no counter).
+        // The break clears the bit, so one physical press == one make byte.
+        // Text mode (suppress==0) deliberately keeps hardware typematic.
+        if (suppress && sc < 128 && sKeyDown[sc])
+            { KbdRepeatDropMark((unsigned char)sc); continue; }
+        if (sc < 128) sKeyDown[sc] = 1;
         ++gKbdKeys;
         QemuKbdPush(c);
         wsrv_publish_key((unsigned int)c);  // window-server event ring
