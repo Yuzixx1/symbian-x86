@@ -64,9 +64,18 @@ static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
  *   DOWN --quiet HOLD_RELEASE_MS--> COOL: fallback press=0 for serial input
  *         that never sends a break; short enough (200 ms guest) to feel quick
  *         even with the slow guest clock under QEMU.
- *   COOL --quiet HOLD_QUIET_GAP_MS--> IDLE: only a genuinely new press (one
- *         arriving after the gap) may arm the key again.
- * The 60 ms debounce alone filters make-contact bounce.
+ *   COOL --make after quiet gap--> PENDING: a make that survived the quiet-gap
+ *         filter is only a CANDIDATE press.  The kernel suppresses hardware
+ *         typematic in graphics mode, so a genuine new physical press is a
+ *         SINGLE make, while the stale QEMU backlog arrives as a CLUSTER.
+ *   PENDING --make within HOLD_PENDING_GAP_MS--> PENDING: re-anchor; a cluster
+ *         member is stale, so it must never latch the key down.
+ *   PENDING --HOLD_PENDING_GAP_MS of silence--> DOWN: a lone make was a real
+ *         new press; latch and start software typematic as usual.  A break
+ *         arriving during PENDING also cancels it back to COOL.
+ * This two-stage gate is required because the stale backlog lands ~470 ms
+ * after the break -- far beyond the quiet gap -- so a single make alone can
+ * no longer be trusted to signal a fresh press.
  */
 #define HOLD_RELEASE_MS 200u      /* fallback release after the last make/repeat */
 #define HOLD_INITIAL_MS 60u       /* first software repeat (before fallback release) */
@@ -77,6 +86,9 @@ static int sQuitRequested;       /* Esc seen: let app_main exit cleanly */
 #define HOLD_QUIET_GAP_MS 150u    /* after a break, ignore makes until this much
                                    * quiet time (no makes) has elapsed; filters
                                    * any trailing hardware-typematic backlog. */
+#define HOLD_PENDING_GAP_MS 100u  /* in PENDING, a follow-up make this soon means
+                                   * the first make was a stale typematic
+                                   * cluster member, not a genuine new press. */
 
 /* All time comparisons use wrap-safe signed deltas: DG_GetTicksMs() is a
  * 32-bit ms counter with no epoch guarantee. */
@@ -85,6 +97,8 @@ static int ms_since(unsigned now, unsigned then) { return (int)(now - then); }
 #define HOLD_IDLE 0u              /* no hold active */
 #define HOLD_DOWN 1u              /* press emitted, key latched in gamekeydown */
 #define HOLD_COOL 2u              /* just released; ignore stale makes */
+#define HOLD_PENDING 3u           /* COOL make passed the gap: wait to see if a
+                                     follow-up make marks it as stale backlog */
 
 #define HOLD_KEY_COUNT 6
 static const unsigned char sHoldKeys[HOLD_KEY_COUNT] = {
@@ -93,7 +107,7 @@ static const unsigned char sHoldKeys[HOLD_KEY_COUNT] = {
 };
 
 struct hold_key {
-    unsigned char state;          /* HOLD_IDLE / HOLD_DOWN / HOLD_COOL */
+    unsigned char state;          /* HOLD_IDLE / HOLD_DOWN / HOLD_COOL / HOLD_PENDING */
     unsigned char marked;         /* first-repeat HOLD marker already sent */
     unsigned char saw_repeat;     /* a hardware typematic byte was observed */
     unsigned last_make;           /* DG_GetTicksMs() of last make byte */
@@ -105,6 +119,8 @@ struct hold_key {
                                      break or the last make seen afterwards;
                                      a make is suppressed until no makes have
                                      been seen for HOLD_QUIET_GAP_MS */
+    unsigned pending_at;          /* PENDING: time of the (re-anchored) make
+                                      that may become a genuine new press */
 };
 static struct hold_key sHold[HOLD_KEY_COUNT];
 
@@ -129,6 +145,7 @@ static unsigned char sKeyQ[KEYQ_MAX];
 static unsigned sKeyQHead, sKeyQLen;
 static unsigned sKeyCount;       /* for sparse DOOM: KEY markers */
 static unsigned sBreakCount;     /* for sparse DOOM: BREAK markers */
+static unsigned sStaleCount;     /* for sparse DOOM: STALE markers */
 static int sEnterSeen;           /* first Enter fast-starts through the menus */
 
 void DG_Init(void)
@@ -158,6 +175,7 @@ void DG_Init(void)
     sKeyQLen = 0;
     sKeyCount = 0;
     sBreakCount = 0;
+    sStaleCount = 0;
     /* -warp (user/doome32.c) starts straight into the level, so there is no
      * title/menu walk to fast-forward.  Keep the flag set so the first real
      * Enter in the game (or a menu the user opens with Esc) is passed through
@@ -174,6 +192,7 @@ void DG_Init(void)
         sHold[i].released_at = 0;
         sHold[i].break_at = 0;
         sHold[i].quiet_at = 0;
+        sHold[i].pending_at = 0;
         }
 
     doom_marker("DOOM: INIT");
@@ -306,7 +325,10 @@ static void mark_key(unsigned k)
   * Only real console bytes (not macro-queue events) use the hold path: menu
   * walks must keep their short press/release taps.
   *
-  * Per-key state machine: IDLE -> DOWN -> COOL -> IDLE.
+  * Per-key state machine: IDLE -> DOWN -> COOL -> PENDING -> DOWN (or back
+  * to COOL on a break).  A make after COOL's quiet gap is only a candidate:
+  * PENDING waits one short window to tell a lone genuine press from the
+  * stale QEMU typematic cluster that lands ~470 ms after the break.
   *   - a fresh make in IDLE emits press=1 and marks DOWN,
   *   - while DOWN, software typematic presses are generated every 80 ms
   *     (first at 60 ms) until HOLD_MAX_MS since the first press,
@@ -314,7 +336,10 @@ static void mark_key(unsigned k)
   *     the authoritative release (duplicates within 50 ms are ignored),
   *   - without a break, silence for HOLD_RELEASE_MS (200 ms) after the last
   *     make/repeat emits the fallback press=0 and enters COOL,
-  *   - COOL ignores stale makes for 120 ms so they cannot re-arm the key,
+  *   - COOL ignores stale makes until a quiet gap since the release AND since
+  *     the last make; its only exit is a make into PENDING (no timer),
+  *   - PENDING re-anchors on a follow-up make (stale cluster) and only commits
+  *     to DOWN after HOLD_PENDING_GAP_MS of make-free silence,
   *   - repeated makes of a DOWN key are debounced for 60 ms.
   */
 static int hold_index(unsigned k)
@@ -333,10 +358,23 @@ static void hold_mark_repeat(unsigned k)
     doom_marker_n("DOOM: HOLD ", k);   /* sparse: first repeat of this hold */
 }
 
+/* Latch a key down and hand control to the software typematic in hold_tick().
+ * Shared by the immediate IDLE->DOWN path and the committed PENDING->DOWN path
+ * so both start the repeat schedule identically. */
+static int hold_latch(struct hold_key *h, unsigned now)
+{
+    h->state = HOLD_DOWN;
+    h->marked = 0;
+    h->saw_repeat = 0;
+    h->start = h->last_make = now;
+    h->next_repeat = now + HOLD_INITIAL_MS;
+    return 1;
+}
+
 /* Record a make byte for a holdable key.
- * Returns 1 for a fresh press (IDLE->DOWN), 2 for an accepted repeat while
- * DOWN, 0 for a non-holdable key, or -1 when the byte was debounced / fell in
- * the cooldown window and must be swallowed by the caller. */
+ * Returns 1 for a fresh press (IDLE->DOWN or committed PENDING->DOWN), 2 for
+ * an accepted repeat while DOWN, 0 for a non-holdable key, or -1 when the byte
+ * was debounced / swallowed by the cooldown or pending window. */
 static int hold_note_press(unsigned k, unsigned now)
 {
     int i = hold_index(k);
@@ -350,16 +388,46 @@ static int hold_note_press(unsigned k, unsigned now)
          * as the key is physically down; the ones still in the kernel ring when
          * the break arrives are from that same hold and must NOT re-arm the
          * latch (that is what made movement linger after release).  Swallow any
-         * make that arrives before HOLD_QUIET_GAP_MS of silence for this key,
-         * pushing the anchor out on every make we see.  Only a make arriving
-         * after a genuine 150 ms lull is accepted as a deliberate re-press;
-         * that gap is short enough for micro-adjustments. */
-        if (ms_since(now, h->quiet_at) < (int)HOLD_QUIET_GAP_MS)
+         * make until BOTH gaps have elapsed:
+         *   - HOLD_QUIET_GAP_MS since the authoritative release, AND
+         *   - HOLD_QUIET_GAP_MS of make-free time for this key (re-anchored on
+         *     every swallowed make, so a stale burst cannot sneak a single
+         *     make through just because the release itself is old).
+         * A make that passes BOTH gaps is only a CANDIDATE.  The stale QEMU
+         * typematic backlog lands ~470 ms after the break -- long after this
+         * gap -- so do NOT latch DOWN here.  Move to PENDING and let the next
+         * short window decide whether it is a lone genuine press or one of a
+         * stale cluster.  hold_tick must not time COOL out to IDLE either. */
+        if (ms_since(now, h->released_at) < (int)HOLD_QUIET_GAP_MS ||
+            ms_since(now, h->quiet_at) < (int)HOLD_QUIET_GAP_MS)
             {
             h->quiet_at = now;
+            ++sStaleCount;
+            if (sStaleCount <= 8u || (sStaleCount % 20u) == 0u)
+                doom_marker_n("DOOM: STALE ", k);   /* sparse: stale make swallowed */
             return -1;
             }
-        h->state = HOLD_IDLE;         /* quiet gap over: a new press can arm */
+        h->state = HOLD_PENDING;      /* candidate press: wait for a 2nd make */
+        h->pending_at = now;
+        return -1;                    /* swallowed for now -- no press event */
+        }
+
+    if (h->state == HOLD_PENDING)
+        {
+        /* The kernel suppresses typematic in graphics mode, so a genuine new
+         * physical press is a SINGLE make followed by silence.  The stale
+         * backlog arrives as a CLUSTER: another make inside this window means
+         * the candidate was stale, so re-anchor and keep waiting.  hold_tick
+         * commits the press once the window expires make-free. */
+        if (ms_since(now, h->pending_at) < (int)HOLD_PENDING_GAP_MS)
+            {
+            h->pending_at = now;      /* re-anchor: another cluster member */
+            ++sStaleCount;
+            if (sStaleCount <= 8u || (sStaleCount % 20u) == 0u)
+                doom_marker_n("DOOM: STALE ", k);
+            return -1;
+            }
+        return hold_latch(h, now);    /* lone make: a real new press */
         }
 
     if (h->state == HOLD_DOWN)
@@ -373,12 +441,7 @@ static int hold_note_press(unsigned k, unsigned now)
         return 2;
         }
 
-    h->state = HOLD_DOWN;
-    h->marked = 0;
-    h->saw_repeat = 0;
-    h->start = h->last_make = now;
-    h->next_repeat = now + HOLD_INITIAL_MS;
-    return 1;
+    return hold_latch(h, now);        /* IDLE: fresh press, latch at once */
 }
 
 /* Consume a key-up byte (0x80 | ascii) from the kernel PS/2 path.  The mapped
@@ -406,6 +469,14 @@ static int hold_note_break(unsigned k, unsigned now,
             }
         else if (h->state == HOLD_COOL)
             h->released_at = now;            /* keep stale makes filtered */
+        else if (h->state == HOLD_PENDING)
+            {
+            /* The candidate make was followed by a release: either a short
+             * tap or a stale make+break pair.  Abandon it -- never let the
+             * pending timer latch a key the user has already let go. */
+            h->state = HOLD_COOL;
+            h->released_at = now;
+            }
         }
 
     ++sBreakCount;
@@ -435,10 +506,24 @@ static int hold_tick(int *pressed, unsigned char *key)
 
         if (h->state == HOLD_COOL)
             {
-            /* Stay suppressed until a full quiet gap with no makes for this
-             * key: only then may a fresh press re-arm the latch. */
-            if (ms_since(now, h->quiet_at) >= (int)HOLD_QUIET_GAP_MS)
-                h->state = HOLD_IDLE;
+            /* Stay suppressed until a make arrives after the quiet gap.  COOL
+             * is never timed out here: hold_note_press() is the sole gate to
+             * PENDING and requires a genuine make-free gap since the release. */
+            continue;
+            }
+        if (h->state == HOLD_PENDING)
+            {
+            /* A lone make with no follow-up inside the window was a genuine
+             * new physical press.  Commit it now and let the normal software
+             * typematic take over; a cluster would have re-anchored pending_at
+             * and kept us here. */
+            if (ms_since(now, h->pending_at) >= (int)HOLD_PENDING_GAP_MS)
+                {
+                (void)hold_latch(h, now);
+                *pressed = 1;
+                *key = sHoldKeys[i];
+                return 1;
+                }
             continue;
             }
         if (h->state != HOLD_DOWN) continue;

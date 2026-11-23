@@ -35,19 +35,6 @@
 // DG_music_module in i_e32sound.c (AC97 PCM exec 240).
 #define FEATURE_SOUND 1
 
-// EKA2 port-specific: crisp stop on movement key release.
-//
-// Vanilla DOOM coasts to a halt after a movement key is released: P_Thrust()
-// adds planar momentum (momx/momy), which P_XYMovement() decays by FRICTION
-// (0xe800 ~= 0.906 per tic) until it drops below STOPSPEED.  The walking view
-// bob (P_CalcHeight) also lives off that momentum, so on the EKA2 port's slow
-// guest clock the whole glide reads as "the key stayed pressed for ~a second".
-// With this option, when the player supplies no planar input for a tic the
-// leftover momx/momy are zeroed immediately, so motion and view bob stop on
-// the very first tic after key-up.  Undefine (or set to 0) for authentic
-// vanilla momentum; no other DOOM behavior is affected.
-#define EKA2_CRISP_STOP 1
-
 #endif /* #ifndef DOOM_FEATURES_H */
 
 

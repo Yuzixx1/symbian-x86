@@ -66,6 +66,18 @@ namespace
     unsigned char sLastMakeSc = 0;   // last accepted make scancode
     unsigned int  sLastMakeAt = 0;   // NTickCount() of that make
 
+    // Post-break guard.  A physical release arms a short suppression window
+    // for that key's MAKE code: a typematic make still queued in the 8042
+    // output buffer when the break was read (and delivered just after it)
+    // must not be forwarded as a fake press -- that re-latches DOOM's DOWN
+    // latch with no physical press behind it and produces a stuck key.  The
+    // table is per-scancode (index = make code 0..127) so releasing one key
+    // never masks a genuine press of a different key.  Suppression is gated
+    // by the same hook as the make filter, so text-mode shell repeats are
+    // unchanged.
+    const unsigned int kPostBreakGapMs = 100u;
+    unsigned int sLastBreakAt[128] = {0};   // NTickCount() of last break per key
+
     void WriteMasks()
         {
         Out8(0x21, gMasterMask);
@@ -214,6 +226,9 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     };
     static unsigned char sShift = 0, sE0 = 0;
+    sE0 = 0;   // 0xE0 is a prefix only within ONE ISR batch.  A trailing E0
+               // left set at batch end would swallow the next batch's first
+               // scancode -- possibly a genuine break -- so clear it here.
     for (int i = 0; i < 8; ++i)
         {
         if (!(In8(0x64) & 0x01))
@@ -252,9 +267,16 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
             }
         if (sc & 0x80)
             {
-            // A physical release ends the hold: reset the typematic filter so
-            // the next genuine press of the same key is never swallowed.
-            sLastMakeSc = 0;
+            // A physical release ends the hold.  Arm the post-break guard for
+            // this key so a queued typematic make delivered just after the
+            // break is dropped instead of becoming a fake press.  Refresh the
+            // make filter too: clearing sLastMakeSc to 0 (the old behaviour)
+            // disabled suppression for exactly the key that needs it.
+            unsigned int now = NTickCount();
+            unsigned char mk = (unsigned char)(sc & 0x7F);
+            if (mk < 128) sLastBreakAt[mk] = now;
+            sLastMakeSc = mk;
+            sLastMakeAt = now;
             QemuKbdPush((char)(0x80u | (unsigned char)c));  // key-up: 0x80 | ascii
             continue;
             }
@@ -263,6 +285,12 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         // a held key cannot build a backlog that outlives its release.
         if (QemuKbdTypematicSuppress() && sc == sLastMakeSc &&
             (unsigned int)(NTickCount() - sLastMakeAt) < kTypematicGapMs)
+            continue;
+        // Post-break guard: swallow any make of this key that arrives inside
+        // the window opened by its last break (typically a typematic make
+        // that was queued ahead of the break in the 8042 buffer).
+        if (QemuKbdTypematicSuppress() && sc < 128 && sLastBreakAt[sc] &&
+            (unsigned int)(NTickCount() - sLastBreakAt[sc]) < kPostBreakGapMs)
             continue;
         sLastMakeSc = sc;
         sLastMakeAt = NTickCount();
