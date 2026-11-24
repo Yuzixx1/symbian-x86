@@ -1549,5 +1549,5 @@ void GenuineBootLaunch()
         KPrintf("GenuineBoot: file server up, svcmgr fallback skipped\r\n");
         return;
         }
-    SvcMgrBootLaunch();  // fallback: our svcmgr starts \PORTFILESRV.E32
+    // RETIRED by r1_shim_retire_apply: SvcMgrBootLaunch();  // fallback: our svcmgr starts \PORTFILESRV.E32
     }

@@ -247,7 +247,7 @@ struct Service { const char* path; const char* cmd; const char* name; const char
 static const Service kServices[] =
     {
     { 0, 0, 0, 0 },  /* EUSER.DLL: already running, documents boot order */
-    { "\\PORTFILESRV.E32", 0, "!FileServer", 0 },  /* F32 / R1 file server */
+    // RETIRED by r1_shim_retire_apply: { "\\PORTFILESRV.E32", 0, "!FileServer", 0 },  /* F32 / R1 file server */
     /* { "\\CONSOLE.E32",  0, "!ConsoleServer", "!FileServer" },  H-02 */
     /* { "\\LOADER.E32",   0, "!Loader",        "!ConsoleServer" }, L-06 */
     /* { "\\DNSSRV.E32",   0, "!DnsResolver",   "!FileServer" },  future */

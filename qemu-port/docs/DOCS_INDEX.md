@@ -683,3 +683,28 @@ are linked below. Of the named candidates, `EFSRV_GATE_FLIP_CHECKLIST.md` and
 These four newly indexed reports bring the indexed Markdown total to **156**,
 matching the 156 `.md` files under `docs/` (including this index); every
 Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 final verification / commit-prep backfill (append-only)
+
+Three final-stage reports existed on disk but had no entry in this index; they
+are linked below. Of the named candidates, `FINAL_PROJECT_SUMMARY.md` was already
+indexed (latest-report backfill above); `FINAL_VERIFICATION_RESULT.md`,
+`FINAL_COMMIT_INVENTORY.md` and `SHIM_RETIRE_READINESS.md` are newly linked here.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [FINAL_VERIFICATION_RESULT.md](FINAL_VERIFICATION_RESULT.md) — authoritative
+  `r1_final_verify.py --strict-skip` run on the stable tree: OVERALL PASS,
+  11/11 PASS, 0 skip, 0 fail, exit 0, with per-test verdicts, logs and the caveat
+  that a PASS does not authorise commit/push or shim retirement.
+- [FINAL_COMMIT_INVENTORY.md](FINAL_COMMIT_INVENTORY.md) — read-only pre-commit
+  staging inventory: file counts/categories, secrets scan (zero matches), exact
+  `git add` paths (never `git add -A`), do-not-stage list and a suggested commit
+  message; plan only, no commit/push and `kernelhwsrv/` untouched.
+- [SHIM_RETIRE_READINESS.md](SHIM_RETIRE_READINESS.md) — dry-run readiness audit
+  of `r1_shim_retire_apply.py`: all four shims READY only via `--from-file` on a
+  captured full-run PASS log, default preview BLOCKED by design, and apply still
+  refused because edit targets are dirty; no apply attempted.
+
+These three newly indexed reports bring the indexed Markdown total to **159**,
+matching the 159 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
