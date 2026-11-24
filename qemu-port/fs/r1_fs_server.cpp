@@ -1,7 +1,15 @@
 #include "r1_fs_server.h"
 #include <f32ver.h>
 namespace R1Fs {
-namespace { const TInt KAlreadyPanicked=1; }
+namespace {
+const TInt KAlreadyPanicked=1;
+/* Kernel-side KErrBadDescriptor (-38) doubles as K::TDesHeader::KConstMaxLength:
+   a read-only descriptor has no writable capacity, so Exec 168
+   (MessageGetDesMaxLength) reports -38 for it. The same value also signals a
+   width mismatch in Exec 169 (16-bit copy on an 8-bit argument). The user-side
+   shim defines KErrBadDescriptor as -9, hence the literal. */
+const TInt KKernelBadDescriptor=-38;
+}
 class FileSession : public CSession2 {
 public:
     explicit FileSession(Core& state) : state_(state), token_(0) {}
@@ -49,8 +57,16 @@ void FileSession::ServiceL(const RMessage2& msg) {
     for (TInt i=0;i<4;++i) if (slots[i]) {
         const TInt len=msg.GetDesLength(i);
         if (len<0) { r=len; break; }
-        const TInt cap=msg.GetDesMaxLength(i);
-        if (cap<0) { r=cap; break; }
+        TInt cap=msg.GetDesMaxLength(i);
+        if (cap<0) {
+            /* Const descriptors carry KConstMaxLength (-38) instead of a
+               capacity. Accept only that exact sentinel and only when the
+               kernel validated the descriptor length; all other errors stay
+               fatal. Genuine EUSER servers never query a const argument's
+               max length, so this is a shim-compatible interpretation. */
+            if (cap!=KKernelBadDescriptor) { r=cap; break; }
+            cap=len;
+        }
         frame.descriptor[i]=1; frame.length[i]=TUint32(len);
         frame.capacity[i]=TUint32(cap);
     }
@@ -71,7 +87,20 @@ TInt FileSession::Process(const RMessage2& msg,const Decoded& d) {
     if (op==SetSessionPath || op==FileOpen || op==FileCreate || op==FileReplace) {
         const TInt n=msg.GetDesLength(0);
         if (n<0 || n>=KPathUnits) return KErrBadName;
-        TBuf<KPathUnits> name; TInt r=msg.Read(0,name); if (r) return r;
+        TBuf<KPathUnits> name; TInt r=msg.Read(0,name);
+        if (r==KKernelBadDescriptor) {
+            /* An 8-bit client name cannot be copied with 16-bit flags. Read it
+               as bytes (genuine EDesC8 names are ASCII path units) and widen. */
+            TBuf8<KPathUnits> bytes;
+            r=msg.Read(0,bytes); if (r) return r;
+            /* RMessage2::Read reports the byte count via the descriptor's
+               length, not its return value (which is KErrNone). */
+            for (TInt i=0;i<bytes.Length();++i) name.Ptr()[i]=bytes.Ptr()[i];
+        } else if (r) return r;
+        /* MessageIpcCopy returns the count in 16-bit units, but our
+           RMessage2::Read(TDes&) shim halves it before SetLength. Restore the
+           kernel-reported length; the bytes themselves were copied correctly. */
+        name.SetLength(n);
         if (name.Length()!=n) return KErrBadDescriptor;
         if (op==SetSessionPath) return state_.SetPath(token_,name.Ptr(),TUint32(n));
         uint32_t h=0;

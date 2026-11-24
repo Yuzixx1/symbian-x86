@@ -1,0 +1,4 @@
+EXPORTS
+	dm_ord1 @ 1 NONAME	; ?GetDomainSpecs@DmPolicy@@SAPBUTDmDomainSpec@@XZ
+	dm_ord2 @ 2 NONAME	; ?Release@DmPolicy@@SAXPBUTDmDomainSpec@@@Z
+	dm_ord3 @ 3 NONAME	; ?GetPolicy@DmPolicy@@SAHAAVTDmHierarchyPolicy@@@Z

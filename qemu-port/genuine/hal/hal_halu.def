@@ -1,0 +1,7 @@
+EXPORTS
+	hal_ord1 @ 1 NONAME	; ?Get@HAL@@SAHW4TAttribute@HALData@@AAH@Z 
+	hal_ord2 @ 2 NONAME	; ?GetAll@HAL@@SAHAAHAAPAUSEntry@1@@Z 
+	hal_ord3 @ 3 NONAME	; ?Set@HAL@@SAHW4TAttribute@HALData@@H@Z 
+	hal_ord4 @ 4 NONAME	; ?Get@HAL@@SAHHW4TAttribute@HALData@@AAH@Z 
+	hal_ord5 @ 5 NONAME	; ?Set@HAL@@SAHHW4TAttribute@HALData@@H@Z 
+	hal_ord6 @ 6 NONAME	; ?InitialValue@HalInternal@@2QBHB 

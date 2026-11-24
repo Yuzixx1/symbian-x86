@@ -27,34 +27,34 @@ struct IoResult {
 };
 class Backend {
 public:
-    ~Backend() {}
+    virtual ~Backend() {}
     // Path restricted to mounted public fixture namespace; no sys\bin write.
     // Lookup distinguishes missing parent (PathNotFound) and leaf (NotFound).
-    int32_t Lookup(const Path& path, Meta& meta) { return NotFound; }
+    virtual int32_t Lookup(const Path& path, Meta& meta) { return NotFound; }
     // Failure may have side effects for Create/Replace: never claim rollback.
     // Caller serializes this with other Core calls on the FS owner thread;
     // reject unsupported names and cross-volume paths rather than truncating.
-    int32_t Open(const Path& path, Disposition how,
+    virtual int32_t Open(const Path& path, Disposition how,
                  Key& key, Meta& meta) { return NotFound; }
     // Each method validates key generation and offset/length before sector math.
     // ReadAt sets committed=actual bytes; WriteAt records committed prefix on
     // error. Caller owns bounded buffers until return; no client descriptors.
-    IoResult ReadAt(Key key, uint64_t offset, uint8_t* dst,
+    virtual IoResult ReadAt(Key key, uint64_t offset, uint8_t* dst,
                     uint32_t capacity) {
         IoResult r; r.error = NotFound; return r;
     }
-    IoResult WriteAt(Key key, uint64_t offset, const uint8_t* src,
+    virtual IoResult WriteAt(Key key, uint64_t offset, const uint8_t* src,
                      uint32_t length) {
         IoResult r; r.error = NotFound; return r;
     }
     // Resize returns actual size on error; no promise of atomic/power-safe FAT.
-    IoResult Resize(Key key, uint64_t newSize) {
+    virtual IoResult Resize(Key key, uint64_t newSize) {
         IoResult r; r.error = NotFound; return r;
     }
     // Flush MUST propagate metadata and correct-volume device cache errors.
-    int32_t Flush(Key key) { return NotFound; }
+    virtual int32_t Flush(Key key) { return NotFound; }
     // Release reference; close errors never masquerade as successful Flush.
-    int32_t Close(Key key) { return BadHandle; }
+    virtual int32_t Close(Key key) { return BadHandle; }
 };
 }
 #endif

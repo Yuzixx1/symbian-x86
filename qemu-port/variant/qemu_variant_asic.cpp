@@ -7,7 +7,9 @@
 
 #include <x86.h>
 #include <e32hal.h>
+#include <nk_trace.h>           // KPrintf
 #include <kernel/kernel.h>
+#include <kernel/kern_priv.h>   // SThreadCreateInfo / Kern::ThreadCreate (boot DThread)
 #include "qemu_variant.h"
 #include "../fs/r1_fs_core.h"
 #include "../fs/r1_fs_fat.h"
@@ -42,6 +44,45 @@ namespace QemuIrq
     }
 
 // (VgaTeletype, X86IrqDispatcher, ShellSpawnFull shared via qemu_variant.h.)
+void GenuineBootLaunch();  // variant/e32load.cpp: genuine startup-chain boot
+                           // list; falls back to SvcMgrBootLaunch() internally
+
+extern "C" void* memclr(void* aTrg, unsigned aLength);
+_LIT(KLitGenuineBoot, "GenuineBoot");
+
+static TInt GenuineBootDThreadFn(TAny*)
+    {
+    GenuineBootLaunch();
+    return 0;
+    }
+
+// The genuine chain must run on a real DThread: E32Run() calls the kernel
+// heap + container mutexes, and invoking it directly from Asic::Init3 (the
+// nanokernel start thread) faults K::Fault(EMutexWaitNotDThread=98).  Spawn a
+// short-lived supervisor DThread exactly like ShellSpawnFull() does, at a
+// higher priority so the banners precede the interactive prompt.
+static void GenuineBootSpawn()
+    {
+    SThreadCreateInfo info;
+    memclr(&info, sizeof(info));
+    info.iType = EThreadSupervisor;
+    info.iFunction = GenuineBootDThreadFn;
+    info.iPtr = 0;
+    info.iSupervisorStack = 0;  // auto-allocate
+    info.iSupervisorStackSize = 0x8000;
+    info.iInitialThreadPriority = 12;  // shell is 10
+    info.iName.Set(KLitGenuineBoot);
+    info.iTotalSize = sizeof(info);
+    KPrintf("KERN spawning genuine boot DThread...\r\n");
+    NKern::ThreadEnterCS();
+    TInt r = Kern::ThreadCreate(info);
+    DThread* pT = (DThread*)info.iHandle;
+    if (r == KErrNone)
+        Kern::ThreadResume(*pT);
+    NKern::ThreadLeaveCS();
+    if (r != KErrNone)
+        KPrintf("KERN genuine boot spawn failed r=%d\r\n", r);
+    }
 
 static inline void Out8(unsigned short aPort, unsigned char aVal)
     { __asm__ __volatile__("out %1, %0" : : "a"(aVal), "Nd"(aPort)); }
@@ -142,12 +183,16 @@ void QemuVariantAsic::Init3()
         const char* marker = "X: mounted (programs)\r\n";
         while (*marker) QemuUart::PutC(*marker++);
     }
-    // S-02: install trusted service-manager execs and launch SVCMGR.E32 at
-    // boot. The manager then starts F32/portfilesrv and supervises it in order
-    // (docs/r1_service_manager_design_v1.md). FAT is mounted above, so the
-    // image is loadable here just as the shell's RunImage loads images.
+    // S-02/G-01: install trusted service-manager execs, then boot the GENUINE
+    // startup chain where its components are staged on the boot volume
+    // (\EFILE/\EFSRV -> \ESTART -> \EWSRV -> \ESHELL, probed by FAT presence).
+    // GenuineBootLaunch() runs on a supervisor DThread (not Init3's nanokernel
+    // thread, which cannot take kernel mutexes) and falls back to
+    // SvcMgrBootLaunch() (svcmgr -> \PORTFILESRV.E32) when no genuine file
+    // server is present, so shim-only disks boot exactly as before. FAT is
+    // mounted above, so images load here just as the shell's RunImage loads.
     SvcMgrExecInstall();
-    SvcMgrBootLaunch();
+    GenuineBootSpawn();
     ShellSpawnFull();         // interactive console as genuine NThread
     }
 

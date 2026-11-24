@@ -26,6 +26,7 @@
 #include <e32err.h>
 #include <nk_trace.h>
 #include <kernel/kernel.h>
+#include <kernel/kern_priv.h>   // K::EventThread / K::EventTailPtr (bridge verdict)
 #include "qemu_variant.h"
 
 namespace
@@ -496,6 +497,9 @@ static TInt DisplayHalFunction(TAny*, TInt aFunction, TAny* a1, TAny*)
     {
     if (aFunction == EDisplayHalScreenInfo)
         {
+        // A genuine EWSRV asks for the framebuffer before it paints; make sure
+        // the Bochs VBE LFB is actually enabled (boot starts in VGA text mode).
+        display_ensure_graphics();
         // Mirrors TScreenInfoV01's 24-byte layout exactly (avoids pulling the
         // private e32event_private.h header into this freestanding driver).
         struct TQScreenInfo
@@ -526,6 +530,109 @@ void QemuDisplayRegisterHal()
     {
     TInt r = Kern::AddHalEntry(EHalGroupDisplay, DisplayHalFunction, 0);
     KPrintf("DISPLAY: EHalGroupDisplay(4) registered r=%d\r\n", r);
+    }
+
+// --- Genuine pointer-event bridge -------------------------------------------
+// QEMU has no pointing device and the port's `mouse test`/`press` feed only the
+// hand-written wsrv ring, so genuine EWSRV never received a raw pointer event
+// and EUSER ord 1868 (TRawEvent::Pos, 8-byte TPoint sret) was never executed.
+// This bridge is the missing *source*: it constructs a real kernel TRawEvent
+// and pushes it through the exported Kern::AddEvent API into the EKA2 event
+// queue, exactly where a genuine pointer driver would.  Everything downstream
+// (ExecHandler::RequestEvent -> K::EventRequest -> CEvent::RunL -> Pos()) is
+// genuine kernel / genuine EWSRV code.  kernelhwsrv/ is untouched.
+//
+// Opt-in: \PTRINJ.TXT on the boot FAT volume holds "x y".  Tests stage it;
+// every other boot leaves the event queue alone.
+namespace
+    {
+    // TRawEvent's payload fields are protected; a local subclass is the
+    // cleanest way to initialise them using the genuine header's exact layout
+    // (no offsets duplicated, no #define protected public, no kernel patch).
+    struct TPointerRawEvent : public TRawEvent
+        {
+        void SetMove(TInt aX, TInt aY)
+            {
+            iType = (TUint8)EPointerMove;
+            iTip = 0;
+            iPointerNumber = 0;
+            iDeviceNumber = 1;      // DeviceNumber() == iDeviceNumber-1 == 0
+            iTicks = Kern::TickCount();
+            iU.pos.x = aX;
+            iU.pos.y = aY;
+            }
+        };
+
+    static TBool ParsePair(const TUint8* aBuf, TUint aLen,
+                           TInt& aX, TInt& aY)
+        {
+        TInt vals[2] = {0, 0};
+        TUint n = 0, i = 0;
+        while (i < aLen && n < 2)
+            {
+            while (i < aLen && (aBuf[i] <= ' ')) ++i;
+            TBool neg = EFalse;
+            if (i < aLen && (aBuf[i] == '-' || aBuf[i] == '+'))
+                { neg = (aBuf[i] == '-'); ++i; }
+            TBool digits = EFalse;
+            TInt v = 0;
+            while (i < aLen && aBuf[i] >= '0' && aBuf[i] <= '9')
+                { v = v * 10 + (aBuf[i] - '0'); ++i; digits = ETrue; }
+            if (!digits) break;
+            vals[n++] = neg ? -v : v;
+            }
+        if (n != 2) return EFalse;
+        aX = vals[0]; aY = vals[1];
+        return ETrue;
+        }
+    }  // namespace
+
+void GenuinePointerBridge()
+    {
+    TUint8 buf[64];
+    TUint got = 0;
+    for (TUint k = 0; k < sizeof(buf); ++k) buf[k] = 0;
+    char prev = FatCurLetter();
+    if (!prev) FatUse('C');
+    TInt r = FatReadPath("\\PTRINJ.TXT", buf, sizeof(buf), got);
+    if (prev) FatUse(prev);
+    if (r != KErrNone || got == 0)
+        return;                       // marker absent: no behaviour change
+
+    TInt x = 0, y = 0;
+    if (!ParsePair(buf, got, x, y))
+        {
+        KPrintf("PTRBRIDGE: bad \\PTRINJ.TXT contents\r\n");
+        return;
+        }
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > 4095) x = 4095;
+    if (y > 4095) y = 4095;
+
+    TPointerRawEvent ev;
+    ev.SetMove(x, y);
+    TRawEvent* tailBefore = K::EventTailPtr;
+    DThread* evtThread = K::EventThread;
+
+    // Kern::AddEvent preconditions: thread context, critical section held,
+    // kernel unlocked, interrupts enabled.  GenuineBootLaunch runs on a
+    // supervisor DThread with the kernel unlocked, so wrapping with CS is the
+    // only requirement here (mirrors ExecHandler::AddEvent in eventq.cpp).
+    NKern::ThreadEnterCS();
+    TInt add = Kern::AddEvent(ev);
+    NKern::ThreadLeaveCS();
+    KPrintf("PTRBRIDGE: injected EPointerMove x=%d y=%d add=%d evtThread=%x "
+            "head=%x tail=%x\r\n", x, y, add, (TUint)evtThread,
+            (TUint)K::EventHeadPtr, (TUint)K::EventTailPtr);
+
+    // Give genuine EWSRV time to consume the request.  A changed tail means
+    // TryDeliverEvent handed this event to UserSvr::RequestEvent, whose RunL
+    // branch for EPointerMove calls EUSER ord 1868 TRawEvent::Pos().
+    NKern::Sleep(300);   // 1000 Hz PIT => ~300 ms for EWSRV to start + request
+    KPrintf("PTRBRIDGE: verdict head=%x tail=%x consumed=%d\r\n",
+            (TUint)K::EventHeadPtr, (TUint)K::EventTailPtr,
+            K::EventTailPtr != tailBefore);
     }
 
 // Boot hook: HwInit0 walks .init_array after paging + ROM are ready.  Safe and

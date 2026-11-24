@@ -228,7 +228,7 @@ def main() -> int:
         if is_pe2:
             # PE2: the section holds the DLL name only; the IAT lives at the
             # end of the text section, pre-linked with 1-based ordinals.
-            if not (1 <= nimp <= 16):
+            if not (1 <= nimp <= 512):   # genuine EWSRV binds 216 EUSER ordinals
                 return fail("PE2 import count out of range")
             if isize < 8 + 6:
                 return fail("PE2 import section too small for DLL name")

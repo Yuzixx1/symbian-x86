@@ -321,3 +321,365 @@ This brings the indexed Markdown total to **99**.
   assets => `RESULT: SKIP`; flaky screendumps are reported as INFO, never fatal.
 
 This brings the indexed Markdown total to **100**.
+
+## Added — genuine userspace architecture & retirement plan (append-only)
+
+- [GENUINE_USERSPACE.md](GENUINE_USERSPACE.md) — architecture document and
+  retirement plan for the project rule that *everything above the kernel must
+  be genuine Symbian code* (if the kernel works the rest should too; changing
+  userspace breaks the other architecture ports). Records why the port layer is
+  only kernel/HAL/variant (evidence from `kernelhwsrv/bsptemplate` and the
+  per-arch `bx86*/bmarm/bwins` slices), then maps every current shim to its
+  genuine source and replacement: F32 (`sfsrv`/`sfile`/`sfat32` →
+  `portfilesrv.cpp` + `fs/r1_fs_*`), window server (`ewsrv` → `winsrv.c` /
+  `guishost.h` / `qemu_windowsrv.cpp`), EUSER (genuine prebuilt `EUSER.DLL`
+  already, shim only in `e32base.h`), startup (`estart`/`domainmgr`/`etshell`
+  → `svcmgr.cpp` + `e32load.cpp` boot launch), HAL (`halservices/hal` present),
+  and the one genuine gap — ESOCK/sockets, absent from the tree, so
+  `netstack.c` stays as documented *authored* code behind a Symbian-shaped ABI.
+  Also gives the `-m32` → `.def`-driven → PE2-E32 build strategy, a six-step
+  dependency-ordered retirement plan gated by selfcheck / doom / efsrv file
+  test / ewsrv window test, and an honest list of absent components (ESOCK,
+  comms DB, Bluetooth, UIKON/GDI, multimedia).
+
+This brings the indexed Markdown total to **101**.
+
+## Added — genuine userspace progress tracking (append-only)
+
+- [GENUINE_PROGRESS.md](GENUINE_PROGRESS.md) — live status companion to
+  `GENUINE_USERSPACE.md`, updated from `tools/r1_genuine_retire_test.py`
+  (dry-run + full QEMU run) and the per-workstream reports under `genuine/`:
+  a status table (subsystem, genuine source, built?, runs?, retired shim?,
+  blocker) — EUSER/HAL/domainmgr/EWSRV/ESTART+ESHELL genuine images built and
+  running, EFSRV/F32 still SKIP (no runnable `EFILE.E32`/`EFAT32.FSY` yet, but
+  the minimal-server IPC round trip passes and the 13/13 wire-opcode static
+  check passes), no shim fully retired yet — plus the port-layer blocker list
+  (!-name/caps registration, import slots 16→512 done, const-descriptor
+  rejection, boot chain, ring-3 FAT adapter, toolchain review fixes) with
+  owners, harness tuning notes, and the ordered next steps.
+
+This brings the indexed Markdown total to **102**.
+
+## Added — 2026-11-24 genuine-userspace status reconciliation (append-only)
+
+- [GENUINE_PROGRESS.md](GENUINE_PROGRESS.md) — refreshed to 2026-11-24: current
+  per-subsystem table (EUSER/EWSRV/ESTART+ESHELL gates PASS; HAL/domainmgr
+  smoke PASS; EFSRV SKIP, full `EFILE.E32` builds but faults `EBadHandle`), a short "verified
+  today" list, and blocker table B1–B7 (B1 caps/B4/B6/B7 FIXED; B3 follow-up,
+  EFILE handle table, EWSRV client name lookup IN FLIGHT; B5 OPEN).
+- [GENUINE_USERSPACE.md](GENUINE_USERSPACE.md) — §6 boot-time auto-launch
+  updated to RESOLVED: supervisor DThread from `Asic::Init3()`,
+  `ECapabilityProtServ`, genuine chain order and svcmgr fallback; the old
+  `KERN 0x62` regression is gone.
+- [SHIM_RETIREMENT_PLAN.md](SHIM_RETIREMENT_PLAN.md) — dry-run-only shim
+  inventory (`tools/r1_shim_retire_plan.py`, 0 READY / 4 BLOCKED), the four
+  production shims, boot-list lines that a switch would edit, ordered switch
+  and rollback. Blocker checklist reconciled to B7/B4/B1-caps FIXED.
+- [BOOT_CHAIN_VERIFICATION.md](BOOT_CHAIN_VERIFICATION.md) — serial boot-chain
+  regression report (selfcheck/smoke/cp4/selftest/efsrv/eshell/retire PASS,
+  ISO boot 0 faults); note the ewsrv harness it records as FAIL was subsequently
+  fixed and is now PASS per `GENUINE_PROGRESS.md`.
+- [GENUINE_BUILD_REVIEW.md](GENUINE_BUILD_REVIEW.md) — independent toolchain
+  audit (CONDITIONAL verdict; MSVC-decorated `.def` names and `--name` path
+  sanitization verified fixed).
+
+This brings the indexed Markdown total to **105**.
+
+## Added — 2026-11-24 on-disk FAT I/O milestone (append-only)
+
+- [GENUINE_PROGRESS.md](GENUINE_PROGRESS.md) — B5 marked **on-disk FAT I/O DONE**
+  with evidence (`FATIOCLIENT.E32` + `tools/r1_genuine_fat_io_test.py` PASS:
+  disk-only `SEED.TXT` read, `FATIO.TXT` create/write/reopen/read
+  `FATIO-MARKER-42A7` byte-for-byte, all r0, no faults); EFSRV retire gate still
+  SKIP. In-flight items (EFILE sret-ABI + `CServer2::Start("!FileServer")` error,
+  EWSRV client window, `estart`/`etshell` sret-ABI rebuild, EWSRV sret-ABI flag;
+  audit `docs/ABI_AUDIT.md`) remain marked as such.
+- [GENUINE_USERSPACE.md](GENUINE_USERSPACE.md) — §6 now records the verified
+  on-disk FAT I/O milestone and points at `tools/r1_genuine_fat_io_test.py`.
+- `genuine/F32_EFSRV_REPORT.md` (under `genuine/`, not indexed here) — blockers
+  #1–#4 updated (B5 on-disk FAT resolved; #2 caps and #3 const descriptors
+  resolved) plus an "on-disk FAT verification" section. No new `docs/*.md`
+  files, so the indexed total stays **105**.
+
+## Added — 2026-11-24 full verification & change inventory (append-only)
+
+- [FINAL_VERIFY_REVIEW.md](FINAL_VERIFY_REVIEW.md) — independent review of
+  `tools/r1_final_verify.py` (verdict NEEDS FIXES, minor): confirms the CLI,
+  flags and 11-script wiring; flags two false-PASS paths (a stale DOOM ISO
+  reused by default, and a last verdict overriding a nonzero exit code) plus
+  two low-severity reporting gaps; records the dry-run / `py_compile` results.
+  Review fixes applied.
+- [CHANGE_INVENTORY.md](CHANGE_INVENTORY.md) — dated (2026-11-24) read-only
+  inventory of the uncommitted genuine-userspace pivot: working-tree shape,
+  grouped file inventory, commit/in-flight classification and commit caveats.
+  No commits/pushes; `kernelhwsrv/` untouched.
+
+New verification command: from `qemu-port/`, `python3 tools/r1_final_verify.py`
+runs all 11 tests (selfcheck → smoke → retire → efserver → ewsrv → eshell →
+fat_io → doom_main/audio/playtest/multikey) with `--list`, `--dry-run`,
+`--only`, `--skip`, `--skip-selfcheck`, `--keep-going`/`--no-keep-going`,
+`--rebuild-iso`, `--strict-skip`, `--log-dir`; logs under
+`/tmp/opencode/final_verify_<name>.log`. `r1_os_selfcheck.py` remains the quick
+check. These two new indexed Markdown files bring the indexed total to **107**.
+
+## Added — 2026-11-24 verification & review report backfill (append-only)
+
+Reports indexed below existed on disk but had no entry in this index (some were
+only mentioned in passing); `kernelhwsrv/` untouched.
+
+- [ABI_AUDIT.md](ABI_AUDIT.md) — static audit of the genuine EUSER sret ABI across
+  staged E32 images: 1/2/4/8-byte struct returns are hazardous under gcc `-m32`;
+  recommended `-freg-struct-return` rebuilds landed for EFILE, EWSRV/EWCLIENT and
+  estart/etshell, with EFILE's `CServer2::Start` blocker still in flight.
+- [EFILE_START_ANALYSIS.md](EFILE_START_ANALYSIS.md) — independent read-only
+  diagnosis of genuine EFILE's `CServer2::Start("!FileServer")` failure, tracing
+  the genuine `sf_main.cpp` path and ranking every non-`KErrNone` return cause.
+- [EFILE_EXIT111_ANALYSIS.md](EFILE_EXIT111_ANALYSIS.md) — root-cause analysis of
+  EFILE's `exit: type=2 reason=111` as `EThrdHeapMaxLessThanMin` from the
+  TInt-only `Panic()` overload, with the exact port-side heap-min/max fix chain.
+- [DOOM_INTEGRATION_VERIFICATION.md](DOOM_INTEGRATION_VERIFICATION.md) — 2026-11-24
+  verification-only DOOM/Freedoom run on the current ISO: `EKA2_CRISP_STOP`
+  confirmed absent, main/audio/playtest PASS and multikey FAIL reproduced thrice.
+- [HAL_DM_REGRESSION.md](HAL_DM_REGRESSION.md) — read-only HAL/domainmgr E32
+  regression against the current toolchain/kernel: 15/15 proof checks PASS with
+  the unchanged `kernfull.elf` and staged genuine images.
+- [POINTER_BRIDGE_REVIEW.md](POINTER_BRIDGE_REVIEW.md) — SAFE verdict on the
+  genuine pointer-event bridge: genuine layout/CS/handoff verified, with a MEDIUM
+  test-only gap (`Pos()` execution implied, not directly asserted) and two LOWs.
+- [SHIM_RETIRE_APPLY_REVIEW.md](SHIM_RETIRE_APPLY_REVIEW.md) — NEEDS-FIXES review
+  of `r1_shim_retire_apply.py`: two HIGH issues (rollback gap, self-defeating
+  post-apply gate), MED/LOW guards and dry-run results; no apply performed.
+- [EWSRV_CLIENT_BLOCKER.md](EWSRV_CLIENT_BLOCKER.md) — root-caused EWSRV external
+  client blocker: stale `EWCLIENT.E32` `!`-name plus `TSize::operator+` sret-ABI
+  mismatch in `CWsWindow::CreateL()`, with a fix verified in a temp build.
+
+These eight newly indexed reports bring the indexed Markdown total to **115**.
+
+## Added — 2026-11-24 EFILE / EFSRV / IPC report backfill (append-only)
+
+Nine reports written during the 2026-11-24 genuine-EFILE unblock effort existed on
+disk but had no entry in this index. `EFILE_DUPLICATE_LAUNCH_PLAN.md` was also
+checked but does not exist on disk, so it has no entry here. `kernelhwsrv/` was
+untouched; no QEMU run by this index update.
+
+- [EFILE_IPC_CONNECT_ANALYSIS.md](EFILE_IPC_CONNECT_ANALYSIS.md) — read-only FULL-EFILE vs EFSRVMIN diagnosis: the `!FileServer` name fix lands but the client gets `SessionPath r=-15` (`KErrServerTerminated`), isolating the residual blocker to server lifetime / session-path shape rather than a bad path.
+- [EFSRV_UNBLOCK_CHECK.md](EFSRV_UNBLOCK_CHECK.md) — read-only on-disk audit of the F32CLIENT UTF-16 `!FileServer` fix and rebuild, checking for a fresh `F32CLIENT: IPC round trip OK` against FULL EFILE (none; only the pre-fix EFSRVMIN shim log has it).
+- [EFILE_SESSION_PATH_PLAN.md](EFILE_SESSION_PATH_PLAN.md) — investigation of the ranked #2 EFSRV cause: disproves the `?:\Private\<SID>\` premise (genuine `GetSystemDriveChar()` returns `'C'`), rejects explicit `RProperty` definition (`KErrPermissionDenied`) and records the remaining port-side approach.
+- [EFILE_DUPLICATE_SOURCES.md](EFILE_DUPLICATE_SOURCES.md) — launch-source/duplicate-owner audit: the observed duplicate is one `E32Run` re-entering `app_main` three times (`start.S` ignores the EBX entry reason), detaching sessions with `KErrServerTerminated`; cross-launcher duplication is only latent.
+- [EFILE_CONVERGENCE.md](EFILE_CONVERGENCE.md) — concurrent-fix status table for the EFILE/EFSRV fixes (single-owner guard, entry trampoline, F32CLIENT name fix, gate typo) plus the exact 9-count EFSRV-gate PASS acceptance criteria.
+- [EFILE_ACCEPTANCE.md](EFILE_ACCEPTANCE.md) — documents `tools/r1_efile_acceptance.py`, a strict read-only checker that applies the 9 EFSRV-gate PASS criteria from `EFILE_CONVERGENCE.md` §2 to one complete raw serial log.
+- [TRAWEVENT_POS_PROOF.md](TRAWEVENT_POS_PROOF.md) — direct guest proof (verdict PROVEN) that genuine `CEvent::RunL()` calls EUSER ord 1868 `TRawEvent::Pos()`, via a conditional EWSRV-only PE2 IAT rebind/wrapper emitting `PTRBRIDGE: TRawEvent::Pos x=80 y=40`.
+- [FULLCHAIN_VERIFICATION.md](FULLCHAIN_VERIFICATION.md) — report for `tools/r1_genuine_fullchain_test.py`: one boot stages all four genuine E32s plus `EUSER.DLL`/`EFAT32.FSY` and asserts launch markers in strict sequential order (no shell relaunch).
+- [GO_NO_GO.md](GO_NO_GO.md) — 2026-11-24 GO/NO-GO decision record: per-subsystem verdict table and NO-GO recommendation for shim retirement / final sign-off, with EFSRV/F32 as the sole narrow blocker.
+
+These nine newly indexed reports bring the indexed Markdown total to **124**.
+
+## Added — 2026-11-24 reader-guide index backfill (append-only)
+
+Six reader-facing guides existed on disk but had no entry in this index. They are
+now linked below; `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [E32_DEVELOPER_GUIDE.md](E32_DEVELOPER_GUIDE.md) — how to add a new end-user
+  E32 application: freestanding C against `runtime.h`, a genuine PE2 `EUSER.DLL`
+  import, `user.mk` rules, shell / `PROGRAMS.IMG` launch and a QEMU test.
+- [FAQ_TROUBLESHOOTING.md](FAQ_TROUBLESHOOTING.md) — practical current-behaviour
+  Q&A for building and running the port (display/console, boot, shell,
+  networking, the READ-ONLY `kernelhwsrv/` rule), with past-fix notes so a stale
+  guide or binary can be told from a real problem.
+- [KERNEL_INTERNALS.md](KERNEL_INTERNALS.md) — map of the genuine EKA2 kernel
+  objects the port actually links (~80 `kernfull` + ~19 nanokernel objects from
+  `kernelhwsrv/kernel/eka/`): bootstrap, scheduler, threads, IPC, executives,
+  timers and active objects, with `file:line` references.
+- [MMU_PAGING.md](MMU_PAGING.md) — the R4/R5 4 KiB paging upgrade: per-page U/S
+  bits, per-process page directories and #PF handling that replaced the old
+  flat 4G/4M identity map.
+- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) — one-page cheat sheet for the port:
+  GRUB-ISO boot command, shell commands and paths, self-test and pointers to the
+  full boot and troubleshooting guides.
+- [TESTING_QA.md](TESTING_QA.md) — complete testing/QA story: the one-command
+  verifier, on-OS self-test, full inventory of `r1_*` harnesses, how QEMU tests
+  stage disks and judge results, and how to interpret (and de-false) failures.
+
+These six newly indexed guides bring the indexed Markdown total to **131**,
+matching the 131 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 audit / precommit backfill (append-only)
+
+Three audit/prep reports existed on disk but had no entry in this index. They
+are linked below. `EFILE_REENTRY_FIX.md` was checked but does not exist on disk,
+so it has no entry; `EFILE_ACCEPTANCE.md` was already indexed. `kernelhwsrv/`
+was untouched and no QEMU run was made by this index update.
+
+- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — static pre-commit security audit of the pivot files (`tools/*.py`, `genuine/**`, changed `variant/`+`fs/`); verdict SAFE with zero real findings, no secrets and no command injection, `kernelhwsrv/` read-only/untouched.
+- [PRECOMMIT_AUDIT.md](PRECOMMIT_AUDIT.md) — prep-only, read-only pre-commit audit/checklist for the genuine-userspace pivot: NO-GO verdict (EFSRV/F32 gate FAIL, EFILE trampoline fix pending/unproven), ordered verification commands, explicit stage-by-path guidance (never `git add -A`) and a do-not-commit list.
+- [EFILE_DUPLICATE_LAUNCH_PLAN.md](EFILE_DUPLICATE_LAUNCH_PLAN.md) — read-only corrected root-cause analysis of the 3x EFILE start signature (one process, three `app_main` reentries) plus a port-side single-owner guard/trampoline experiment in `variant/e32load.cpp`, with IPC-vs-1x-start trade-off and retire-gate results.
+
+These three newly indexed reports bring the indexed Markdown total to **134**,
+matching the 134 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 EFILE guard-vs-trampoline resolution backfill (append-only)
+
+One report existed on disk but had no entry in this index; it is linked below.
+`EFILE_REENTRY_FIX.md` was checked and does not exist on disk. `kernelhwsrv/`
+was untouched and no QEMU run was made by this index update.
+
+- [EFILE_GUARD_VS_TRAMPOLINE.md](EFILE_GUARD_VS_TRAMPOLINE.md) — authoritative
+  decision resolving the two competing single-owner EFILE fixes in
+  `variant/e32load.cpp`: keep the single-owner guard and remove the entry
+  trampoline (which broke IPC without genuine EUSER thread/TLS setup), with the
+  accepting-gate evidence (retire 4/4, smoke PASS) and honest caveats.
+
+This newly indexed report brings the indexed Markdown total to **135**,
+matching the 135 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 audit / integrity report backfill (append-only)
+
+Two reports existed on disk but had no entry in this index; they are linked
+below. Of the other named candidates, `EFILE_DUPLICATE_LAUNCH_PLAN.md` was
+already indexed (audit/precommit backfill above); `SESSIONPATH_NEG15.md` and
+`ESTART_EXC00_ANALYSIS.md` were checked and do not exist on disk, so they have
+no entries. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [GUARD_TRAMPOLINE_REVIEW.md](GUARD_TRAMPOLINE_REVIEW.md) — independent
+  read-only review of the guard-vs-trampoline resolution (NEEDS WORK: the code
+  resolution is clean — guard kept, trampoline gone, 464 binds/1 registration/
+  no port-shim/faults — but runtime acceptance is unmet with `SessionPath r=-15`
+  ×2 and all supporting logs ending in harness SIGTERM; keep guard-only and
+  maintain NO-GO until an uninterrupted prove and the ESTART fault fix).
+- [PRESERVATION_AUDIT.md](PRESERVATION_AUDIT.md) — read-only pre-commit
+  verification that the documented preservation points are intact: the
+  `archive/handwritten-r25` branch/tag and `HEAD` all at `56fbaff`, the
+  983-entry `symbian-x86-archive-56fbaff.tar.gz` present/readable, no mismatches
+  in the SHIM_RETIREMENT_PLAN / PRECOMMIT_AUDIT archive refs, plus a rollback
+  recipe and caveats (tarball is git-source-only, ambiguous branch+tag name).
+
+These two newly indexed reports bring the indexed Markdown total to **137**,
+matching the 137 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 final report backfill (append-only)
+
+Nine reports existed on disk but had no entry in this index; they are linked
+below. Of the named candidates, `NEG15_SEMANTICS.md` and
+`ESTART_UID_CLEANUP.md` were checked and do not exist on disk, so they have no
+entries. `EFILE_REENTRY_FIX.md` now exists on disk (earlier backfill sections
+recorded it as absent); it is indexed here without altering those entries.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [TRAMPOLINE_FINAL_REMOVAL.md](TRAMPOLINE_FINAL_REMOVAL.md) — definitive removal of the re-added EFILE entry trampoline from `variant/e32load.cpp` (veneer, `E32Run` call site, exec-270 op 5 trace), restoring the guard-only model that `AGENTS.md` now permanently forbids reintroducing.
+- [ESHELL_PS_STATUS.md](ESHELL_PS_STATUS.md) — read-only 2026-11-24 snapshot of the ESHELL `ps` fix: owner-process activity plus the finding that ESHELL `ps` appears FIXED in the latest repro (`--PROCESSES-->` rows), pending formal gate confirmation.
+- [GUARD_ESTART_BLOCK_ANALYSIS.md](GUARD_ESTART_BLOCK_ANALYSIS.md) — read-only diagnosis of ESTART's `r=-11`: `pack_multi.py` stamps EFILE UID3 `0x100000bf` on every image so the single-owner guard refuses ESTART, with the minimal fix of per-image genuine UID3s (`0x10272C04` / `0x101F7AE7`).
+- [FINAL_GATE_STATUS.md](FINAL_GATE_STATUS.md) — live one-page gate-status snapshot (2026-11-24 03:17 EET): per-gate GREEN/IN FLIGHT/FAIL/NOT DONE table synthesizing docs, log mtimes and running processes, flagging the EFSRV `SessionPath r=-15` false-PASS and ESTART guard-block caveats.
+- [FINAL_VERIFY_RUNBOOK.md](FINAL_VERIFY_RUNBOOK.md) — read-only, execute-only-after-fixes runbook keyed to `FINAL_GATE_STATUS.md`: five fix-landing prerequisites (A–E), tree-stability checks and the ordered full-verification commands; explicitly not authorization to commit, push or retire shims.
+- [EFILE_CLEAN_PROVE.md](EFILE_CLEAN_PROVE.md) — report for `tools/r1_efile_clean_prove.py`: one uninterrupted QEMU boot on the final GRUB ISO staging EUSER/EFILE/EFAT32/F32CLIENT, with raw-log/ISO hashes and the marker table (464 binds, three EFILE starts, single-owner claim, IPC).
+- [PACK_MULTI_UID_FIX.md](PACK_MULTI_UID_FIX.md) — `genuine/pack_multi.py` per-image UID3 fix unblocking ESTART `-11`: new optional `uid3` argument and `--uid3` CLI defaulting to the EFILE UID so existing callers stay byte-identical (callers in `build_estart_eshell.py` still to land).
+- [SESSIONPATH_NEG15.md](SESSIONPATH_NEG15.md) — F32CLIENT false-pass integrity fix: `fsclient.cpp` wrongly accepted any completed IPC reply (including `KErrServerTerminated -15`) as `IPC round trip OK`, making the EFSRV retire gate a false PASS; now requires `KErrNone`.
+- [EFILE_REENTRY_FIX.md](EFILE_REENTRY_FIX.md) — `variant/e32load.cpp` report on the 3x EFILE start signature: single-owner guard plus corrected reentry handling, tracing the old magic-offset trampoline's `#PF`/port-shim failure to `user/start.S` ignoring the EBX entry reason.
+
+These nine newly indexed reports bring the indexed Markdown total to **146**,
+matching the 146 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 latest-report backfill (append-only)
+
+Four reports existed on disk but had no entry in this index; they are linked
+below. Of the other named candidates, `TRAMPOLINE_FINAL_REMOVAL.md` was already
+indexed (final report backfill above), while `ESTART_UID_GATE_CHECK.md` and
+`EFILE_REENTRY_SUPPRESS.md` were checked and do not exist on disk, so they have
+no entries. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [NEG15_SEMANTICS.md](NEG15_SEMANTICS.md) — read-only semantics report:
+  `SessionPath r=-15` is `KErrServerTerminated` (a genuine server-lifecycle
+  failure, never a benign status or marshalling bug); rejects accepting `-15`
+  as success — the exact false positive the tightened client removed — and
+  classifies the fix as server-session stability / wait-for-`KErrNone`.
+- [FINAL_PROJECT_SUMMARY.md](FINAL_PROJECT_SUMMARY.md) — dated 2026-11-24
+  ready-to-fill synthesis of the genuine-userspace pivot: what was built,
+  preservation point `56fbaff`, last known gate verdicts (no authoritative full
+  verify run yet; fullchain FAIL 11/14, EFILE acceptance FAIL 5/9, DOOM PASS)
+  and open blockers; explicitly a status snapshot, not authorization to commit,
+  push or retire shims.
+- [ESHELL_UID_GATE_CHECK.md](ESHELL_UID_GATE_CHECK.md) — read-only verification
+  that changing ESHELL UID3 `0x101F7AE7` → `0x10000111` (the PS-fix build change,
+  later reverted) breaks neither the boot chain nor the ESTART/ESHELL retire-gate
+  UID detection.
+- [ESTART_UID_CLEANUP.md](ESTART_UID_CLEANUP.md) — genuine-UID3 cleanup in
+  `genuine/estart_eshell/build_estart_eshell.py`: pass per-image genuine UID3s to
+  `pack_multi()` (ESTART `0x10272C04`, ESHELL `0x101F7AE7`, distinct debug UIDs)
+  and drop the post-pack `0x10000111` stamp, clearing the single-owner guard's
+  ESTART `-11` block.
+
+These four newly indexed reports bring the indexed Markdown total to **150**,
+matching the 150 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 EFSRV gate-flip checklist backfill (append-only)
+
+One report existed on disk but had no entry in this index; it is linked below.
+Of the named candidates, `FINAL_PROJECT_SUMMARY.md` was already indexed (latest-
+report backfill above), while `EFILE_REENTRY_SUPPRESS.md` and
+`ESTART_UID_GATE_CHECK.md` were checked and do not exist on disk, so they have
+no entries. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [EFSRV_GATE_FLIP_CHECKLIST.md](EFSRV_GATE_FLIP_CHECKLIST.md) — read-only
+  anti-false-pass checklist that forbids declaring EFSRV PASS until every box
+  is ticked from ONE clean log: re-entry suppression and UID re-stamp
+  preconditions, the strict 9/9 `r1_efile_acceptance.py` prove (start=1,
+  IPC on `r==0` only, `r=-15`/port-shim/`#PF`=0), then the official retire,
+  smoke and 14/14 full-chain gates, plus invariant anti-false-pass rules.
+
+This newly indexed report brings the indexed Markdown total to **151**,
+matching the 151 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 DOOM post-UID verification backfill (append-only)
+
+One report existed on disk but had no entry in this index; it is linked below.
+Of the named candidates, `EFILE_REENTRY_SUPPRESS.md` was checked and does not
+exist on disk, so it has no entry. `kernelhwsrv/` was untouched and no QEMU run
+was made by this index update.
+
+- [DOOM_POST_UID_VERIFICATION.md](DOOM_POST_UID_VERIFICATION.md) — verification-only DOOM/Freedoom run against the current 03:15 staged ISO after the genuine-userspace/UID changes (eshell UID re-stamp, guard-only EFILE, PS shim, trampoline removal): all four tests (main, audio, playtest past 455-frame cap, 8/8 multikey) PASS, `EKA2_CRISP_STOP` absent from code, ord-915 bind rebased, zero Exc/Panic/FAULT/#PF; no rebuild, commit or push, `kernelhwsrv/` untouched.
+
+This newly indexed report brings the indexed Markdown total to **152**,
+matching the 152 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 EFSrv gate-GREEN final-state backfill (append-only)
+
+Four final-state reports existed on disk but had no entry in this index; they
+are linked below. Of the named candidates, `EFSRV_GATE_FLIP_CHECKLIST.md` and
+`NEG15_SEMANTICS.md` were already indexed (earlier backfill sections above).
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [EFILE_REENTRY_SUPPRESS.md](EFILE_REENTRY_SUPPRESS.md) — final report on
+  suppressing genuine EFILE's two re-entrant user threads via an atomic
+  single-owner guard in `efile_glue.cpp` (plus the no-op plugin-chain lock),
+  keeping one server thread alive; clean prove 18/18, acceptance 9/9, EFSRV
+  gate flipped to PASS with zero faults/port-shim.
+- [REENTRY_SUPPRESSION_STATUS.md](REENTRY_SUPPRESSION_STATUS.md) — read-only
+  03:36 EET observer snapshot of the in-flight re-entry-suppression work:
+  guard landed and verified (1 start, 0 returns, 2 suppression markers,
+  `r=-15` eliminated) but 8/9 with the `IPC round trip OK` reply gap still
+  open; recommendation WAIT while the owner iterates.
+- [SESSIONPATH_REPLY_HANG.md](SESSIONPATH_REPLY_HANG.md) — root-cause report
+  tracing the last 8/9 criterion to a deadlock in genuine
+  `FsPluginManager::ReadLockChain()` (`RReadWriteLock::ReadLock`), never
+  reaching `DoRequestL`/`Complete`, with the no-op chain-lock shim fix and a
+  one-discriminating-test evidence sequence.
+- [EFILE_NOOP_LOCK_FINAL.md](EFILE_NOOP_LOCK_FINAL.md) — close-out making the
+  no-op chain-lock patch unconditional in `genuine/build_efile.py` so a default
+  (non-debug) build cannot silently reintroduce the hang; static validation
+  plus all five fresh runtime gates PASS and the EFSRV gate GREEN with no
+  trampoline re-added.
+
+These four newly indexed reports bring the indexed Markdown total to **156**,
+matching the 156 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.

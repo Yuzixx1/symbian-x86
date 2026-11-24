@@ -1,0 +1,4 @@
+EXPORTS
+	_Z13EmptyFunctionv @ 1 NONAME ; plain GCC-mangled name (bx86gcc style)
+	app_main @ 2 NONAME
+	?Printf@RDebug@@SAXPBDZZ @ 3 NONAME ; MSVC-decorated name, mapped via --export-map

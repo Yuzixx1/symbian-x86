@@ -389,9 +389,9 @@ struct TE32Info
     TUint32 iCodeRelocOff;       // file offset of code reloc section (0=none)
     TUint32 iDataRelocOff;       // file offset of data reloc section (0=none)
     TUint32 iImpOff;             // file offset of import section (0=none)
-    TInt iImpN;                  // import count (0, or up to 16 PE2 ordinals)
+    TInt iImpN;                  // import count (0, or up to 512 PE2 ordinals)
     TBool iPe2;                  // PE2 import format (ordinals stored in IAT)
-    TUint32 iSlots[16];            // code offsets of the IAT slots
+    TUint32 iSlots[512];           // code offsets of the IAT slots
     TUint32 iExpOff;             // file offset of export directory (0=none)
     TInt iExpCount;              // export count (DLLs only)
     };
@@ -410,6 +410,15 @@ TBool E32ProcessAlive(TUint aId);  // still in the process container?
 TBool E32ProcessDead(TUint aId);   // reaper predicate: husks count as dead
 void VgaTeletype(char aC);
 void ShellSpawnFull();
+
+// Genuine pointer-event bridge (variant/qemu_display.cpp).  Opt-in: reads two
+// decimal coords from \PTRINJ.TXT on the boot FAT volume, builds a genuine
+// TRawEvent(EPointerMove) and feeds it to the EKA2 kernel event queue via the
+// public Kern::AddEvent API.  This is the only port-side source of raw events
+// for the genuine EWSRV, so its UserSvr::RequestEvent -> CEvent::RunL ->
+// EUSER ord 1868 TRawEvent::Pos path actually executes under QEMU.  No-op when
+// the marker file is absent (all other tests boot unchanged).
+void GenuinePointerBridge();
 
 // Bulk framebuffer blit exec (variant/qemu_fbblit.cpp).  Slots 274/275 would
 // overlap EpocFastExecTable, so blit/info are ops 3/2 of genuine slow exec 270.

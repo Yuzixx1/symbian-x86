@@ -1,0 +1,3 @@
+--export-map dm_ord1=_ZN8DmPolicy14GetDomainSpecsEv
+--export-map dm_ord2=_ZN8DmPolicy7ReleaseEPK13TDmDomainSpec
+--export-map dm_ord3=_ZN8DmPolicy9GetPolicyER18TDmHierarchyPolicy

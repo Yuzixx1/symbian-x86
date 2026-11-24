@@ -43,6 +43,14 @@ python3 tools/test_stable.py   # 16 stages: build + 15 QEMU regressions
 Primary boot image: `qemu-port/build/symbian-grub.iso` (BIOS + UEFI).
 `sdk/` has the app walkthrough (`sdk/docs/getting-started.md`).
 
+## Verification
+
+From `qemu-port/`, run `python3 tools/r1_final_verify.py` for the full
+one-command suite (11 tests, selfcheck through DOOM; stages a fresh DOOM ISO by
+default). For a fast pre-flight only, use `python3 tools/r1_os_selfcheck.py`.
+See `qemu-port/docs/DOCS_INDEX.md` for the documentation index and
+`qemu-port/docs/FINAL_VERIFY_REVIEW.md` for the harness review.
+
 ## Status (2026-10-20, honest)
 
 Done and regressed in QEMU: interactive shell with FAT32 read/write/format

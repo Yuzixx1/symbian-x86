@@ -26,6 +26,85 @@ extern "C" TUint8 qemu_tss[];  // 104B bootstrap TSS (bootcpu_gas.S BSS)
 static TUint8 sTssStack[4096];
 static TUint sSvcLastPid = 0;   // S-02: pid of the most recent E32Run success
 
+// --- single-owner guard for the genuine file server --------------------------
+// EFILE publishes the protected kernel object "!FileServer".  Only one process
+// may own that name: a second EFILE either fails CServerFs::Start() or steals
+// the name when the first owner's thread exits (DServer::Close detaches every
+// session with KErrServerTerminated, seen by F32CLIENT as -15).  The guard
+// below refuses a second EFILE-family image from any boot path (genuine boot
+// table, prove script shell command, or the svcmgr fallback).
+static TBool IsEwsrvProcess(const char* n);  // defined below; EWSRV shares UID3
+
+// Genuine EFILE UID3 (also shared by genuine EWSRV, hence the name check).
+// Aliases EFILEX/EFILERFS are the *same image*, so UID3 is authoritative.
+const TUint32 KPortEfileUid3 = 0x100000bfu;
+
+static TBool PortIsEfileName(const char* aName)
+    {
+    if (!aName) return EFalse;
+    const char* base = aName;
+    for (const char* p = aName; *p; ++p)
+        if (*p == '\\' || *p == '/' || *p == ':') base = p + 1;
+    // Boot name, prove aliases, and the name-patched RFS prove image.
+    const char* names[4] = { "EFILE", "EFILEX", "EFILERFS", "EFSRV" };
+    for (TInt k = 0; k < 4; ++k)
+        {
+        const char* n = names[k];
+        TInt i = 0;
+        while (n[i] && base[i] && (base[i] == n[i] || base[i] == n[i] + 32)) ++i;
+        if (!n[i] && (!base[i] || base[i] == '.')) return ETrue;
+        }
+    return EFalse;
+    }
+
+// UID-keyed image test.  Name is only a fallback for a name-patched image;
+// EWSRV is excluded explicitly because it carries the same UID3.
+static TBool PortIsEfileImage(const TE32Info& aInfo, const char* aName)
+    {
+    if (IsEwsrvProcess(aName)) return EFalse;
+    return (aInfo.iUid3 == KPortEfileUid3) || PortIsEfileName(aName);
+    }
+
+// Atomic single-owner claim: read AND set under NKern CS (no preemption
+// between check and register).  Replaces the old TOCTOU name-only check.
+static TBool sPortEfileOwner = EFalse;
+
+// True when a live DServer already published the genuine file-server name.
+// Must be called with the kernel unlocked (object-container mutex is legal).
+static TBool PortFileServerPublished()
+    {
+    DObjectCon& servers = *K::Containers[EServer];
+    servers.Wait();
+    TFindHandle fh;
+    TKName found;
+    TBool yes = (servers.FindByName(fh, _L("!FileServer"), found) == KErrNone);
+    servers.Signal();
+    return yes;
+    }
+
+// True when a live EFILE-family process already exists.  Complements the
+// published-name check: a just-launched EFILE has not published the name yet.
+static TBool PortEfileProcessRunning()
+    {
+    DObjectCon& procs = *K::Containers[EProcess];
+    procs.Wait();
+    TBool yes = EFalse;
+    for (TInt i = 0; i < procs.Count() && !yes; ++i)
+        {
+        DProcess* p = (DProcess*)procs[i];
+        if (!p) continue;
+        TKName n;
+        p->Name(n);  // e.g. "EFILE.Uid-..."
+        TPtrC8 base((const TUint8*)n.Ptr(), n.Length());
+        TInt dot = base.Locate('.');
+        if (dot > 0) base.Set(base.Left(dot));
+        if (PortIsEfileName((const char*)base.Ptr()))
+            yes = ETrue;
+        }
+    procs.Signal();
+    return yes;
+    }
+
 // First user thread needs a real TSS: our port never runs the genuine
 // X86::Init1Interrupts (which would LTR + publish X86_TSS_Ptr), so the
 // first ring-3 preemption triple-faults (#TS) and every reschedule
@@ -451,7 +530,7 @@ TInt E32Validate(const TUint8* aBuf, TUint aLen, TE32Info& aInfo)
             {
             // PE2-style: section holds DLL name only.  The IAT lives at the
             // end of the text section, pre-linked with 1-based ordinals.
-            if (n < 1 || n > 16)
+            if (n < 1 || n > 512)   // genuine EWSRV binds 219 EUSER ordinals
                 { return KErrNotSupported; }
             if (isize < 8 + 6)
                 { return KErrCorrupt; }
@@ -638,6 +717,13 @@ static TInt E32LoadDll()
 static void ExecRecRemember(DProcess* aProc, DCodeSeg* aSeg, const char* aName);
 static TBool ExecRecAvailable();
 
+// PTRINJ proof wrapper (defined below with the IAT rebinding helpers); the
+// genuine ord-1868 address is cached here so the wrapper can tail-call it.
+extern "C" TUint32 sPortOrigPos;
+extern "C" void PortEwsrvPosHook();
+static TBool IsEwsrvProcess(const char* n);
+static TBool PointerInjectionActive();
+
 // Reliable exit status: ring of recent reaps, surviving the teardown that
 // destroys the DProcess itself. Written under the reaper's locks (CS +
 // code-seg + container); read under CS. Blocking wait() is still future.
@@ -701,6 +787,14 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
         return r;
     if (info.iUid1 != 0x1000007au)
         return KErrNotSupported;  // EXEC must never start a DLL as a process
+    // Single-owner guard: key on the genuine EFILE UID3 (covers every alias)
+    // plus a name fallback; EWSRV shares the UID3 and is excluded.  The
+    // published-name/process probes run unlocked (container mutex is legal),
+    // the check-and-claim itself is atomic under NKern CS below.
+    const TBool isEfile = PortIsEfileImage(info, aName);
+    TBool efileBusy = EFalse;
+    if (isEfile)
+        efileBusy = PortEfileProcessRunning() || PortFileServerPublished();
     // All three per-process tables must have room: sProcs (CWD), sExecs
     // (code-seg reaper) and the M-03 PD pool. Failing before ProcessCreate
     // avoids untracked processes and leaked segs.
@@ -772,6 +866,21 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     KPrintf("e32run: setup done, entering CS...\r\n");
     TssInitOnce();
     NKern::ThreadEnterCS();
+    if (isEfile)
+        {
+        if (sPortEfileOwner || efileBusy)
+            {
+            KPrintf("e32run: single-owner: %s uid3=%08x already running or "
+                    "!FileServer published; launch refused\r\n",
+                    aName, info.iUid3);
+            NKern::ThreadLeaveCS();
+            Kern::Free(ppinfo);
+            return KErrAlreadyExists;
+            }
+        sPortEfileOwner = ETrue;  // atomic claim: check and set under CS
+        KPrintf("e32run: single-owner: %s uid3=%08x claimed\r\n",
+                aName, info.iUid3);
+        }
     DProcess* proc = NULL;
     HBuf* cmd = NULL;
     if (aCmdLine && *aCmdLine)
@@ -789,7 +898,10 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
             }
         cmd = HBuf::New(TPtrC8(unicode, (TInt)clen * 2));
         if (!cmd)
-            { NKern::ThreadLeaveCS(); Kern::Free(ppinfo); return KErrNoMemory; }
+            {
+            if (isEfile) sPortEfileOwner = EFalse;
+            NKern::ThreadLeaveCS(); Kern::Free(ppinfo); return KErrNoMemory;
+            }
         KPrintf("e32run: cmdline %d chars\r\n", clen);
         }
     TInt h = 0;
@@ -798,9 +910,18 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     if (!proc && cmd)
         delete cmd;  // NewProcess failed: ownership never transferred
     KPrintf("e32run: ProcessCreate r=%d run=%x proc=%x\r\n", r, pinfo.iCodeRunAddress, proc);
+    if (r != KErrNone && isEfile) sPortEfileOwner = EFalse;  // failed launch
     if (r == KErrNone && proc)
         {
         sSvcLastPid = (TUint)proc->iId;  // S-02: hand pid back to the launch exec
+        // G-01/B1: the port loader never copied the E32 image capability set
+        // into the DProcess, so ExecHandler::ServerCreateWithOptions
+        // (kernel/eka/kernel/sipc.cpp:837) panics the thread when a genuine
+        // server publishes a protected "!..." name (sfile "!FileServer",
+        // ewsrv "!E32WindowServer").  This port has no platform-security
+        // model: grant ProtServ to every E32 process we load so the leading
+        // '!' is accepted.  kernelhwsrv/ is untouched.
+        proc->iS.iCaps[0] |= (TUint32)(1u << (TUint)ECapabilityProtServ);
         // M-03 step 2: allocate the process page directory before Resume().
         // Static 4K-aligned pool makes this infallible after the PdAvail()
         // pre-check; log PD physical so CR3 switching can be verified later.
@@ -808,6 +929,11 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
                             pinfo.iDataRunAddress, (TUint)(info.iDataSize + info.iBssSize),
                             0, (TUint)info.iStackSize);
         KPrintf("e32run: PdCreate r=%d PD=%x\r\n", pdR, PdPhys(proc));
+        // Genuine EWSRV's edisp screen driver writes the VBE LFB directly;
+        // expose the framebuffer to user mode (coarse 4M PDE U/S=1).
+        TUint32 lfb = display_lfb();
+        if (lfb && display_fb_size())
+            PdMapUser(proc, lfb, lfb, display_fb_size());
         }
     if (r == KErrNone)
         {
@@ -853,6 +979,25 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
                         {
                         KPrintf("e32run: ordinal %d out of range (have %d)\r\n",
                             ord, sDllExpN);
+                        continue;
+                        }
+                    // PTRINJ proof: rebind ONLY EWSRV's ord-1868 IAT slot to a
+                    // transparent wrapper that calls the genuine export and
+                    // logs EAX:EDX.  Gated on the marker so no other boot or
+                    // process changes behaviour.
+                    if (ord == 1868 && info.iPe2 && IsEwsrvProcess(aName) &&
+                        PointerInjectionActive())
+                        {
+                        sPortOrigPos = sDllExp[ord - 1];
+                        // Ring-3 wrapper lives in kernel .text (U/S=0 by default);
+                        // make its 4K page user-executable via the port PD API.
+                        PdMapUser(0, (TUint)(TLinAddr)&PortEwsrvPosHook & ~0xfffu,
+                                  0, 4096);
+                        *(TUint32*)(codeRun + info.iSlots[k]) =
+                            (TUint32)(TLinAddr)&PortEwsrvPosHook;
+                        KPrintf("e32run: PTRINJ EWSRV ord 1868 -> PosHook %08x "
+                                "(genuine %08x)\r\n",
+                                (TUint)(TLinAddr)&PortEwsrvPosHook, sPortOrigPos);
                         continue;
                         }
                     *(TUint32*)(codeRun + info.iSlots[k]) = sDllExp[ord - 1];
@@ -1181,7 +1326,105 @@ static TInt SvcMgrCtlExec(TInt aOp, TInt aArg)
     // added safely (they overlap EpocFastExecTable -- see qemu_fbblit.h).
     if (aOp == (TInt)FBO_FBINFO) return fbblit_info_exec(aArg);
     if (aOp == (TInt)FBO_FBBLIT) return fbblit_blit_exec(aArg);
+    // PTRINJ proof sink: called from the ring-3 ord-1868 Pos wrapper via
+    // int 0x21; runs in ring 0 so KPrintf (COM1 + VGA) is legal here.
+    if (aOp == 4)
+        {
+        KPrintf("PTRBRIDGE: TRawEvent::Pos x=%d y=%d\r\n",
+                (TInt)(((TUint)aArg >> 16) & 0xffffu),
+                (TInt)((TUint)aArg & 0xffffu));
+        return KErrNone;
+        }
     return KErrArgument;
+    }
+
+// --- PTRINJ-gated EUSER ord 1868 (TRawEvent::Pos) wrapper, EWSRV only --------
+// Direct guest proof that genuine CEvent::RunL() actually calls EUSER ord 1868
+// and that its 8-byte TPoint sret comes back in EAX:EDX.  Gated on the EWSRV
+// process name AND \PTRINJ.TXT, so every other boot is byte-for-byte unchanged.
+// kernelhwsrv/ and the genuine EWSRV image on disk are untouched; only this
+// port-side loader rebinds one PE2 IAT slot at load time, then calls the
+// genuine export exactly as before.
+//
+// Genuine Pos() (EUSER.DLL @1868, disasm @0x1000ac40) is cdecl with one stack
+// arg: this=[ebp+8], x=[this+8] -> EAX, y=[this+0xc] -> EDX.  The wrapper is
+// transparent: it re-pushes the caller's `this`, calls the genuine export,
+// records EAX:EDX, emits slow exec 270 op 4 (logged from ring 0 by
+// SvcMgrCtlExec), restores EAX:EDX and returns.  Only caller-saved EAX/ECX/EDX
+// are touched; EBX/ESI/EDI/EBP and the stack are balanced (cdecl caller still
+// cleans its own `this`).
+TUint32 sPortOrigPos = 0;   // genuine ord-1868 address (set at bind)
+// Written in AT&T syntax explicitly: GAS's Intel mode silently biases
+// ESP-relative push displacements by +4, which would push the wrong stack slot.
+asm(
+    ".text\n"
+    ".att_syntax noprefix\n"
+    ".globl PortEwsrvPosHook\n"
+    "PortEwsrvPosHook:\n"
+    "  pushl 4(%esp)\n"                   // re-push this for genuine cdecl call
+    "  call *sPortOrigPos\n"              // genuine TRawEvent::Pos(); EAX=x, EDX=y
+    "  addl $4, %esp\n"                   // drop copied 'this' (caller cleans its own)
+    "  pushl %eax\n"                      // preserve x across the logging exec
+    "  pushl %edx\n"                      // preserve y
+    "  movl $4, %ecx\n"                   // exec 270 op 4 = log Pos result
+    "  movl 4(%esp), %edx\n"              // x
+    "  shll $16, %edx\n"
+    "  orl (%esp), %edx\n"                // packed (x<<16)|y
+    "  movl $270, %eax\n"                 // slow exec: SvcMgrCtlExec
+    "  int $0x21\n"                       // ring 0 -> KPrintf (QEMU serial)
+    "  popl %edx\n"                       // y  (genuine Pos return)
+    "  popl %eax\n"                       // x  (genuine Pos return)
+    "  ret\n"
+    ".intel_syntax noprefix\n"
+    );
+
+static TBool sPtrInjChecked = EFalse;
+static TBool sPtrInjActive = EFalse;
+static TBool PointerInjectionActive()
+    {
+    if (sPtrInjChecked) return sPtrInjActive;
+    sPtrInjChecked = ETrue;
+    TUint8 buf[64];
+    TUint got = 0;
+    char prev = FatCurLetter();
+    if (!prev) FatUse('C');
+    TInt r = FatReadPath("\\PTRINJ.TXT", buf, sizeof(buf), got);
+    if (prev) FatUse(prev);
+    sPtrInjActive = (r == KErrNone && got > 0);
+    KPrintf("e32run: PTRINJ gate r=%d got=%u active=%d\r\n",
+            r, got, sPtrInjActive);
+    return sPtrInjActive;
+    }
+
+static TBool IsEwsrvProcess(const char* n)
+    {
+    return n && n[0] == 'E' && n[1] == 'W' && n[2] == 'S' &&
+           n[3] == 'R' && n[4] == 'V';
+    }
+
+// Genuine FsRegisterThread() marks the server process AND the calling thread
+// system-permanent/critical (sexec.cpp:2228-2229).  In a full Symbian boot
+// that file server never exits, but this port cannot supply ESTART/media
+// drivers, so its E32Main must return and the thread must exit.  A normal exit
+// of a system-permanent thread faults K::ESystemThreadPanic (4) in
+// DThread::Exit (sthread.cpp:738), which is the residual KERN 4.  Clear those
+// two bits after the genuine registration, mirroring the existing UserPanic/
+// UserSetCritical port shims in genuine/efile/efile_glue.cpp.
+typedef TInt (*TFsRegisterFn)(TInt);
+static TFsRegisterFn sOrigFsRegister = 0;
+static TInt PortFsRegisterThread(TInt aUnused)
+    {
+    TInt r = sOrigFsRegister(aUnused);
+    DThread* t = TheCurrentThread;
+    if (t)
+        {
+        DProcess* p = t->iOwningProcess;
+        if (p)
+            p->iFlags &= ~(TUint)(KThreadFlagProcessCritical | KProcessFlagSystemPermanent);
+        t->iFlags &= ~(TUint)(KThreadFlagSystemPermanent | KThreadFlagSystemCritical);
+        KPrintf("FsRegister: cleared system-permanent/critical flags r=%d\r\n", r);
+        }
+    return r;
     }
 
 void SvcMgrExecInstall()
@@ -1189,6 +1432,14 @@ void SvcMgrExecInstall()
     TUint32* tab = (TUint32*)EpocSlowExecTable;
     if (tab[0] < 271u)  // unexpected table size: refuse to patch
         { KPrintf("SvcMgr: exec table count %u, install skipped\r\n", tab[0]); return; }
+    // Wrap the genuine FsRegisterThread so an exiting file-server thread does
+    // not fault K::ESystemThreadPanic when this port tears EFILE down.
+    if (!sOrigFsRegister)
+        {
+        sOrigFsRegister = (TFsRegisterFn)tab[4 + 2 * 81];
+        tab[4 + 2 * 81] = (TUint32)(TLinAddr)&PortFsRegisterThread;
+        KPrintf("SvcMgr: FsRegisterThread wrapper installed (slot 81)\r\n");
+        }
     const TInt slots[3] = {268, 269, 270};
     TInt (*fns[3])(TInt, TInt) = {&SvcMgrLaunchExec, &SvcMgrKillExec, &SvcMgrCtlExec};
     for (TInt i = 0; i < 3; ++i)
@@ -1213,4 +1464,90 @@ void SvcMgrBootLaunch()
     char name[] = "SVCMGR.E32";
     r = E32Run(sSvcImg, got, name, 0);
     KPrintf("SvcMgr: boot launch r=%d pid=%u\r\n", r, sSvcLastPid);
+    }
+
+// --- G-01: genuine Symbian startup chain (boot list) --------------------------
+// Init3 spawns GenuineBootLaunch() on a supervisor DThread (see the Asic) after
+// SvcMgrExecInstall(). The genuine chain EUSER.DLL (already resident) ->
+// EFILE.E32 / EFSRV.E32 (genuine !FileServer) -> ESTART.E32 -> EWSRV.E32 ->
+// ESHELL.E32 is probed on the boot volume by FAT presence, in genuine order;
+// every component staged under its genuine name is launched through the same
+// FatReadPath + E32Run path the shell's RunImage and SvcMgrLaunchExec use.
+// Anything absent falls
+// back to the hand-written shims: with no genuine file server staged, the boot
+// falls back to SvcMgrBootLaunch() (svcmgr -> \PORTFILESRV.E32), and boots
+// without EWSRV/ESHELL keep the console shell + GUI execs. Detection is by
+// FAT presence, so shim-only disks (no genuine names) boot exactly as before.
+namespace {
+struct GenuineBootEnt
+    {
+    const char* iPath;    // FAT path probed on the boot volume
+    TBool iFileServer;    // ETrue: file-server slot (only one is launched)
+    TBool iGraphics;      // ETrue: bring the VBE LFB up before the launch
+    };
+const GenuineBootEnt kGenuineBootList[] =
+    {
+    { "\\EFILE.E32",   ETrue,  EFalse },  // genuine !FileServer host (sfile)
+    { "\\EFSRV.E32",   ETrue,  EFalse },  // alternate file-server name
+    { "\\ESTART.E32",  EFalse, EFalse },  // genuine estart (estartmain.cpp)
+    { "\\E32STRT.E32", EFalse, EFalse },  // alternate estart name
+    { "\\EWSRV.E32",   EFalse, ETrue  },  // genuine window server (ws_main.cpp)
+    { "\\ESHELL.E32",  EFalse, EFalse },  // genuine shell (etshell ts_main.cpp)
+    };
+enum { KGenuineBootCount = (TInt)(sizeof(kGenuineBootList) / sizeof(kGenuineBootList[0])) };
+
+TInt GenuineBootTry(const GenuineBootEnt& aEnt)
+    {
+    char prev = FatCurLetter();
+    if (!prev) FatUse('C');
+    TUint got = 0;
+    TInt r = FatReadPath(aEnt.iPath, sSvcImg, sizeof(sSvcImg), got);
+    if (prev) FatUse(prev);
+    if (r != KErrNone)
+        return r;  // not staged on this boot volume
+    if (aEnt.iGraphics)
+        display_ensure_graphics();  // E32Run maps the LFB only while it is up
+    const char* base = aEnt.iPath;
+    for (const char* p = aEnt.iPath; *p; ++p)
+        if (*p == '\\' || *p == '/' || *p == ':')
+            base = p + 1;
+    char name[32];
+    TUint k = 0;
+    while (base[k] && k < sizeof(name) - 1)
+        { name[k] = base[k]; ++k; }
+    name[k] = 0;
+    r = E32Run(sSvcImg, got, name, 0);
+    KPrintf("GenuineBoot: %s r=%d pid=%u\r\n", name, r, sSvcLastPid);
+    return r;
+    }
+}  // namespace
+
+void GenuineBootLaunch()
+    {
+    KPrintf("GenuineBoot: probing boot volume for the genuine startup chain\r\n");
+    TBool genuineFs = EFalse;
+    TBool serverUp = PortFileServerPublished();  // e.g. svcmgr shim won boot race
+    if (serverUp)
+        KPrintf("GenuineBoot: !FileServer already published, skipping "
+                "genuine file-server slot\r\n");
+    for (TInt i = 0; i < KGenuineBootCount; ++i)
+        {
+        const GenuineBootEnt& e = kGenuineBootList[i];
+        if (e.iFileServer && (genuineFs || serverUp))
+            continue;  // one file server only
+        if (GenuineBootTry(e) == KErrNone && e.iFileServer)
+            genuineFs = ETrue;
+        }
+    // Opt-in genuine pointer bridge (variant/qemu_display.cpp).  Only active
+    // when the test stages \PTRINJ.TXT; queues one real TRawEvent(EPointerMove)
+    // via Kern::AddEvent so genuine EWSRV's UserSvr::RequestEvent -> Pos()
+    // path is exercised.  Runs on this supervisor DThread (kernel unlocked).
+    GenuinePointerBridge();
+
+    if (genuineFs || serverUp)
+        {
+        KPrintf("GenuineBoot: file server up, svcmgr fallback skipped\r\n");
+        return;
+        }
+    SvcMgrBootLaunch();  // fallback: our svcmgr starts \PORTFILESRV.E32
     }

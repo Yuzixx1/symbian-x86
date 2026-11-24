@@ -15,8 +15,13 @@ This test makes SERIAL MARKERS the authoritative signal instead:
 
 doom_marker() prints every marker TWICE (immediate EUSER ord-915 + delayed
 batched DebugPrint copy ~0.8-1.2 s later).  attribute_events() claims the copy
-nearest each scheduled action; the delayed twin is dropped by its lag.  Only
-the deduped, key-matched markers decide the verdict.
+nearest each scheduled action for the TIMING checks; the delayed twin is
+dropped by its lag.  For the no-stuck-key verdict, the AUTHORITATIVE full serial
+log is parsed after the run, copy-pairs are collapsed, and markers are bound to
+scheduled actions by (role, key, order) -- no clock window.  This is required
+because the guest can emit a CRLF RELEASE seconds after the host break (under
+load), so the short per-loop watch window can miss it entirely; a missing
+watch marker alone must not be read as a stuck key.
 
 Scenarios (each LOOPS times):
   (a) HOLD W + HOLD D (diagonal): drop W, D must stay held, then drop D.
@@ -63,6 +68,9 @@ FALLBACK_LO, FALLBACK_HI = 0.55, 1.65  # delayed-copy lag window
 DRAIN = 1.35                         # let delayed copies flush between scenarios
 
 MARK_RE = re.compile(r"DOOM:\s*(KEY|HOLD|BREAK|RELEASE|STALE)\s+(\d+)", re.I)
+# Byte-level scan of the authoritative full log (both CRLF and bare-LF copies).
+MARK_ALL_RE = re.compile(
+    rb"DOOM:\s*(KEY|HOLD|BREAK|RELEASE|STALE)\s+(\d+)\r?\n", re.I)
 PRESS_KINDS = ("KEY", "HOLD")
 REL_KINDS = ("RELEASE", "BREAK")
 # DOOM keycodes (ports/doom/doomkeys.h), decimal: w,d,s,a,fire,use
@@ -169,6 +177,71 @@ def dedupe_stale(events):
             continue
         kept.append(e)
     return kept, others
+
+
+def parse_full_markers(log_path):
+    """Parse every marker copy from the authoritative FULL serial log.
+
+    Returns (offset, kind, key, crlf) tuples.  Byte offsets -- not host times --
+    are used because the guest's serial copy can lag the host sendkey clock by
+    seconds under load: the per-loop MarkerWatch window can then miss a RELEASE
+    that is nevertheless present in the log (this is what made diagonal_2 FAIL).
+    """
+    try:
+        with open(log_path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return []
+    return [(m.start(), m.group(1).decode("ascii").upper(),
+             m.group(2).decode("ascii"),
+             data[m.start():m.end()].endswith(b"\r\n"))
+            for m in MARK_ALL_RE.finditer(data)]
+
+
+def dedupe_copies(markers):
+    """Collapse the immediate CRLF + delayed bare-LF twin of each real marker.
+
+    Both serial paths emit one copy per event; the batched LF copy arrives
+    0.55-1.65 s later.  Keep the CRLF copy as canonical, drop an LF copy that
+    pairs with a still-unpaired earlier CRLF of the same (kind, key), and keep
+    an LF copy that has no CRLF twin (some events use only the batched path).
+    """
+    pending = {}                     # (kind, key) -> unpaired CRLF copies
+    kept = []
+    for off, kind, key, crlf in markers:
+        tag = (kind, key)
+        if crlf:
+            pending[tag] = pending.get(tag, 0) + 1
+            kept.append((off, kind, key))
+        elif pending.get(tag, 0) > 0:
+            pending[tag] -= 1
+        else:
+            kept.append((off, kind, key))
+    return kept
+
+
+def attribute_global(logical, actions):
+    """Bind each logical marker to one scheduled action by (role, key), in order.
+
+    No timestamp window is used: host-time windows are unreliable given the
+    guest serial lag.  Actions are visited in scheduled-time order and each is
+    claimed at most once, so a delayed duplicate cannot be counted twice.
+    """
+    order = sorted(range(len(actions)), key=lambda i: actions[i][0])
+    out = {}
+    for off, kind, key in logical:
+        if kind in PRESS_KINDS:
+            role = "press"
+        elif kind in REL_KINDS:
+            role = "release"
+        else:
+            continue
+        for ai in order:
+            if ai in out or actions[ai][1] != role or actions[ai][2] != key:
+                continue
+            out[ai] = (off, kind, key)
+            break
+    return out
 
 
 def attribute_events(events, actions):
@@ -310,8 +383,14 @@ def fmt_trace(events, t0):
                     for t, k, key in sorted(events)) if events else "(none)"
 
 
-def analyse(meta, actions, immediate, unattributed, stale):
-    """Return (failures, notes) from deduped, key-matched markers."""
+def analyse(meta, actions, immediate, unattributed, stale, ordered):
+    """Return (failures, notes) from deduped, key-matched markers.
+
+    `ordered` maps scenario-local action indices to logical markers attributed
+    from the FULL serial log (lag-immune).  `immediate` is the per-loop watch
+    view used only for the timing checks below; it may miss a release whose
+    serial copy landed after the watch window, so it no longer decides (1).
+    """
     bad = []
     notes = []
     t0 = meta["t0"]
@@ -320,17 +399,36 @@ def analyse(meta, actions, immediate, unattributed, stale):
     rel_ai = [(ai, ev) for ai, ev in immediate if ev[1] in REL_KINDS]
     prs_ai = [(ai, ev) for ai, ev in immediate if ev[1] in PRESS_KINDS]
 
-    # (1) every asserted press has exactly one RELEASE within the window
-    for ai, pev in prs_ai:
-        key = pev[2]
-        releases = [rev for rai, rev in rel_ai
-                    if rev[2] == key and 0 <= rev[0] - pev[0] <= 2.0]
-        notes.append("press %s@%+.3f -> %s" % (
-            KN.get(key, key), pev[0] - t0,
-            ("RELEASE@%+.3f" % (releases[0][0] - t0)) if releases else "NO RELEASE"))
-        if len(releases) != 1:
-            bad.append("press %s has %d RELEASE(s), expected 1" %
-                       (KN.get(key, key), len(releases)))
+    # The partner of a press is its own scheduled break (same key, next in
+    # time).  Pairing actions -- not wall-clock proximity -- is what makes the
+    # no-stuck-key assertion correct when D is held 2.2 s or serial lags.
+    partner = {}
+    for pi, act in enumerate(actions):
+        if act[1] != "press":
+            continue
+        cands = [ri for ri, a2 in enumerate(actions)
+                 if a2[1] == "release" and a2[2] == act[2] and a2[0] >= act[0]]
+        if cands:
+            partner[pi] = min(cands, key=lambda ri: actions[ri][0] - act[0])
+
+    # (1) every OBSERVED press must have its OWN scheduled break observed as a
+    #     RELEASE/BREAK marker in the authoritative full log.  Order-based
+    #     full-log attribution is immune to the guest serial lag that made the
+    #     old 2.0 s press->release window report false "NO RELEASE" FAILs.
+    for ai in sorted(ordered):
+        at, role, key = actions[ai][:3]
+        if role != "press":
+            continue
+        ri = partner.get(ai)
+        if ri is None:
+            bad.append("press %s has no scheduled break" % KN.get(key, key))
+            continue
+        if ri not in ordered:
+            bad.append("press %s has NO RELEASE for its own break" %
+                       KN.get(key, key))
+        else:
+            notes.append("press %s -> RELEASE at its own break" %
+                         KN.get(key, key))
 
     # (2) each scheduled break produces a RELEASE within 300 ms of it
     for ai, act in enumerate(actions):
@@ -426,26 +524,42 @@ def run_qemu(log_path, loops):
                     stale, evs = dedupe_stale(raw)
                     immediate, unattributed, fallbacks = attribute_events(evs, actions)
                     dedup = sorted([ev for _, ev in immediate])
-                    bad, notes = analyse(meta, actions, immediate,
-                                         unattributed, stale)
                     res["results"].append({
                         "tag": tag, "meta": meta, "raw": raw, "stale": stale,
                         "dedup": dedup, "unattributed": unattributed,
-                        "fallbacks": fallbacks, "bad": bad, "notes": notes,
+                        "fallbacks": fallbacks, "bad": [], "notes": [],
+                        "_span": (start, len(ctx.actions)), "actions": actions,
+                        "immediate": immediate,
                     })
-                    status = "FAIL" if bad else "PASS"
-                    print("[%s] %-14s %s (raw=%d dedup=%d fb=%d unattr=%d)" %
-                          (status, tag, meta["label"], len(raw), len(dedup),
-                           len(fallbacks), len(unattributed)))
-                    print("       trace: %s" % fmt_trace(dedup, meta["t0"]))
-                    print("       %s" % "; ".join(notes))
-                    if bad:
-                        print("       raw: %s" % fmt_trace(raw, meta["t0"]))
-                        print("       -> %s" % " | ".join(bad))
                     if loop + 1 < loops:
                         time.sleep(0.35)
                 if si + 1 < len(SCENARIOS):
                     time.sleep(DRAIN)            # flush delayed copies
+
+            # Attribute against the AUTHORITATIVE full serial log.  The guest
+            # can emit a CRLF RELEASE seconds after the host break (or only via
+            # the batched LF path), so the per-loop watch window cannot be the
+            # sole evidence for "key released" -- it produced diagonal_2's
+            # false FAIL.  Order-based global binding needs no timing window.
+            time.sleep(DRAIN)
+            logical = dedupe_copies(parse_full_markers(log_path))
+            claims = attribute_global(logical, ctx.actions)
+            for r in res["results"]:
+                lo, hi = r["_span"]
+                ordered = {ai - lo: claims[ai] for ai in claims if lo <= ai < hi}
+                bad, notes = analyse(r["meta"], r["actions"], r["immediate"],
+                                     r["unattributed"], r["stale"], ordered)
+                r["bad"], r["notes"] = bad, notes
+                status = "FAIL" if bad else "PASS"
+                print("[%s] %-14s %s (raw=%d dedup=%d fb=%d unattr=%d)" %
+                      (status, r["tag"], r["meta"]["label"], len(r["raw"]),
+                       len(r["dedup"]), len(r["fallbacks"]),
+                       len(r["unattributed"])))
+                print("       trace: %s" % fmt_trace(r["dedup"], r["meta"]["t0"]))
+                print("       %s" % "; ".join(notes))
+                if bad:
+                    print("       raw: %s" % fmt_trace(r["raw"], r["meta"]["t0"]))
+                    print("       -> %s" % " | ".join(bad))
 
             base.write_keys(vm, b"\x1b", "Esc/quit")
             base.wait_for_bytes(log_path, [b"DOOM: DONE"], 8)
