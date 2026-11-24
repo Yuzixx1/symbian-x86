@@ -19,7 +19,7 @@ archive point. The annotated tag dereferences to that commit; its tag object is
 | `git rev-parse archive/handwritten-r25^{commit}` | `56fbaff` | `56fbaffbcf41cc4f97d60a6deeef6912376a0e44` | YES |
 | `symbian-x86-archive-56fbaff.tar.gz` | present, readable, 983 entries | `-rw-r--r--` 2,481,838 bytes; `tar tzf | wc -l` = `983` | YES |
 | `origin` remote | GitHub source | `https://github.com/Yuzixx1/symbian-x86.git` (fetch/push) | YES |
-| `HEAD` vs archive point | `HEAD` = `56fbaff`, tree dirty (nothing committed since pivot) | `HEAD` = `56fbaffbcf41cc4f97d60a6deeef6912376a0e44`; 56 dirty paths (M + ??), no new commits | YES |
+| `HEAD` vs archive point | `HEAD` = `d26fade` (authorized commits `7f76900` + `d26fade` pushed to `origin/main`; archive point stays `56fbaff`) | `HEAD` = `origin/main` = `d26fade5db13a140845a30e0faabe4550fb3940d`; chain `d26fade` → `7f76900` → `56fbaff`; 9 dirty paths (M + ??) | YES |
 | `docs/SHIM_RETIREMENT_PLAN.md` archive refs | branch/tag `archive/handwritten-r25`, commit `56fbaff`, tarball name | all correct (lines 190, 214–216, 223, 254) | YES |
 | `docs/PRECOMMIT_AUDIT.md` archive refs | tarball `symbian-x86-archive-56fbaff.tar.gz` | correct (lines 20, 49) | YES |
 
@@ -51,6 +51,12 @@ No mismatches found. No wrong archive name or commit reference in either doc.
   `refs/heads/archive/handwritten-r25` / `git rev-list -n 1` for the commit.
 - The annotated tag dereferences (not points directly) to `56fbaff`; both are
   correct by design.
-- `HEAD` is still at `56fbaff` with a dirty tree (56 modified/untracked paths):
-  nothing has been committed or pushed since the pivot, as required.
+- **Correction (2026-11-24):** `HEAD` is now `d26fade5db13a140845a30e0faabe4550fb3940d`,
+  identical to `origin/main` (chain `d26fade` → `7f76900` → `56fbaff`). Both
+  post-pivot commits (`7f76900` pivot, `d26fade` shim retirement) were authorized
+  and pushed; no new commit or push was authorized or performed for this
+  correction. The tree has 9 intentional dirty leftovers: `M` `state.json`,
+  `M` `DOCS_INDEX.md`, `M` `AGENTS.md`, `??` stray `-D__cdecl` file,
+  `??` `qemu-slot.lock`, `??` archive tarball. The archive branch/tag and
+  tarball at `56fbaff` above are unchanged and remain the preservation points.
 - This report is the only file written; `kernelhwsrv/` was not touched.

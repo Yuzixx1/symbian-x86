@@ -56,3 +56,21 @@ no commit, no push, no shim retirement. `kernelhwsrv/` is READ-ONLY and untouche
 NO-GO. EFSRV gate FAIL pending the A2 entry-trampoline fix (unbuilt/unverified);
 per GO_NO_GO.md §2 no shim may be retired and no commit/push may occur. This
 checklist is preparation only — passing commands here do not grant authorization.
+
+## 5. Tree-state snapshot (post-commit, 2026-11-24)
+
+This is a **post-commit snapshot** dated 2026-11-24 — no new commit/push is
+authorized by this document. The pivot and shim-retirement work is committed
+and pushed:
+
+- `HEAD` = `origin/main` = `d26fade5db13a140845a30e0faabe4550fb3940d`
+  (chain `d26fade` → `7f76900` → `56fbaff`); both commits (`7f76900`
+  genuine-userspace pivot, `d26fade` shim retirement) were user-authorized
+  and pushed to `origin/main`.
+- Remaining working-tree leftovers, all intentionally unstaged:
+  `M qemu-port/.sybian/coordinator/state.json`, `M qemu-port/docs/DOCS_INDEX.md`,
+  `M AGENTS.md`, `?? qemu-port/-D__cdecl=__attribute__((cdecl))` (stray),
+  `?? qemu-port/.sybian/qemu-slot.lock`, `?? symbian-x86-archive-56fbaff.tar.gz`
+  (archive tarball — still NOT gitignored, never `git add -A`).
+- `kernelhwsrv/` remains READ-ONLY and untouched. The checklist, ordered
+  commands, and do-not-commit list above remain valid.

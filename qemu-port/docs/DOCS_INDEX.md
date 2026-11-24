@@ -708,3 +708,185 @@ indexed (latest-report backfill above); `FINAL_VERIFICATION_RESULT.md`,
 These three newly indexed reports bring the indexed Markdown total to **159**,
 matching the 159 `.md` files under `docs/` (including this index); every
 Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 shim-retirement / stale-object final backfill (append-only)
+
+Six reports existed on disk but had no entry in this index; they are linked
+below. Of the named candidates, `FINAL_VERIFICATION_RESULT.md` was already
+indexed (final verification / commit-prep backfill above). `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [SHIM_RETIREMENT_RESULT.md](SHIM_RETIREMENT_RESULT.md) — guarded, user-authorized
+  retirement after `7f76900` of the file-server shims `portfilesrv` + `r1_fs`:
+  preflight checks, per-shim outcomes (APPLIED / RETIRED via shared edits,
+  svcmgr applied then rolled back as out of scope, winsrv not applied), the two
+  commented-out fallback lines, snapshots and gate logs.
+- [CP4_STRESS_INDEPENDENT_CHECK.md](CP4_STRESS_INDEPENDENT_CHECK.md) — independent
+  refutation of the claim that the retirement edits cause `cp4_stress` to fail:
+  pristine tree 4/4 PASS, current tree 4/4 FAIL, pristine + edits 3/3 PASS,
+  traced to one stale build object; no retirement edit needs reverting.
+- [STALE_OBJECT_REBUILD.md](STALE_OBJECT_REBUILD.md) — confirmation and repair of
+  the stale `build/qemu_variant_asic.o` behind the `cp4_stress` failure: before/
+  after mtimes and sha256 hashes, the force-rebuild + relink commands (no
+  `make clean`) and the subsequent PASS results.
+- [RETIREMENT_COMMIT_REVIEW.md](RETIREMENT_COMMIT_REVIEW.md) — read-only diff audit
+  after the guarded apply: only two intended shim lines are commented out, the
+  genuine boot chain and other `kServices[]` rows are intact, plus a future
+  commit staging plan; no commit or push.
+- [POST_COMMIT_TREE_REVIEW.md](POST_COMMIT_TREE_REVIEW.md) — read-only post-`7f76900`
+  tree snapshot: local HEAD and `origin/main` match, `kernelhwsrv/` clean, and a
+  table of intended runtime/untracked files versus the stray compiler-flag
+  artifact, with future authorized-cleanup notes.
+- [RETIREMENT_FINAL_INVENTORY.md](RETIREMENT_FINAL_INVENTORY.md) — exact read-only
+  staging plan: modified/untracked file counts and categories, the 164→165 doc
+  count, the two verified shim edits, and the caveat that this index's backfill
+  text still claimed 159.
+
+These six newly indexed reports bring the indexed Markdown total to **165**,
+matching the 165 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 post-commit tree / remaining-shims backfill (append-only)
+
+Two post-commit reports existed on disk but had no entry in this index; they are
+linked below. Of the named candidates, `STALE_OBJECT_REBUILD.md` and
+`RETIREMENT_FINAL_INVENTORY.md` were already indexed (shim-retirement /
+stale-object final backfill above). `kernelhwsrv/` was untouched and no QEMU
+run was made by this index update.
+
+- [FINAL_TREE_VERIFICATION.md](FINAL_TREE_VERIFICATION.md) — read-only post-push
+  tree verification: local HEAD and `origin/main` both at `d26fade`, `git diff
+  --check` clean, `kernelhwsrv/` and source trees clean, preservation refs at
+  `56fbaff`, and a table of expected working-tree leftovers with caveats.
+- [REMAINING_SHIMS_AUDIT.md](REMAINING_SHIMS_AUDIT.md) — read-only inventory of
+  hand-written code still in the production path after retirement: the two
+  applied bypasses (portfilesrv/r1_fs), A/B/C classification table, dependency-
+  first retirement order for svcmgr/winsrv/EUSER-static-shim, and risks.
+
+These two newly indexed reports bring the indexed Markdown total to **167**,
+matching the 167 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 archive final-check backfill (append-only)
+
+One report existed on disk but had no entry in this index; it is linked below.
+Of the named candidates, `FINAL_PROJECT_SUMMARY.md`, `FINAL_VERIFICATION_RESULT.md`
+and `REMAINING_SHIMS_AUDIT.md` were already indexed (earlier backfill sections
+above). `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [ARCHIVE_FINAL_CHECK.md](ARCHIVE_FINAL_CHECK.md) — read-only post-commit
+  preservation verification that all documented points survived the pivot and
+  shim-retirement commits: `origin/main` and `main` at `d26fade`, history order
+  `d26fade` → `7f76900` → `56fbaff`, branch/tag `archive/handwritten-r25` and the
+  983-entry `symbian-x86-archive-56fbaff.tar.gz` all still at `56fbaff`, plus a
+  recorded tarball sha256 baseline, remote-ref listing and caveats.
+
+This newly indexed report brings the indexed Markdown total to **168**,
+matching the 168 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 cleanup-phase log (append-only)
+
+One report was created during the post-`d26fade` cleanup phase; it is linked
+below. `R1FS_GLUE_FEASIBILITY.md` and `CLEANUP_AUTHORITY_CHECK.md` were checked
+and do not exist on disk, so they have no entries. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [CLEANUP_LOG.md](CLEANUP_LOG.md) — dated running log of the human-reviewed
+  shim cleanup: authority verification (`r1_final_verify.py --strict-skip` on
+  `d26fade`, PENDING), dead portfilesrv files/artifacts removal (PENDING),
+  `r1_fs` kernel-glue feasibility (PENDING), svcmgr/winsrv/euser_shim NOT
+  STARTED with the `SvcMgrExecInstall()` exec-81/PTRINJ trap preserved, and
+  netstack marked NEVER (authored exception), plus the safe-kept port-bridge
+  list.
+
+This newly indexed report brings the indexed Markdown total to **169**,
+matching the 169 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 cleanup phase (append-only)
+
+Six cleanup-phase reports existed on disk but had no entry in this index;
+they are linked below. Of the named candidates, `CLEANUP_LOG.md` was already
+indexed (cleanup-phase log backfill above), while `CLEANUP_AUTHORITY_CHECK.md`
+was checked and does not exist on disk, so it has no entry. `kernelhwsrv/`
+was untouched and no QEMU run was made by this index update.
+
+- [CLEANUP_STEP_STATUS.md](CLEANUP_STEP_STATUS.md) — read-only ~18:50 EET
+  snapshot of the post-`d26fade` cleanup steps: authority verify IN PROGRESS,
+  dead portfilesrv file/artifact removal IN PROGRESS, r1_fs glue feasibility
+  and svcmgr/winsrv retirement NOT STARTED, each with file+mtime evidence.
+- [R1FS_GLUE_FEASIBILITY.md](R1FS_GLUE_FEASIBILITY.md) — read-only verdict
+  (SAFE TO REMOVE, coupled edit only) that the kernel-linked `r1_fs` objects
+  in `KERNFULL_OBJS` serve only the retired portfilesrv shim, not genuine
+  EFILE/EFSRV.
+- [SVCMGR_RETIREMENT_PLAN.md](SVCMGR_RETIREMENT_PLAN.md) — read-only,
+  reviewed SAFE / apply-ready plan to retire svcmgr without reintroducing
+  KERN 4, mapping the `SvcMgrExecInstall()` exec-81/PTRINJ trap and its shared
+  files with the r1_fs glue removal.
+- [SVCMGR_PLAN_REVIEW.md](SVCMGR_PLAN_REVIEW.md) — read-only independent
+  review of the svcmgr plan (verdict SAFE, no blockers, 3 minor fixes
+  recommended) with every file:line claim verified against live sources.
+- [WINSRV_EDISP_SCOPE.md](WINSRV_EDISP_SCOPE.md) — read-only scoping report
+  for cleanup step 5: winsrv retirement via genuine edisp plus the EWSRV
+  client gate, covering the current exec-271/272/273 architecture and sources.
+- [POST_REMOVAL_VERIFY.md](POST_REMOVAL_VERIFY.md) — verify-only impact check
+  (~18:49 EET) of the portfilesrv file/artifact removal after a transient
+  18:47:31 smoke failure, confirming tree state and whether the removal broke
+  anything once the tree settled.
+
+These six newly indexed reports bring the indexed Markdown total to **175**,
+matching the 175 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 cleanup-phase r1_fs removal backfill (append-only)
+
+Five cleanup-phase reports existed on disk but had no entry in this index;
+they are linked below. `SVCMGR_APPLY_STATUS.md` was checked and does not exist
+on disk, so it has no entry. `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+- [R1FS_REMOVAL_STATUS.md](R1FS_REMOVAL_STATUS.md) — read-only ~18:56 EET
+  status snapshot of the step-3 `r1_fs` kernel-glue removal: Makefile
+  `KERNFULL_OBJS` edit LANDED (uncommitted), `R1Fs::*` symbols and mount path
+  status, with a concurrent `r1_final_verify.py --strict-skip` run in flight.
+- [R1FS_REMOVAL_REVIEW.md](R1FS_REMOVAL_REVIEW.md) — independent read-only
+  review of the same `r1_fs` glue removal (~19:0x EET), verdict **CLEAN**:
+  file:line claims verified, `kernelhwsrv/` clean, no QEMU run.
+- [CLEANUP_STAGING_DRYRUN.md](CLEANUP_STAGING_DRYRUN.md) — read-only
+  validation that every proposed staging command from
+  `CLEANUP_COMMIT_INVENTORY.md` was run with `--dry-run`; nothing actually
+  staged, no commit/push, `kernelhwsrv/` clean.
+- [CLEANUP_COMMIT_INVENTORY.md](CLEANUP_COMMIT_INVENTORY.md) — refreshed
+  staging plan for a future user-authorized cleanup commit: grouped
+  `git add`/`git rm` path lists (docs group now includes
+  `EUSER_SHIM_SCOPE.md`, group C `r1_fs` glue now LANDED), never `git add -A`.
+- [EUSER_SHIM_SCOPE.md](EUSER_SHIM_SCOPE.md) — read-only scoping report for
+  cleanup step 6: `user/euser_shim.cpp` is 34 lines providing exactly five
+  out-of-line symbols (rest is header-inline), with consumer inventory and the
+  build-time-only retirement path.
+
+These five newly indexed reports bring the indexed Markdown total to **180**,
+matching the 180 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 newest-report backfill (append-only)
+
+Two newest reports existed on disk but had no entry in this index; they are
+linked below. Of the named candidates, `AUTHORITY_GATE_REVIEW.md` and
+`CLEANUP_AUTHORITY_CHECK.md` were checked and do not exist on disk, so they
+have no entries. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [DANGLING_REFS_SWEEP.md](DANGLING_REFS_SWEEP.md) — post-deletion reference
+  sweep proving no build/test/doc reference to the deleted portfilesrv files
+  or the removed kernel `r1_fs` glue breaks the build: `make -n` dry-runs for
+  userland/kernfull/isogrub all exit 0 with zero dangling refs; verdict CLEAN.
+- [SVCMGR_APPLY_STATUS.md](SVCMGR_APPLY_STATUS.md) — read-only ~18:58 monitor
+  snapshot of the in-flight svcmgr retirement apply: 5-file snapshot taken,
+  0/5 target files edited, `SvcMgrExecInstall()` still live, baseline gates
+  green (strict 11/11 PASS, retire 4/4, fullchain 14/14); verdict IN PROGRESS.
+
+These two newly indexed reports bring the indexed Markdown total to **182**,
+matching the 182 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
