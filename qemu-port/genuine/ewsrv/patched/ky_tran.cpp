@@ -38,6 +38,35 @@ enum
 	EKeyDataSettings ///< Access data needed for control code entry @see TCtrlDigits, signature TLibFnDataSetting
 	};
 
+//
+// QEMU port patch (documented): built-in minimal keymap.
+//
+// EKDATA.DLL is a ROM keyboard-layout library that this port's single-DLL
+// E32 loader cannot load, so Initialise() cannot call ChangeKeyData(_L(""))
+// and the TConvTable/TFuncTable/TCtrlDigits members would stay as heap
+// garbage (genuine fills them from EKDATA.DLL via Update()).  The class
+// constructors below therefore install a minimal static keymap instead:
+// every scan code 0x00-0xff maps to itself (identity), except the
+// editing/modifier/function scan codes which map to their genuine EKey*
+// codes so TCharExtended::IsModifier() still suppresses modifier keys, and
+// the function tables pass every key through unchanged (EPassKeyThru with
+// EStateUnchanged).  All genuine table-walking code in this file is
+// unchanged; only the keymap *data source* is port-supplied.
+//
+enum
+	{
+	KPortScanCodeCount=0x100,	///< conv table covers TStdScanCode 0x00-0xff
+	KPortNumGenFuncTables=13	///< genuine SFuncTables::numGenFuncTables
+	};
+
+static TUint16 gPortKeyCodes[KPortScanCodeCount];
+static SScanCodeBlock gPortBlock;
+static SConvSubTable gPortSubTable;
+static const SConvSubTable* gPortSubTables[1];
+static SConvTableNode gPortNode;
+static SFuncTableEntry gPortDefaultEntry;
+static SFuncTable gPortGenFuncTables[KPortNumGenFuncTables];
+
 EXPORT_C CKeyTranslator* CKeyTranslator::New()
 //
 // Return the actual key translator
@@ -60,13 +89,23 @@ CKeyTranslatorX::CKeyTranslatorX()
 
     UpdateModifiers(0);
 
+	// QEMU port: iIsdefaultKeyData is POD; genuine sets it in ChangeKeyData()
+	// when EKDATA.DLL is loaded.  This port never loads it, so mark the
+	// built-in keymap (installed by the member constructors) as the default:
+	// ChangeKeyData(_L("")) then returns KErrNone without loading EKDATA.DLL.
+	iIsdefaultKeyData=ETrue;
+
 	}
 
 TInt CKeyTranslatorX::Initialise()
 	{
 	// QEMU port: EKDATA.DLL is a ROM keyboard-layout library that this port's
-	// single-DLL E32 loader cannot load.  Return success with empty tables;
-	// raw TRawEvent key codes still reach windows via the event path.
+	// single-DLL E32 loader cannot load, so ChangeKeyData(_L("")) cannot be
+	// used.  The TConvTable/TFuncTable/TCtrlDigits constructors install a
+	// built-in minimal keymap instead (see the port block at the top of this
+	// file), so TranslateKey walks valid tables instead of dereferencing
+	// garbage pnones/pentries, and translated key codes still reach windows
+	// via the event path.
 	return KErrNone;
 	}
 
@@ -446,6 +485,16 @@ void TCtrlDigits::Update(RLibrary aLibrary)
 //
 TCtrlDigits::TCtrlDigits()
 	{
+	// QEMU port: zero-initialise the POD members; genuine leaves them as
+	// garbage until Update() fills them from EKDATA.DLL, which this port
+	// never loads.  Safe defaults keep the ctrl-digits state machine inert.
+	iCount=0;
+	iMaxCount=3;
+	iMaximumCtrlDigitsMaxCount=6;
+	iDigits=0L;
+	iRadix=EDecimal;
+	iErrorFlag=EFalse;
+	iTermination=ETerminationByCount;
 	};
 //
 void TCtrlDigits::Reset()
@@ -513,6 +562,64 @@ TConvTable::TConvTable()
 #pragma warning (disable: 4705)
 	{
 #pragma warning (default: 4705)
+	// QEMU port: install the built-in minimal keymap (see the port block at
+	// the top of this file) instead of leaving the POD members as heap
+	// garbage; genuine fills them from EKDATA.DLL via Update().
+	for (TUint i=0; i<KPortScanCodeCount; i++)
+		gPortKeyCodes[i]=(TUint16)i;
+	// editing keys -> genuine EKey* codes
+	gPortKeyCodes[EStdKeyBackspace]=EKeyBackspace;
+	gPortKeyCodes[EStdKeyTab]=EKeyTab;
+	gPortKeyCodes[EStdKeyEnter]=EKeyEnter;
+	gPortKeyCodes[EStdKeyEscape]=EKeyEscape;
+	gPortKeyCodes[EStdKeySpace]=EKeySpace;
+	gPortKeyCodes[EStdKeyDelete]=EKeyDelete;
+	gPortKeyCodes[EStdKeyPrintScreen]=EKeyPrintScreen;
+	gPortKeyCodes[EStdKeyPause]=EKeyPause;
+	gPortKeyCodes[EStdKeyHome]=EKeyHome;
+	gPortKeyCodes[EStdKeyEnd]=EKeyEnd;
+	gPortKeyCodes[EStdKeyPageUp]=EKeyPageUp;
+	gPortKeyCodes[EStdKeyPageDown]=EKeyPageDown;
+	gPortKeyCodes[EStdKeyInsert]=EKeyInsert;
+	gPortKeyCodes[EStdKeyLeftArrow]=EKeyLeftArrow;
+	gPortKeyCodes[EStdKeyRightArrow]=EKeyRightArrow;
+	gPortKeyCodes[EStdKeyUpArrow]=EKeyUpArrow;
+	gPortKeyCodes[EStdKeyDownArrow]=EKeyDownArrow;
+	// modifier keys -> EKey* codes so TCharExtended::IsModifier() suppresses
+	// them as key presses, exactly like a genuine keymap does
+	gPortKeyCodes[EStdKeyLeftShift]=EKeyLeftShift;
+	gPortKeyCodes[EStdKeyRightShift]=EKeyRightShift;
+	gPortKeyCodes[EStdKeyLeftAlt]=EKeyLeftAlt;
+	gPortKeyCodes[EStdKeyRightAlt]=EKeyRightAlt;
+	gPortKeyCodes[EStdKeyLeftCtrl]=EKeyLeftCtrl;
+	gPortKeyCodes[EStdKeyRightCtrl]=EKeyRightCtrl;
+	gPortKeyCodes[EStdKeyLeftFunc]=EKeyLeftFunc;
+	gPortKeyCodes[EStdKeyRightFunc]=EKeyRightFunc;
+	gPortKeyCodes[EStdKeyCapsLock]=EKeyCapsLock;
+	gPortKeyCodes[EStdKeyNumLock]=EKeyNumLock;
+	gPortKeyCodes[EStdKeyScrollLock]=EKeyScrollLock;
+	// F1..F24 are contiguous in both enums
+	for (TUint i=0; i<=(TUint)(EStdKeyF24-EStdKeyF1); i++)
+		gPortKeyCodes[EStdKeyF1+i]=EKeyF1+i;
+	// one node (matches any modifiers), one sub-table, one block 0x00-0xff
+	gPortBlock.firstScanCode=0;
+	gPortBlock.lastScanCode=KPortScanCodeCount-1;
+	gPortSubTable.pkeyCode=gPortKeyCodes;
+	gPortSubTable.scanCodes.numBlocks=1;
+	gPortSubTable.scanCodes.pblocks=&gPortBlock;
+	gPortSubTables[0]=&gPortSubTable;
+	gPortNode.maskedModifiers.iMask=0;
+	gPortNode.maskedModifiers.iValue=0;
+	gPortNode.numSubTables=1;
+	gPortNode.ppsubTables=gPortSubTables;
+	iConvTable.numNodes=1;
+	iConvTable.pnodes=&gPortNode;
+	iFirstScanCode=0;
+	iLastScanCode=KPortScanCodeCount-1;
+	iKeypadScanCodes.numBlocks=0;
+	iKeypadScanCodes.pblocks=0;
+	iNonAutorepKeyCodes.numKeyCodes=0;
+	iNonAutorepKeyCodes.pkeyCodes=0;
 	}
 //
 TBool TConvTable::onKeypad(TUint aScanCode) const
@@ -602,12 +709,41 @@ TFuncTable::TFuncTable()
 #pragma warning (disable: 4705)
 	{
 #pragma warning (default: 4705)
+	// QEMU port: install built-in pass-through function tables (see the port
+	// block at the top of this file) instead of leaving iFuncTables as heap
+	// garbage; genuine fills it from EKDATA.DLL via Update().
+	for (TUint i=0; i<KPortNumGenFuncTables; i++)
+		{
+		gPortGenFuncTables[i].numEntries=0;
+		gPortGenFuncTables[i].pentries=0;
+		}
+	// default entry: match any key with any modifiers, pass the key through
+	// unchanged and keep the keyboard state unchanged
+	gPortDefaultEntry.maskedModifiers.iMask=0;
+	gPortDefaultEntry.maskedModifiers.iValue=0;
+	gPortDefaultEntry.keyCodePattern.iKeyCode=0;
+	gPortDefaultEntry.keyCodePattern.iPattern=EAnyKey;
+	gPortDefaultEntry.keyCodePattern.iFiller=0;
+	gPortDefaultEntry.funcAndNewState.state=EStateUnchanged;
+	gPortDefaultEntry.funcAndNewState.func=EPassKeyThru;
+	gPortDefaultEntry.funcAndNewState.funcParam=0;
+	iFuncTables.defaultTable.numEntries=1;
+	iFuncTables.defaultTable.pentries=&gPortDefaultEntry;
+	iFuncTables.modifierTable.numEntries=0;
+	iFuncTables.modifierTable.pentries=0;
+	iFuncTables.numGenFuncTables=KPortNumGenFuncTables;
+	iFuncTables.pgenFuncTables=gPortGenFuncTables;
 	}
 //
 SFuncTableEntry TFuncTable::getDefault(const TCharExtended &aChar, const TInt &aModifiers) const
 // Get the default table entry. Should be called if passing through a normal function-table did
 // not trap these parameters.
 	{
+	// QEMU port: tolerate an empty default table (EKDATA.DLL not loaded) by
+	// returning the built-in pass-through entry instead of indexing a NULL
+	// pentries.
+	if (iFuncTables.defaultTable.numEntries==0 || iFuncTables.defaultTable.pentries==0)
+		return gPortDefaultEntry;
     TUint i=0;
 	while(i<iFuncTables.defaultTable.numEntries)
         {
@@ -645,12 +781,17 @@ SFuncAndState TFuncTable::GetGeneralFuncAndState(const TCharExtended &aChar, con
 // Pass through the table corresponding to the current keyboard state, returning the first
 // table entry matching the given parameters.
 	{
-	for (TUint i=0; i<iFuncTables.pgenFuncTables[aCurState].numEntries; i++)
-		if (aChar.MatchesPattern(iFuncTables.pgenFuncTables[aCurState].pentries[i].keyCodePattern, aRadix)
-			&& MatchesMaskedValue(aModifiers,iFuncTables.pgenFuncTables[aCurState].pentries[i].maskedModifiers))
-			{
-			return iFuncTables.pgenFuncTables[aCurState].pentries[i].funcAndNewState;
-			}
+	// QEMU port: guard against a missing or out-of-range state table
+	// (EKDATA.DLL not loaded) before indexing pgenFuncTables.
+	if (iFuncTables.pgenFuncTables!=0 && aCurState<iFuncTables.numGenFuncTables)
+		{
+		for (TUint i=0; i<iFuncTables.pgenFuncTables[aCurState].numEntries; i++)
+			if (aChar.MatchesPattern(iFuncTables.pgenFuncTables[aCurState].pentries[i].keyCodePattern, aRadix)
+				&& MatchesMaskedValue(aModifiers,iFuncTables.pgenFuncTables[aCurState].pentries[i].maskedModifiers))
+				{
+				return iFuncTables.pgenFuncTables[aCurState].pentries[i].funcAndNewState;
+				}
+		}
    	return getDefault(aChar, aModifiers).funcAndNewState;
 	}
 

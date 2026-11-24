@@ -94,16 +94,17 @@ build/user/NETBRIDGE.E32: build/user/netbridge_test.elf tools/elf2e32.py tools/m
 
 # GUI desktop shell E32: builds a display list in the low-RAM gui_shared
 # buffer and asks the kernel (slow exec 251) to paint the VBE framebuffer.
-# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
-# guishell_printf_slot at 0x408000 (textSize).
-build/user/guishell.o: user/guishell.c user/runtime.h user/guishost.h | build/user
+# PE2 imports of EUSER.DLL ordinals 211/1547/120/915/1548 packed by pack_multi
+# at codeBase+0x8000 (guishell.c #includes ws_e32_client.c; the fifth slot
+# guishell_iat_async at 0x408010 is ord 1548, async DoSendReceive).
+build/user/guishell.o: user/guishell.c user/ws_e32_client.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 
 build/user/guishell.elf: build/user/start.o build/user/runtime.o build/user/guishell.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=guishell_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=guishell_iat_async=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
 
-build/user/GUISHELL.E32: build/user/guishell.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+build/user/GUISHELL.E32: build/user/guishell.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,1548
 	python3 tools/e32read.py $@ --quiet
 
 # R1 real ICMP ping E32: builds a genuine Ethernet/IPv4/ICMP echo request,
@@ -553,15 +554,16 @@ build/user/HEXDUMP.E32: build/user/hexdump.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/e32read.py $@ --quiet
 
 # SCREENSAVER / ANIMATION E32: genuine user-driven graphics on the real VBE
-# LFB through the GUI slow executives 249/250/251. PE2 import of EUSER.DLL
-# ordinal 915 (RDebug::Printf); IAT slot saver_printf_slot at 0x408000.
+# LFB through the GENUINE EWSRV client surface (saver.c is self-contained on
+# the saver_iat_* slots). PE2 imports of EUSER.DLL ordinals 211/1547/120/915
+# packed by pack_multi at codeBase+0x8000.
 userland: build/user/SAVER.E32
-build/user/saver.o: user/saver.c user/runtime.h user/guishost.h | build/user
+build/user/saver.o: user/saver.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/saver.elf: build/user/start.o build/user/runtime.o build/user/saver.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=saver_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/SAVER.E32: build/user/saver.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=saver_iat_connect=0x408000 --defsym=saver_iat_send=0x408004 --defsym=saver_iat_close=0x408008 --defsym=saver_iat_printf=0x40800c -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/SAVER.E32: build/user/saver.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915
 	python3 tools/e32read.py $@ --quiet
 
 # MINESWEEPER E32 -- genuine interactive 8x8/10-mine game driven from PortCon
@@ -658,13 +660,15 @@ build/user/UNITS.E32: build/user/units.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
-# SCREENSHOT E32: discovers the real VBE framebuffer via GUI slow execs
-# 249/250, paints a 64x64 patch through exec 251 (ring-0 LFB write) and saves
-# the captured raw RGBA bytes to SCREEN.RAW over PortFile IPC. Genuine PE2
-# import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
-# shot_printf_slot at 0x408000 (textSize).
+# SCREENSHOT E32: discovers the real VBE framebuffer via exec 270 op 2
+# (FBO_FBINFO, variant/qemu_fbblit.h -- the SvcMgr fbctl exec, not a winsrv
+# GUI slow exec), paints a 64x64 patch with ONE exec 270 op 3 bulk blit
+# (FBO_FBBLIT, ring-0 LFB write), reads the rect straight back from the
+# U/S=1-mapped LFB and saves the captured raw RGBA bytes to SCREEN.RAW over
+# PortFile IPC. Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf);
+# IAT slot shot_printf_slot at 0x408000 (textSize).
 userland: build/user/SHOT.E32
-build/user/shot.o: user/shot.c user/runtime.h user/guishost.h | build/user
+build/user/shot.o: user/shot.c user/runtime.h variant/qemu_fbblit.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/shot.elf: build/user/start.o build/user/runtime.o build/user/shot.o user/link.ld
 	ld -m elf_i386 --emit-relocs --defsym=shot_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
@@ -1206,21 +1210,28 @@ build/user/SNAKE2.E32: build/user/snake2.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
-# REUSABLE GUI TOOLKIT DEMO (GH) -- guilib.c is a self-contained PE2 GUI
-# toolkit (display-list double buffer, primitives, windows, buttons, keyboard
-# and mouse input) built on GUI slow execs 249/250/251; guihello.c is its
-# interactive demonstration (arrow-key focus, Enter press, Esc quit).  Genuine
-# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
-# guihello_printf_slot at 0x408000 (textSize).
+# REUSABLE GUI TOOLKIT DEMO (GH) -- guilib.c is the PE2 GUI toolkit, now on
+# the GENUINE EWSRV client path (docs/WINSRV_MIGRATION_PLAN.md chunk B):
+# guilib.c #includes user/ws_e32_client.c (chunk A) and adds the minimal
+# console draw (EConsoleClearScreen/SetCursorPosAbs/Write) over the same
+# session; no winsrv execs 249/250/251 remain in guilib.c or its apps.
+# guihello.c is its interactive demonstration (arrow-key focus, Enter press,
+# Esc quit).  Multi-import PE2 pack (EWCLIENT pattern, genuine/pack_multi.py)
+# with IAT slots at codeBase+0x8000 (textSize 0x8000):
+#   0x408000 ord 211  RSessionBase::CreateSession   (ws_e32_client)
+#   0x408004 ord 1547 RSessionBase::DoSendReceive   (ws_e32_client)
+#   0x408008 ord 120  RHandleBase::Close            (ws_e32_client)
+#   0x40800c ord 915  RDebug::Printf                (ws_e32_client)
+#   0x408010 ord 915  RDebug::Printf                (app markers)
 userland: build/user/GUIHELLO.E32
-build/user/guilib.o: user/guilib.c user/guilib.h user/runtime.h | build/user
+build/user/guilib.o: user/guilib.c user/guilib.h user/ws_e32_client.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/guihello.o: user/guihello.c user/guilib.h user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/guihello.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/guihello.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=guihello_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/GUIHELLO.E32: build/user/guihello.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=guihello_printf_slot=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GUIHELLO.E32: build/user/guihello.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,915
 	python3 tools/e32read.py $@ --quiet
 
 # SMALL BASIC INTERPRETER E32 -- a genuine line-oriented interpreter with a
@@ -1240,18 +1251,18 @@ build/user/BASIC.E32: build/user/basic.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/e32read.py $@ --quiet
 
 # BREAKOUT E32 -- genuine real-time graphical arcade game on the VBE LFB.
-# Builds full animated frames (bricks/paddle/ball/HUD) in the low-RAM gui_shared
-# display list and submits them through GUI slow exec 251; reads real keyboard
-# input via the PortCon lease (A/D move, ENTER restart, ESC quit). PE2 import of
-# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot breakout_printf_slot at
-# 0x408000 (textSize).
+# Session/window/pixels go through ws_e32_client.c on the GENUINE EWSRV
+# (breakout.c #includes ws_e32_client.c, so no separate ws_e32_client.o);
+# PE2 EUSER ordinals 211/1547/120/915 at codeBase+0x8000 plus a fifth slot
+# breakout_iat_async at 0x408010 (ord 1548, async DoSendReceive); reads real
+# keyboard input via the PortCon lease (A/D move, ENTER restart, ESC quit).
 userland: build/user/BREAKOUT.E32
-build/user/breakout.o: user/breakout.c user/runtime.h user/guishost.h | build/user
+build/user/breakout.o: user/breakout.c user/ws_e32_client.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/breakout.elf: build/user/start.o build/user/runtime.o build/user/breakout.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=breakout_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/BREAKOUT.E32: build/user/breakout.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=breakout_iat_async=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/BREAKOUT.E32: build/user/breakout.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,1548
 	python3 tools/e32read.py $@ --quiet
 
 # ---------------------------------------------------------------------------
@@ -1280,34 +1291,34 @@ userland-exe: userland
 build/user/%.EXE: build/user/%.E32
 	cp -f $< $@
 
-# GRAPHICAL APPLICATION LAUNCHER E32 -- full-screen desktop menu rendered to
-# the VBE LFB through GUI slow exec 251.  Up/Down (or W/S) select, A/D switch
-# columns, ENTER launches via trusted exec 268 (SvcMgrLaunch), ESC exits.
-# Genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf) for markers;
-# IAT slot guimenu_printf_slot at 0x408000 (textSize).
+# GRAPHICAL APPLICATION LAUNCHER E32 -- full-screen desktop menu on the
+# GENUINE EWSRV client surface (guimenu.c #includes ws_e32_client.c).  Up/Down
+# (or W/S) select, A/D switch columns, ENTER launches via trusted exec 268
+# (SvcMgrLaunch, svcmgr -- not a winsrv GUI exec), ESC exits.  PE2 EUSER IAT
+# slots at codeBase+0x8000: ord 211/1547/120/915 (ws_e32_client) + ord 1548
+# async send at 0x408010 + ord 915 markers at 0x408014, packed by pack_multi.
 userland: build/user/GUIMENU.E32
-build/user/guimenu.o: user/guimenu.c user/runtime.h user/guishost.h | build/user
+build/user/guimenu.o: user/guimenu.c user/ws_e32_client.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/guimenu.elf: build/user/start.o build/user/runtime.o build/user/guimenu.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=guimenu_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/GUIMENU.E32: build/user/guimenu.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=guimenu_iat_send_async=0x408010 --defsym=guimenu_printf_slot=0x408014 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GUIMENU.E32: build/user/guimenu.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,1548,915
 	python3 tools/e32read.py $@ --quiet
 
-# GRAPHICAL DESKTOP / WINDOW MANAGER E32 -- a genuine PE2 E32 program that
-# paints the VBE LFB through GUI slow execs 249/250/251: wallpaper, 8 clickable
-# app icons, taskbar with a live clock, Start menu and draggable/focusable
-# windows.  Click (gui_shared button word) or W/S/A/D + ENTER selects/launches
-# via trusted exec 268; ESC returns to the shell.  Genuine PE2 import of
-# EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot desktop_printf_slot at
-# 0x408000 (textSize).
+# GRAPHICAL DESKTOP / WINDOW MANAGER E32 -- on the GENUINE EWSRV text-window
+# path (chunk D4): desktop.c #includes ws_e32_client.c, renders one full-screen
+# console window (app list + launch log + taskbar) and reads input via async
+# EConsoleRead.  PE2 EUSER IAT slots at codeBase+0x8000: ord 211/1547/120/915
+# (ws_e32_client) + ord 1548 async send at 0x408010 (desktop_iat_async),
+# packed by pack_multi.  Launch still uses trusted exec 268 (svcmgr).
 userland: build/user/DESKTOP.E32
-build/user/desktop.o: user/desktop.c user/runtime.h user/guishost.h | build/user
+build/user/desktop.o: user/desktop.c user/ws_e32_client.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/desktop.elf: build/user/start.o build/user/runtime.o build/user/desktop.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=desktop_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/DESKTOP.E32: build/user/desktop.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=desktop_iat_async=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DESKTOP.E32: build/user/desktop.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,1548
 	python3 tools/e32read.py $@ --quiet
 
 # WINDOWED TEXT EDITOR E32 (DTEDIT) -- a second REAL GUI desktop application:
@@ -1316,32 +1327,34 @@ build/user/DESKTOP.E32: build/user/desktop.elf tools/elf2e32.py tools/mke32.py
 # cursor.  Keyboard typing, Backspace, Enter and arrow keys edit the buffer;
 # mouse presses are read from gui_shared (button word + button_seq) and
 # hit-tested against the toolbar/close box/text cells.  Saving uses PortFile IPC
-# (file_save -> NOTE.DAT).  Built on the reusable guilib.c toolkit over GUI slow
-# execs 249/250/251.  Genuine PE2 import of EUSER.DLL ordinal 915
-# (RDebug::Printf); IAT slot dtedit_printf_slot at 0x408000 (textSize).
+# (file_save -> NOTE.DAT).  Built on the reusable guilib.c toolkit on the
+# GENUINE EWSRV client path (chunk B, no winsrv exec 251 / retired shim header).
+# Same multi-import IAT layout as GUIHELLO (ws_e32_client slots
+# 0x408000-0x40800c, app marker slot dtedit_printf_slot at 0x408010).
 userland: build/user/DTEDIT.E32
-build/user/dtedit.o: user/dtedit.c user/guilib.h user/guishost.h user/runtime.h | build/user
+build/user/dtedit.o: user/dtedit.c user/guilib.h user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/dtedit.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/dtedit.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=dtedit_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/DTEDIT.E32: build/user/dtedit.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=dtedit_printf_slot=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DTEDIT.E32: build/user/dtedit.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,915
 	python3 tools/e32read.py $@ --quiet
 
 # WINDOWED DESKTOP CALCULATOR E32 -- a real application window (title bar,
 # close button, border, drop shadow) with a live display and a 20-key keypad,
-# painted on the VBE LFB through the reusable guilib.c toolkit (GUI execs
-# 249/250/251).  Clickable with the PS/2 mouse (gui_shared.buttons/button_seq)
-# and typeable on the serial keyboard; expressions use a recursive-descent
-# parser adapted from calc.c.  Genuine PE2 import of EUSER.DLL ord 915;
-# IAT slot dtcalc_printf_slot at 0x408000 (textSize).
+# painted through the reusable guilib.c toolkit on the GENUINE EWSRV client
+# path (chunk B, no winsrv exec 251 / retired shim header).  Clickable with the
+# pointer (guilib gui_mouse_full buttons/seq) and typeable on the serial
+# keyboard; expressions use a recursive-descent parser adapted from calc.c.
+# Same multi-import IAT layout as GUIHELLO (ws_e32_client slots
+# 0x408000-0x40800c, app marker slot dtcalc_printf_slot at 0x408010).
 userland: build/user/DTCALC.E32
-build/user/dtcalc.o: user/dtcalc.c user/runtime.h user/guilib.h user/guishost.h | build/user
+build/user/dtcalc.o: user/dtcalc.c user/runtime.h user/guilib.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/dtcalc.elf: build/user/start.o build/user/runtime.o build/user/guilib.o build/user/dtcalc.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=dtcalc_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/DTCALC.E32: build/user/dtcalc.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c --defsym=dtcalc_printf_slot=0x408010 -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/DTCALC.E32: build/user/dtcalc.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915,915
 	python3 tools/e32read.py $@ --quiet
 
 # WINDOW SERVER E32 (WSV) -- a genuine PE2 E32 process that owns the VBE LFB,
@@ -1352,7 +1365,7 @@ build/user/DTCALC.E32: build/user/dtcalc.elf tools/elf2e32.py tools/mke32.py
 # window-server executives are unavailable.  Genuine PE2 import of EUSER.DLL
 # ordinal 915 (RDebug::Printf); IAT slot winsrv_printf_slot at 0x408000.
 userland: build/user/WINSRV.E32
-build/user/winsrv.o: user/winsrv.c user/runtime.h user/guishost.h | build/user
+build/user/winsrv.o: user/winsrv.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/winsrv.elf: build/user/start.o build/user/runtime.o build/user/winsrv.o user/link.ld
 	ld -m elf_i386 --emit-relocs --defsym=winsrv_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
@@ -1360,22 +1373,75 @@ build/user/WINSRV.E32: build/user/winsrv.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
-# WINDOW-SERVER CLIENT LIBRARY + WINDOWED CALCULATOR E32 (WSDL) -- a real
-# client of the window server: wsclient.c draws into private per-window content
-# buffers from variant/qemu_windowsrv.h's struct ws_shared, while wsdl.c opens
-# ONE calculator window and services ws_get_event() mouse/key events.  Genuine
-# PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf); IAT slot
-# wsdl_printf_slot at 0x408000 (textSize).
+# WINDOWED CALCULATOR E32 (WSDL) -- a client of the window server on the
+# GENUINE EWSRV path: wsdl.c drives the ws_* API now implemented by
+# ws_e32_client.c (PE2 EUSER ordinals 211/1547/120/915 packed by pack_multi at
+# codeBase+0x8000; ws_e32_iat_printf lives at 0x40800c).  The old exec-based
+# wsclient.c is no longer linked here.
 userland: build/user/WSDL.E32
-build/user/wsclient.o: user/wsclient.c user/wsclient.h variant/qemu_windowsrv.h user/runtime.h | build/user
+build/user/wsclient.o: user/wsclient.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
-build/user/wsdl.o: user/wsdl.c user/wsclient.h user/runtime.h variant/qemu_windowsrv.h | build/user
+build/user/wsdl.o: user/wsdl.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
-build/user/wsdl.elf: build/user/start.o build/user/runtime.o build/user/wsclient.o build/user/wsdl.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=wsdl_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/WSDL.E32: build/user/wsdl.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+build/user/wsdl.elf: build/user/start.o build/user/runtime.o build/user/ws_e32_client.o build/user/wsdl.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WSDL.E32: build/user/wsdl.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915
 	python3 tools/e32read.py $@ --quiet
+
+# WS_E32_CLIENT + WSE32TEST (docs/WINSRV_MIGRATION_PLAN.md step 1) -- the
+# wsclient API ported onto the GENUINE EWSRV client surface: RSessionBase::
+# CreateSession(_L("!E32WindowServer")) + DoSendReceive with the genuine
+# CWsSession opcodes, imported from the prebuilt genuine EUSER.DLL through
+# four PE2 IAT slots at codeBase+0x8000, packed by genuine/pack_multi.py
+# (the EWCLIENT pattern).  Connection/session/window-create/title/size only;
+# the event ring + GC blit are the next chunk.  The old exec-based wsclient.c
+# stays in place for WSDL.E32 above until the migration completes.
+# IAT slot map (seeded by --defsym, ordinals written by pack_multi):
+#   0x408000 ord 211  RSessionBase::CreateSession(TDesC16,TVersion,int)
+#   0x408004 ord 1547 RSessionBase::DoSendReceive(int,TIpcArgs const*) const
+#   0x408008 ord 120  RHandleBase::Close()
+#   0x40800c ord 915  RDebug::Printf(char const*,...)
+userland: build/user/WSE32TEST.E32
+build/user/ws_e32_client.o: user/ws_e32_client.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/ws_e32_test.o: user/ws_e32_client.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -DWS_E32_TEST_MAIN -c $< -o $@
+build/user/ws_e32_test.elf: build/user/start.o build/user/runtime.o build/user/ws_e32_test.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WSE32TEST.E32: build/user/ws_e32_test.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915
+	python3 tools/e32read.py $@ --quiet
+
+# WS_E32_DRAW_TEST (docs/WINSRV_MIGRATION_PLAN.md chunk 2) -- pixel drawing
+# through the GENUINE EWSRV: ws_draw_fill_rect() over the genuine CWsSession
+# opcodes EConsoleSetTextColors (21) + EConsoleSetCursorPosAbs (6) +
+# EConsoleWrite (10) on the same !E32WindowServer session; the server blits
+# each cell into the LFB.  No new EUSER ordinals: the draw ops ride the one
+# DoSendReceive import, so the IAT slots are identical to WSE32TEST.
+# IAT slot map (same as above):
+#   0x408000 ord 211  RSessionBase::CreateSession(TDesC16,TVersion,int)
+#   0x408004 ord 1547 RSessionBase::DoSendReceive(int,TIpcArgs const*) const
+#   0x408008 ord 120  RHandleBase::Close()
+#   0x40800c ord 915  RDebug::Printf(char const*,...)
+userland: build/user/WSE32DRAW.E32
+build/user/ws_e32_draw_test.o: user/ws_e32_draw_test.c user/runtime.h | build/user
+	$(CC) $(USER_FLAGS) -c $< -o $@
+build/user/ws_e32_draw.elf: build/user/start.o build/user/runtime.o build/user/ws_e32_client.o build/user/ws_e32_draw_test.o user/link.ld
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=ws_e32_iat_connect=0x408000 --defsym=ws_e32_iat_send=0x408004 --defsym=ws_e32_iat_close=0x408008 --defsym=ws_e32_iat_printf=0x40800c -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/WSE32DRAW.E32: build/user/ws_e32_draw.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915
+	python3 tools/e32read.py $@ --quiet
+
+# SHOTE32 (docs/WINSRV_MIGRATION_PLAN.md order item 4) -- SHOT migrated onto
+# the GENUINE EWSRV client API (EWCLIENT pattern): genuine RConsole over
+# CWsSession IPC, one PE2 EUSER import thunk per needed export (ordinals from
+# kernelhwsrv euseru.def), packed by genuine/pack_multi.py.  Built by
+# tools/build_ews_app.py (generalized genuine/ewsrv/build_client.py); exec 270
+# (FBO_FBINFO/FBO_FBBLIT) stays -- it retires with svcmgr, not winsrv.
+userland: build/user/SHOTE32.E32
+build/user/SHOTE32.E32: user/shot_e32.c user/runtime.c user/start.S tools/build_ews_app.py genuine/pack_multi.py genuine/ewsrv/ewsrv_shims.cpp genuine/ewsrv/stubs.S genuine/ewsrv/patched/co_cli.cpp | build/user
+	python3 tools/build_ews_app.py shot_e32 build/user/SHOTE32.E32
 
 # ---------------------------------------------------------------------------
 # LARGE USER HEAP PROOF (BIGHEAP) -- append-only addition, 2026-11-21.
@@ -1462,16 +1528,17 @@ build/user/FBBLITTEST.E32: build/user/fbblittest.elf tools/elf2e32.py tools/mke3
 
 # ---------------------------------------------------------------------------
 # GC_BLIT proof E32 (append-only addition, 2026-11-21).  Allocates a 640x400
-# RGBA frame, publishes its physical base/size via guishost's tail fields and
-# submits ONE exec-251 GC_BLIT command (real bulk LFB blit).  Genuine PE2
-# import of EUSER.DLL ordinal 915; IAT slot gcblittest_printf_slot at 0x408000.
+# RGBA frame and submits ONE GC_BLIT over the GENUINE EWSRV client surface
+# (gcblittest.c is self-contained on the gcblittest_iat_* slots).  PE2
+# imports of EUSER.DLL ordinals 211/1547/120/915 packed by pack_multi at
+# codeBase+0x8000.
 userland: build/user/GCBLITTEST.E32
-build/user/gcblittest.o: user/gcblittest.c user/runtime.h user/guishost.h | build/user
+build/user/gcblittest.o: user/gcblittest.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 build/user/gcblittest.elf: build/user/start.o build/user/runtime.o build/user/malloc.o build/user/gcblittest.o user/link.ld
-	ld -m elf_i386 --emit-relocs --defsym=gcblittest_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
-build/user/GCBLITTEST.E32: build/user/gcblittest.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@ --euser-import 915
+	ld -m elf_i386 --emit-relocs -T user/link.ld --defsym=gcblittest_iat_connect=0x408000 --defsym=gcblittest_iat_send=0x408004 --defsym=gcblittest_iat_close=0x408008 --defsym=gcblittest_iat_printf=0x40800c -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/GCBLITTEST.E32: build/user/gcblittest.elf genuine/pack_multi.py tools/mke32.py tools/e32read.py
+	python3 genuine/pack_multi.py $< $@ --iat-start 0x8000 --ordinals 211,1547,120,915
 	python3 tools/e32read.py $@ --quiet
 
 # ---------------------------------------------------------------------------

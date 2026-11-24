@@ -30,7 +30,11 @@ DEFS = ["__GCC32__", "__X86__", "__EPOC32__", "_UNICODE",
         "__cdecl=__attribute__((cdecl))", "__fastcall=__attribute__((fastcall))",
         "__stdcall=__attribute__((stdcall))",
         "NONSHARABLE_CLASS(x)=class x", "NONSHARABLE_STRUCT(x)=struct x",
-        "_FOFF(c,f)=(((TInt)&(((c*)0x1000)->f))-0x1000)"]
+        "_FOFF(c,f)=(((TInt)&(((c*)0x1000)->f))-0x1000)",
+        # edisp_glue.cpp prints the EWSRV-EDISP startup marker: the genuine
+        # edisp wd_generic.cpp is now compiled unmodified, so the marker lives
+        # in the port glue's HAL::Get(EDisplayMemoryAddress) handler.
+        "EDISP_PORT_MARKER"]
 INCS = [EKA / "include", EKA / "include/kernel/x86", EKA / "include/nkern",
         EKA / "common", KH / "userlibandfileserver/domainmgr/inc",
         KH / "userlibandfileserver/fileserver/inc",
@@ -43,12 +47,21 @@ FLAGS = ["-m32", "-march=i486", "-Os", "-ffreestanding", "-nostdlib",
          # structs (e.g. TPoint from TRawEvent::Pos(), 8 B) in EDX:EAX, not
          # gcc -m32's default Itanium hidden-sret pointer. A hidden sret shifts
          # args by one slot on the EUSER side. Force register returns.
-         "-freg-struct-return", "-w"]
+         "-freg-struct-return",
+          # Genuine _L()/_LIT() literals are L"..." (wchar_t) cast to TText*;
+          # under __GCC32__ __TText is wchar_t too (e32des16.h). Symbian
+          # wchar_t is 16-bit, Linux gcc's is 32-bit unless -fshort-wchar.
+          # Without it "!E32WindowServer" is stored UTF-32 and prebuilt EUSER
+          # (2-byte TText) reads it as "!" -> KErrNotFound for real clients.
+          "-fshort-wchar", "-w"]
 
 SOURCES = [
     HERE / "patched/ws_main.cpp",
     HERE / "patched/ws_win.cpp",
-    HERE / "patched/wd_generic.cpp",
+    # GENUINE edisp display driver, unmodified (was patched/wd_generic.cpp);
+    # the port display-HAL bridge lives in edisp_glue.cpp.
+    EKA / "drivers/edisp/epoc/generic/wd_generic.cpp",
+    HERE / "edisp_glue.cpp",
     EKA / "ewsrv/ws_dat.cpp",
     EKA / "ewsrv/ws_utl.cpp",
     EKA / "ewsrv/co_cli.cpp",

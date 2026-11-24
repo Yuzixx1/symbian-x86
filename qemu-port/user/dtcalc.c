@@ -2,24 +2,27 @@
  * dtcalc.c -- a real WINDOWED desktop calculator for the R1 EKA2 port.
  *
  * This is not a text-mode calculator and not a canned demo: it paints a
- * decorated, shadowed window with a live display and a 20-key keypad onto the
- * real VBE linear framebuffer, using the reusable guilib.c toolkit (display
- * list transport via GUI slow execs 249/250/251).  Every key is clickable with
- * the real PS/2 mouse (press edges detected from gui_shared.buttons /
- * button_seq) and typeable on the serial keyboard (gui_key / con_tryread).
+ * decorated, shadowed window with a live display and a 20-key keypad, using
+ * the reusable guilib.c toolkit on the genuine EWSRV client path (EConsole
+ * window + EConsoleWrite; no winsrv execs).  Every key is clickable with the
+ * pointer (press edges from guilib's gui_mouse_full button word / seq) and
+ * typeable on the serial keyboard (gui_key / con_tryread).
  * Expressions are evaluated by a recursive-descent parser adapted from
  * user/calc.c (+ - * /, parentheses, wrapping 32-bit arithmetic).
  *
  * Serial markers ride the genuine PE2 import of EUSER.DLL ordinal 915
- * (RDebug::Printf); IAT slot dtcalc_printf_slot lives at 0x408000.
+ * (RDebug::Printf); IAT slot dtcalc_printf_slot lives at 0x408010 (the
+ * ws_e32_client slots occupy 0x408000-0x40800c; textSize stays 0x8000).
  */
+/* WINSRV_MIGRATION_PLAN chunk B: no winsrv display-list exec here
+ * anymore -- pointer state comes from guilib's gui_mouse_full() on the
+ * genuine EWSRV client path (zeros until the EWSRV input bridge lands,
+ * plan section 5). */
 #include "runtime.h"
 #include "guilib.h"
-#include "guishost.h"
 
 /* PE2 IAT slot, defined with --defsym in user.mk. */
 extern void (*dtcalc_printf_slot)(const char*);
-extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 
 static void marker(const char* text)
 {
@@ -289,7 +292,6 @@ static void press_key(int idx, char* expr, char* result,
 /* ---- entry point -------------------------------------------------------- */
 int app_main(void)
 {
-    static struct gui_shared* sh;
     char line[160];
     char expr[64], result[24];
     unsigned prev_buttons, prev_seq;
@@ -312,10 +314,8 @@ int app_main(void)
         return 1;
         }
 
-    sh = (struct gui_shared*)exec2(QE_EXEC_GUI_DRAW, 0, 0);
-    if (!sh || sh->magic != GUI_MAGIC || sh->version != GUI_VERSION)
-        { marker("DCALC: FAIL shared buffer"); gui_shutdown(); return 1; }
-
+    /* Pointer state via guilib on the genuine EWSRV client path (no exec 251
+     * gui_shared anymore). */
     wx = (gui_fb_width() - WIN_W) / 2;
     wy = (gui_fb_height() - WIN_H) / 2;
     if (wx < 0) wx = 0;
@@ -323,8 +323,10 @@ int app_main(void)
     if (wx + WIN_W > gui_fb_width()) wx = gui_fb_width() - WIN_W;
     if (wy + WIN_H > gui_fb_height()) wy = gui_fb_height() - WIN_H;
 
-    prev_buttons = sh->buttons;
-    prev_seq = sh->button_seq;
+    {
+        int m0x = 0, m0y = 0;
+        gui_mouse_full(&m0x, &m0y, &prev_buttons, &prev_seq);
+    }
 
     /* first complete frame, then announce readiness */
     draw_frame(wx, wy, expr, result, -1);
@@ -386,14 +388,11 @@ int app_main(void)
             dirty = 1;
             }
 
-        /* ---- real PS/2 mouse: press edge + hit test -------------------- */
-        buttons = sh->buttons;
-        seq = sh->button_seq;
+        /* ---- pointer: press edge + hit test (guilib/EWSRV path) --------- */
+        gui_mouse_full(&mx, &my, &buttons, &seq);
         dseq = seq - prev_seq;
         clicked = (buttons != 0u && prev_buttons == 0u) ||
                   (dseq >= 2u && buttons == 0u);
-        mx = sh->mouse_x;
-        my = sh->mouse_y;
         mb = (int)buttons;
         prev_buttons = buttons;
         prev_seq = seq;

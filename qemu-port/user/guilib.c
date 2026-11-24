@@ -1,12 +1,34 @@
 /*
  * guilib.c -- reusable PE2 GUI toolkit for the R1 QEMU port.
  *
- * Self-contained display-list transport (layout mirrors user/guishost.h):
- * exec 249 = LFB base, 250 = LFB size, 251(0) = address of struct gl_shared,
- * 251(n>0) = execute n commands and refresh the PS/2 mouse crosshair.  All
- * rendering is done in kernel context by variant/qemu_gui_exec.cpp; this file
- * never touches VRAM directly.  The PS/2 ISR publishes buttons/button_seq
- * straight into that shared struct, so gui_mouse() reports real click state.
+ * WINSRV_MIGRATION_PLAN.md chunk B: the backend is now the GENUINE EWSRV
+ * client path from user/ws_e32_client.c (chunk A), #included below so this
+ * library can issue the draw opcodes over the very same session and window.
+ * The winsrv slow execs 249/250/251 are gone from this file and all its
+ * consumers (guihello.c, dtedit.c, dtcalc.c):
+ *
+ *   session/window : ws_open() / ws_window_create() / ws_set_title() /
+ *                    ws_screen_size() / ws_close()      -- chunk A code.
+ *   draw (minimal) : EConsoleClearScreen + EConsoleSetCursorPosAbs +
+ *                    EConsoleWrite (CWsSession ops 2/6/10 of
+ *                    kernelhwsrv/kernel/eka/include/ws_std.h), sent through
+ *                    the chunk-A session via ws_e32_send().  Implemented
+ *                    locally here because ws_e32_client.c's ws_fill/
+ *                    ws_text/ws_present are still stubs; chunk 2 lands the
+ *                    RWindow/GC pixel path (GC_RECT chrome) on top.
+ *   keyboard       : PortCon lease (con_acquire/con_tryread), unchanged.
+ *   mouse          : gui_shared no longer exists without exec 251; PS/2
+ *                    input into genuine EWSRV is the open blocker (plan
+ *                    section 5), so gui_mouse* report zeros until the
+ *                    EWSRV input-injection bridge lands.
+ *
+ * Rendering model: the back display list is kept (same command budget), so
+ * gui_pending_commands() and the apps' command-budget guards still work.
+ * gui_present() interprets the list against the console text grid: pixel
+ * (x,y) maps to cell (x/GUI_CELL_W, y/GUI_ROW_PITCH) on a 64x42 grid;
+ * GC_CLEAR -> EConsoleClearScreen (with bg colour), GC_RECT -> chunk 2's
+ * ws_draw_fill_rect (filled cells), GC_PUTC runs coalesce into one
+ * EConsoleSetTextColors + EConsoleSetCursorPosAbs + EConsoleWrite per line.
  *
  * No hosted libc is used.  Serial markers are the caller's responsibility
  * (see guihello.c); this library is intentionally silent.
@@ -14,50 +36,46 @@
 #include "guilib.h"
 #include "runtime.h"
 
-extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
+/* Chunk A client, included so the draw helpers below can use its session
+ * (sSession) and ws_e32_send() directly; gui_init()/gui_shutdown() call the
+ * public ws_* API from the same translation unit. */
+#include "ws_e32_client.c"
 
-/* ---- transport definitions, kept private so guishost.h needs no changes -- */
-#define QE_GL_FBBASE        249u
-#define QE_GL_FBSIZE        250u
-#define QE_GL_DRAW          251u
+/* One more genuine CWsSession opcode (kernelhwsrv .../ws_std.h) not yet in
+ * the included client's enum: EConsoleClearScreen.  The draw ops 6/10/21,
+ * the EPtrC/EPtr descriptor-type macros (WS_E32_EPTRC/WS_E32_EPTR) and the
+ * palette helpers ws_e32_rgb_to_index()/ws_draw_fill_rect() all come from the
+ * included chunk-2 ws_e32_client.c. */
+#define GL_OP_CLEAR_SCREEN    2    /* EConsoleClearScreen                   */
 
-#define GL_MAGIC            0x47554931u   /* "GUI1" */
-#define GL_VERSION          1u
-#define GL_MAX_CMDS         640u   /* must mirror GUI_MAX_CMDS (shared ABI layout) */
-
+/* Display-list opcodes (same numbering as the old shim ABI, so the
+ * recorded back list keeps its meaning for gui_pending_commands()). */
 #define GC_CLEAR            0u
 #define GC_RECT             1u
 #define GC_PUTC             2u
+
+#define GL_MAX_CMDS         640u   /* same per-frame budget as before */
 
 struct gl_cmd {
     volatile unsigned type;
     volatile unsigned a, b, c, d, e;
 };
 
-struct gl_shared {
-    volatile unsigned magic;
-    volatile unsigned version;
-    volatile unsigned count;
-    volatile unsigned draw_calls;
-    volatile int      fb_w, fb_h;
-    volatile int      mouse_x, mouse_y;
-    volatile unsigned buttons;        /* kernel: PS/2 mask 1=L 2=R 4=M       */
-    struct gl_cmd     cmds[GL_MAX_CMDS];
-    volatile unsigned button_seq;     /* kernel: increments on button change */
-};
-
 /* ---- state -------------------------------------------------------------- */
-static struct gl_shared* sSh;
 static struct gl_cmd     sBack[GL_MAX_CMDS];   /* local (back) command list */
 static unsigned          sN;
 static int               sReady;
 static int               sLeased;
-static unsigned          sFbBase, sFbSize;
+static int               sScrW, sScrH;         /* EConsoleScreenSize, px    */
 static int               sEscState;            /* ANSI arrow decoder state  */
 
 #define GL_MAX_WINDOWS      16
 static struct { int x, y, w, h; } sWins[GL_MAX_WINDOWS];
 static int sWinCount;
+
+/* ws_e32_client.c's marker() is unused here (this library stays silent);
+ * reference it once so -Wunused-function does not fire. */
+static void (*volatile gl_keep_marker)(const char*) = marker;
 
 static unsigned gl_strlen(const char* s)
 {
@@ -67,40 +85,149 @@ static unsigned gl_strlen(const char* s)
 }
 
 static void gl_cmd(unsigned type, unsigned a, unsigned b,
-                   unsigned c, unsigned d, unsigned e)
+                    unsigned c, unsigned d, unsigned e)
 {
     if (!sReady || sN >= GL_MAX_CMDS) return;
     struct gl_cmd* q = &sBack[sN++];
     q->type = type; q->a = a; q->b = b; q->c = c; q->d = d; q->e = e;
 }
 
+/* ---- minimal draw over the chunk-A session -------------------------------
+ * Each helper mirrors the proven TIpcArgs shapes of ws_e32_client.c:
+ * TPckgC<TPoint> as EDesC8 for SetCursorPosAbs, TPtrC16 as EDesC16 for
+ * Write, two plain TInts for SetTextColors (exactly what the genuine
+ * RConsole in ewsrv/co_cli.cpp sends). */
+static int gl_send_clear(void)
+{
+    struct ws_e32_ipcargs args;
+    ws_e32_args0(&args);
+    return ws_e32_send(GL_OP_CLEAR_SCREEN, &args);
+}
+
+static int gl_set_colors(uint32_t aFg, uint32_t aBg)
+{
+    struct ws_e32_ipcargs args;
+    ws_e32_args0(&args);
+    args.iArgs[0] = (int)ws_e32_rgb_to_index(aFg);   /* fg, TInt slot */
+    args.iArgs[1] = (int)ws_e32_rgb_to_index(aBg);   /* bg, TInt slot */
+    return ws_e32_send(WS_E32_OP_CONSOLE_SET_TEXT_COLORS, &args);
+}
+
+static int gl_send_cursor_abs(int aCol, int aRow)
+{
+    struct ws_e32_ipcargs args;
+    struct ws_e32_desC8 pckg;            /* TPckgC<TPoint>                  */
+    struct ws_e32_point pt;
+    pt.iX = aCol; pt.iY = aRow;
+    pckg.iLength = WS_E32_EPTRC((unsigned)sizeof(pt));
+    pckg.iPtr = (const unsigned char*)&pt;
+    ws_e32_args0(&args);
+    args.iArgs[0] = (int)&pckg;
+    args.iFlags = (WS_E32_EDESC_C8 << 0);
+    return ws_e32_send(WS_E32_OP_CONSOLE_SET_CURSOR_POS_ABS, &args);
+}
+
+static int gl_send_write(const unsigned short* aText, unsigned aLen)
+{
+    struct ws_e32_ipcargs args;
+    struct ws_e32_desC16 desc;           /* TPtrC16                         */
+    desc.iLength = WS_E32_EPTRC(aLen);
+    desc.iPtr = aText;
+    ws_e32_args0(&args);
+    args.iArgs[0] = (int)&desc;
+    args.iFlags = (WS_E32_EDESC_C16 << 0);
+    return ws_e32_send(WS_E32_OP_CONSOLE_WRITE, &args);
+}
+
+/* Flush one coalesced text run: set its colours, position the cursor, then
+ * write the line. */
+static void gl_flush_run(unsigned short* run, unsigned* len,
+                         int* row, int* col, uint32_t* fg, uint32_t* bg)
+{
+    if (*len) {
+        (void)gl_set_colors(*fg, *bg);
+        (void)gl_send_cursor_abs(*col, *row);
+        (void)gl_send_write(run, *len);
+        *len = 0;
+    }
+}
+
+/* ---- session connect ------------------------------------------------------
+ * Same RSessionBase::CreateSession import (ord 211) as ws_e32_client.c's
+ * ws_open(), driven from this translation unit.  The full genuine name
+ * "!E32WindowServer" is tried first; the boot-started EWSRV.E32 image
+ * currently registers its name truncated to "!" (the _LIT 4-byte-char quirk
+ * under g++ -m32 -- EWCLIENT's _L collapses the same way, see the exec128
+ * trace), so on KErrNotFound we retry with "!". */
+static int gl_connect_one(const void* aNameDesc)
+{
+    int r;
+    sSession.iHandle = 0;               /* KNullHandle */
+    r = e32_connect(&sSession, aNameDesc, &sWsVersion, WS_E32_MESSAGE_SLOTS);
+    if (r != 0) { sSession.iHandle = 0; return r; }
+    if (sSession.iHandle == 0) return -1;
+    return 0;
+}
+
+static int gl_connect(void)
+{
+    static const struct ws_e32_desC16 fullName =
+        { WS_E32_EPTRC(WS_E32_SERVER_NAME_LEN), sServerName };
+    static const struct { unsigned iTypeLength; unsigned short iBuf[1]; } bang =
+        { 1u, { '!' } };
+    int r;
+    if (sOpen) return 0;
+    r = gl_connect_one(&fullName);
+    if (r == -1)                        /* KErrNotFound: name truncated */
+        r = gl_connect_one(&bang);
+    if (r != 0) return r;
+    sOpen = 1;
+    sWin = -1;
+    return 0;
+}
+
 /* ---- setup / teardown --------------------------------------------------- */
 int gui_init(void)
 {
-    int shb;
+    int r, w = 0, h = 0;
 
-    sSh = 0; sN = 0; sReady = 0; sLeased = 0;
+    sN = 0; sReady = 0; sLeased = 0;
     sEscState = 0; sWinCount = 0;
-    sFbBase = (unsigned)exec2(QE_GL_FBBASE, 0, 0);
-    sFbSize = (unsigned)exec2(QE_GL_FBSIZE, 0, 0);
-    shb = exec2(QE_GL_DRAW, 0, 0);
-    if (shb <= 0) return -1;
-    sSh = (struct gl_shared*)shb;
-    if (sSh->magic != GL_MAGIC || sSh->version != GL_VERSION) return -2;
-    sReady = 1;
+    sScrW = 1024; sScrH = 768;
+
+    /* Genuine EWSRV session via gl_connect() below (the same CreateSession
+     * EUSER import ws_e32_client.c's ws_open uses, plus the name fallback
+     * that matches the boot-started server).  Return the raw error. */
+    r = gl_connect();
+    if (r != 0) return r;
+
+
+    /* Full-grid console window: 64x42 cells cover the 1024x768 screen
+     * (one cell = GUI_CELL_W x GUI_ROW_PITCH px of the toolkit grid). */
+    r = ws_window_create(0, 0, 64, 42, "EKA2 GUI");
+    if (r != 0) { ws_close(); return r ? r : -2; }
+
+    /* EConsoleScreenSize: answers in console cells (128x76 here); used as a
+     * session-op proof.  The toolkit grid stays the design 1024x768 (64x42
+     * cells of GUI_CELL_W x GUI_ROW_PITCH), so gui_fb_* keep app layouts. */
+    r = ws_screen_size(&w, &h);
+    if (r != 0) { ws_close(); return r; }
+
     /* Input lease: the kernel shell stops polling while we hold it. */
     sLeased = (con_acquire() == 0);
+    sReady = 1;
     return 0;
 }
 
 void gui_shutdown(void)
 {
     if (sLeased) { con_release(); sLeased = 0; }
+    if (sReady) ws_close();        /* EConsoleDestroy + RHandleBase::Close */
     sReady = 0;
 }
 
-int gui_fb_width(void)  { return sSh ? (int)sSh->fb_w : 0; }
-int gui_fb_height(void) { return sSh ? (int)sSh->fb_h : 0; }
+int gui_fb_width(void)  { return sReady ? sScrW : 0; }
+int gui_fb_height(void) { return sReady ? sScrH : 0; }
 
 /* ---- input -------------------------------------------------------------- */
 int gui_key(void)
@@ -149,10 +276,19 @@ int gui_key(void)
 
 void gui_mouse(int* x, int* y, int* buttons)
 {
-    if (x) *x = sSh ? (int)sSh->mouse_x : 0;
-    if (y) *y = sSh ? (int)sSh->mouse_y : 0;
-    /* Published by the IRQ12 PS/2 ISR directly into the shared struct. */
-    if (buttons) *buttons = sSh ? (int)sSh->buttons : 0;
+    /* No kernel gui_shared on the EWSRV path; the input-injection bridge
+     * (plan section 5) is the open blocker, so report "no mouse" for now. */
+    if (x) *x = 0;
+    if (y) *y = 0;
+    if (buttons) *buttons = 0;
+}
+
+void gui_mouse_full(int* x, int* y, unsigned* buttons, unsigned* seq)
+{
+    if (x) *x = 0;
+    if (y) *y = 0;
+    if (buttons) *buttons = 0;
+    if (seq) *seq = 0;
 }
 
 /* ---- primitives --------------------------------------------------------- */
@@ -166,6 +302,8 @@ void gui_clear(uint32_t color)
 void gui_rect(int x, int y, int w, int h, uint32_t color)
 {
     if (w <= 0 || h <= 0) return;
+    /* Recorded; painted as pixels by chunk 2 (RWindow/GC), no-op on the
+     * console text path for now. */
     gl_cmd(GC_RECT, (unsigned)x, (unsigned)y,
            (unsigned)w, (unsigned)h, color);
 }
@@ -239,14 +377,45 @@ void gui_button(int win, int x, int y, int w, int h,
 void gui_present(void)
 {
     unsigned i;
+    unsigned short run[128];       /* one coalesced text line, UTF-16 */
+    unsigned runLen = 0;
+    int runRow = -1, runCol = -1;
+    uint32_t runFg = 0, runBg = 0;
+
     if (!sReady || sN == 0) return;
     for (i = 0; i < sN; ++i) {
-        const struct gl_cmd* src = &sBack[i];
-        struct gl_cmd* dst = &sSh->cmds[i];
-        dst->type = src->type; dst->a = src->a; dst->b = src->b;
-        dst->c = src->c;       dst->d = src->d; dst->e = src->e;
+        const struct gl_cmd* q = &sBack[i];
+        if (q->type == GC_CLEAR) {
+            gl_flush_run(run, &runLen, &runRow, &runCol, &runFg, &runBg);
+            (void)gl_set_colors(GUI_WHITE, q->a);
+            (void)gl_send_clear();     /* EConsoleClearScreen, bg = q->a */
+            continue;
+        }
+        if (q->type == GC_RECT) {
+            /* Filled rect in console cells via chunk 2's genuine
+             * ws_draw_fill_rect (SetTextColors + cursor + space cells). */
+            int col = (int)(q->a / (unsigned)GUI_CELL_W);
+            int row = (int)(q->b / (unsigned)GUI_ROW_PITCH);
+            int cw  = (int)(q->c / (unsigned)GUI_CELL_W);
+            int ch  = (int)(q->d / (unsigned)GUI_ROW_PITCH);
+            if (cw < 1) cw = 1;
+            if (ch < 1) ch = 1;
+            gl_flush_run(run, &runLen, &runRow, &runCol, &runFg, &runBg);
+            (void)ws_draw_fill_rect(0, col, row, cw, ch, q->e);
+            continue;
+        }
+        if (q->type == GC_PUTC) {
+            int col = (int)(q->a / (unsigned)GUI_CELL_W);
+            int row = (int)(q->b / (unsigned)GUI_ROW_PITCH);
+            if (runLen && (row != runRow || col != runCol + (int)runLen ||
+                           q->d != runFg || q->e != runBg))
+                gl_flush_run(run, &runLen, &runRow, &runCol, &runFg, &runBg);
+            if (!runLen) { runRow = row; runCol = col; runFg = q->d; runBg = q->e; }
+            if (runLen < sizeof(run) / sizeof(run[0]))
+                run[runLen++] = (unsigned short)(q->c & 0xffffu);
+        }
     }
-    (void)exec2(QE_GL_DRAW, sN, 0);   /* arg1>0: run list + refresh mouse */
+    gl_flush_run(run, &runLen, &runRow, &runCol, &runFg, &runBg);
 }
 
 int gui_pending_commands(void)

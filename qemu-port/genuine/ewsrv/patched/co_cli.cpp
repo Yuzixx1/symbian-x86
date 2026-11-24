@@ -19,8 +19,9 @@
 
 TInt RConsole::Connect()
 	{
-	// Port ABI: _L("...") gives a proper 2-byte TPtrC16; KE32WindowServer's
-	// _LIT macro emits 4-byte chars under g++ -m32 and fails name validation.
+	// Port ABI: the image is built with -fshort-wchar, so _L("...") gives a
+	// proper 2-byte UTF-16 TPtrC16 matching prebuilt EUSER.DLL (without the
+	// flag g++ -m32 emits 4-byte chars and name validation fails).
 	return CreateSession(_L("!E32WindowServer"),Version(),KMessageSlots);
 	}
 

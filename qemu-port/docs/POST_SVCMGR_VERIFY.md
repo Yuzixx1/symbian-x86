@@ -34,7 +34,7 @@ HEAD at run time: `e29a072`. `kernelhwsrv/` untouched (read-only respected).
 | `r1_genuine_efsrv_test.py` | **PASS** (rc=0, 19:11:14–19:11:31) — F32PROBE genuine FAT32 BPB, F32CLIENT IPC round trip OK, EUSER ord 915 bound | `efsrv.log` |
 | `r1_genuine_eshell_test.py` | **PASS** (rc=0, 19:11:31–19:11:52) — 8/8 commands fault-free | `eshell.log` |
 | `r1_final_verify.py --strict-skip` (run 1, 19:11:52–19:22:47) | **10/11 PASS — `OVERALL: FAIL (10 pass, 0 skip, 1 fail)`; only `selfcheck` FAIL (222.9s) while another agent's verify/QEMU ran concurrently** (known concurrency flake, cf. `docs/CLEANUP_AUTHORITY_CHECK.md`); all other 10 (qemu_smoke, retire, efsrv, ewsrv, eshell, fat_io, doom_main/audio/playtest/multikey) PASS | `finalverify.log` |
-| `r1_final_verify.py --strict-skip` (isolated re-run) | see §3 | `finalverify_iso.log` |
+| `r1_final_verify.py --strict-skip` (isolated re-run, 19:33:30–19:44:30, own log dir `fv_iso/`) | **10/11 PASS — `OVERALL: FAIL (10 pass, 0 skip, 1 fail)`; again only `selfcheck` FAIL (234.1s), this time NOT concurrent** | `finalverify_iso.log`, per-test in `fv_iso/` |
 
 ## 2. Fault scan (step 4)
 
@@ -49,15 +49,52 @@ Scanned all new logs (`/tmp/opencode/post_svcmgr_verify/*.log` + the run-1
 - `SessionPath r=-15` never accepted as IPC success (efsrv gate reports a real
   IPC round trip).
 
-## 3. Authoritative OVERALL (isolated re-run)
+## 3. Authoritative OVERALL (isolated re-run) and the `selfcheck`/`cp4_stress` failure
 
-Run 1's only failure was `selfcheck` under concurrent QEMU load from another
-agent's in-flight verify. An isolated re-run
-(`r1_final_verify.py --strict-skip --log-dir /tmp/opencode/post_svcmgr_verify/fv_iso`,
-started after all foreign verify/QEMU processes went quiet) captured:
+Run 1's only failure was `selfcheck` under concurrent QEMU load. An isolated
+re-run (`r1_final_verify.py --strict-skip --log-dir …/fv_iso`, started 19:33:30
+after foreign verify/QEMU went quiet) captured:
 
-- **OVERALL: PENDING** — see `finalverify_iso.log` / `iso_wait.log` for the
-  captured line and timestamps.
+- **`OVERALL: FAIL (10 pass, 0 skip, 1 fail)` — 10/11 PASS; `failed: selfcheck`**
+  (`finalverify_iso.log`, `fv_iso/final_verify_selfcheck.log`, 234.1s).
+- Selfcheck sub-steps: build PASS, isogrub PASS, qemu_smoke PASS, cp4_ca PASS,
+  **cp4_stress FAIL**, selftest PASS. So the single failing step is
+  `tools/r1_cp4_ca_stress_test.py`.
+- **Failure mode (not a guest fault):** `AssertionError: b'CPSTRESS: start4'
+  not seen after offset 12000` — a 15 s serial-marker wait in
+  `wait_after()` (`r1_cp4_ca_stress_test.py:67-77`). Guest serial logs of the
+  same test show `CPSTRESS: start4 0` **is** printed, `KILLPROC: killed` works,
+  and **0 FAULT/Exc/Panic/#PF/KERN lines** (`/tmp/opencode/cp4_stress_*.log`).
+  I.e. the 4th async launch was merely slower than the 15 s marker window under
+  host load (several other agents were running concurrent QEMU verifies;
+  host was near memory saturation at 19:07: 268 MB free).
+- The apply agent's late `e32load.cpp` edit (19:05:19) **reinstalled exec 269**
+  (peer kill → `E32Kill`) inside `PortTrapExecInstall()` explicitly for
+  cp4_stress (`e32load.cpp:1268-1269, 1378-1403`: "slot 269 restored for
+  cp4_stress; slot 268 + ops 0/1 stay retired with svcmgr") — consistent with
+  `KILLPROC.E32 13 → KILLPROC: killed` succeeding in the logs.
+- Cross-check of every `cp4_stress` serial log produced on this tree
+  (`/tmp/opencode/cp4_stress_928240/937214/973392/981410/987089…`, 19:10–19:43):
+  all show `CPSTRESS: start1..4`, `KILLPROC.E32 13 → KILLPROC: killed`, and
+  **0 fault lines** — including `973392` (19:36), the re-attempt right after my
+  isolated run's timeout (`973140`, 12,674 B, cut just past the 12,000-byte
+  window). The marker arrives but past the test's 15 s window under host load
+  (2–4 concurrent foreign QEMU verifies were running during both of my runs;
+  host memory was near saturation at 19:07). Conclusion: **load-related timing
+  flake, not a guest regression**.
+- A dedicated quiet-machine re-run of `r1_cp4_ca_stress_test.py` was attempted
+  (19:46–19:53) but could not complete: another agent (winsrv/edisp, owns
+  `user/wsdl.c`, `user/user.mk`) was mid-edit (wsdl.c 19:52:43, user.mk
+  19:53:55), so its internal `make … userland` failed transiently on
+  `build/user/wsdl.elf: undefined reference to 'ws_e32_iat_printf'`
+  (`cp4_stress_rerun.log:86`). Not related to the svcmgr apply — that link rule
+  and `wsdl.c` are the winsrv agent's in-flight files. Follow-up: re-run
+  cp4_stress isolated once the winsrv edit lands and the tree is quiet.
+- Tree-mutation caveat: the gates above ran 19:08–19:44 against the apply as
+  landed (`kernfull.elf` 19:05:22 + ISO 19:08). Afterwards the apply agent
+  edited `variant/e32load.cpp` again at 19:38:53 (reinstalled exec 269 — see
+  `e32load.cpp:1268-1269,1378-1403`) and rebuilt; those later edits are outside
+  this verification window.
 
 ## 4. Verdict
 
@@ -65,11 +102,22 @@ started after all foreign verify/QEMU processes went quiet) captured:
   pointer/PTRINJ exec-270 op4, ewsrv, efsrv, eshell 8/8).
 - Fault scan clean; exec-81 wrapper intact (no `ESystemThreadPanic`, no KERN-4);
   PTRINJ/exec-270 op 4 re-proven end-to-end (80,40 consumed by genuine EWSRV).
-- **svcmgr apply is SAFE on the gate evidence** (no rollback indicated). The only
-  non-green item is the run-1 `selfcheck` FAIL, attributed to concurrent foreign
-  QEMU, to be confirmed by the isolated OVERALL in §3.
-- Blockers: none from this tree. External note only: concurrent verify runs by
-  other agents can flake `selfcheck` (run it isolated, per
-  `docs/CLEANUP_AUTHORITY_CHECK.md` precedent).
+- `r1_final_verify.py --strict-skip` captured **OVERALL 10/11 in both runs**
+  (run 1 at 19:11, run 2 at 19:33) — the only fail is `selfcheck` → `cp4_stress`
+  15 s marker-window timeout; guest serial logs show **zero faults** and all
+  markers incl. `start4` + `KILLPROC: killed` present (see §3). All other 10
+  tests PASS in both runs (smoke, retire, efsrv, ewsrv, eshell, fat_io,
+  doom_main/audio/playtest/multikey).
+- **Verdict: svcmgr apply SAFE — no rollback indicated.** Every gate exercising
+  the applied paths passes with a clean fault scan: fullchain 14/14 with
+  "svcmgr/portfilesrv fallback not used", retire 4/4, PTRINJ via exec-270 op 4
+  (80,40 consumed by genuine EWSRV), peer-kill via reinstalled exec 269.
+- Blockers: none from the svcmgr apply itself. Two external notes: (a)
+  `cp4_stress` needs one clean isolated re-run when the host is quiet (its 15 s
+  marker window flakes under concurrent QEMU + memory pressure — same pattern as
+  the d26fade authority-check flake); (b) the tree is still being mutated by
+  other agents (apply agent: `e32load.cpp` 19:38:53; winsrv agent: `wsdl.c`/
+  `user.mk` 19:52–53, which transiently breaks `make userland` on
+  `wsdl.elf`) — re-verify after those land.
 - Rollback point if ever needed: `/tmp/opencode/svcmgr_retire_backup_20261124_185621/`
   or `git show e29a072:<path>`.

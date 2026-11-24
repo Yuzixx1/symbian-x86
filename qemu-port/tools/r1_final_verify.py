@@ -63,6 +63,7 @@ Usage:
     python3 tools/r1_final_verify.py --strict-skip    # make SKIP fatal
 """
 import argparse
+import fcntl
 import os
 import re
 import shlex
@@ -72,6 +73,7 @@ import subprocess
 import sys
 import time
 from collections import namedtuple
+from contextlib import contextmanager, nullcontext
 
 PORT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(PORT, "tools")
@@ -84,6 +86,34 @@ LOG_KEEP_BYTES = 2 * 1024 ** 2              # keep the last 2 MB (verdict tail)
 BUILD_ISO = os.path.join(PORT, "build", "symbian-grub.iso")
 DOOM_ISO = "/tmp/opencode/r1_doom.iso"
 REBUILD_ISO_TIMEOUT = 300
+
+# Exclusive lock around the selfcheck gate (which runs r1_selftest.py, a QEMU
+# boot): only one selftest may run at a time across concurrent invocations.
+LOCK = "/tmp/opencode/r1_selftest.lock"
+
+
+@contextmanager
+def selftest_lock():
+    """flock the selftest; no-op when a parent already holds it.
+
+    A lock-holding parent exports R1_SELFTEST_LOCK_HELD=1, so the nested
+    r1_os_selfcheck.py / r1_selftest.py does not deadlock on the same file.
+    """
+    if os.environ.get("R1_SELFTEST_LOCK_HELD") == "1":
+        yield
+        return
+    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+    fh = open(LOCK, "a+")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        os.environ["R1_SELFTEST_LOCK_HELD"] = "1"   # inherited by children
+        print(f"== selftest lock acquired: {LOCK}", flush=True)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
 
 # name, script (relative to qemu-port), extra argv, timeout seconds
 Test = namedtuple("Test", "name script argv timeout")
@@ -310,23 +340,27 @@ def run_test(test, logdir, doom_build_own=False):
     rc = None
     timed_out = False
     error = None
-    with open(logpath, "w", errors="replace") as logf:
-        try:
-            proc = subprocess.Popen(
-                cmd, cwd=PORT, stdout=logf, stderr=subprocess.STDOUT,
-                start_new_session=True)
-        except OSError as exc:
-            error = f"could not start: {exc}"
-        else:
+    # The selfcheck contains the selftest (a QEMU boot): hold the exclusive
+    # selftest lock around it so only one selftest runs at a time.  The env
+    # handoff makes the lock a no-op in the nested r1_selftest.py.
+    with (selftest_lock() if test.name == "selfcheck" else nullcontext()):
+        with open(logpath, "w", errors="replace") as logf:
             try:
-                rc = proc.wait(timeout=test.timeout)
-            except subprocess.TimeoutExpired:
-                timed_out = True
+                proc = subprocess.Popen(
+                    cmd, cwd=PORT, stdout=logf, stderr=subprocess.STDOUT,
+                    start_new_session=True)
+            except OSError as exc:
+                error = f"could not start: {exc}"
+            else:
                 try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                proc.wait()
+                    rc = proc.wait(timeout=test.timeout)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait()
     elapsed = time.monotonic() - started
 
     # Rotate an oversized log before reading it, so verdict parsing never

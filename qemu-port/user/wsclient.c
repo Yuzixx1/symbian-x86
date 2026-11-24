@@ -307,3 +307,26 @@ uint32_t ws_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
     return ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
 }
+
+/* ---- E32 migration stubs (docs/WINSRV_MIGRATION_PLAN.md) ------------------
+ * The R1 shim window server has no set-title / set-size / screen-size op, so
+ * the old exec backend cannot answer these; the genuine EWSRV path
+ * (ws_e32_client.c) implements them over the CWsSession opcodes. */
+int ws_set_title(int wid, const char* title)
+{
+    (void)wid; (void)title;
+    return -1;
+}
+
+int ws_set_size(int wid, int w, int h)
+{
+    (void)wid; (void)w; (void)h;
+    return -1;
+}
+
+int ws_screen_size(int* w, int* h)
+{
+    if (w) *w = 0;
+    if (h) *h = 0;
+    return -1;
+}

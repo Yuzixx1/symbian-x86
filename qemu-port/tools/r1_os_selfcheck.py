@@ -14,6 +14,7 @@ Every step is reported as [PASS] or [FAIL] with a reason; the final line is
 OVERALL: PASS / OVERALL: FAIL.  The exit status is 0 only when every step
 passed.  Usage: python3 tools/r1_os_selfcheck.py
 """
+import fcntl
 import os
 import re
 import shlex
@@ -21,9 +22,38 @@ import signal
 import subprocess
 import sys
 import time
+from contextlib import contextmanager, nullcontext
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGDIR = "/tmp/opencode"
+# Exclusive lock around the selftest step (it boots QEMU): only one selftest
+# may run at a time, even across concurrent selfcheck/final-verify runs.
+LOCK = "/tmp/opencode/r1_selftest.lock"
+
+
+@contextmanager
+def selftest_lock():
+    """flock the selftest; no-op when a parent already holds it.
+
+    A lock-holding parent exports R1_SELFTEST_LOCK_HELD=1, so the nested
+    r1_selftest.py (and this step, if re-entered under it) does not deadlock
+    on the same lock file.
+    """
+    if os.environ.get("R1_SELFTEST_LOCK_HELD") == "1":
+        yield
+        return
+    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+    fh = open(LOCK, "a+")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        os.environ["R1_SELFTEST_LOCK_HELD"] = "1"   # inherited by children
+        print(f"== selftest lock acquired: {LOCK}", flush=True)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
 
 BANNER = "EKA2 PC OS — single-command selfcheck"
 
@@ -65,31 +95,35 @@ def run_step(name, cmd, timeout):
     """Run one command in its own process group; return (ok, reason, elapsed)."""
     print(f"== RUN {name}: {shlex.join(cmd)}  (timeout {timeout}s)", flush=True)
     started = time.monotonic()
-    try:
-        proc = subprocess.Popen(
-            cmd, cwd=ROOT,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, errors="replace", start_new_session=True,
-        )
-    except OSError as exc:
-        return False, f"could not start command: {exc}", time.monotonic() - started
-
-    timed_out = False
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        # Kill the whole process group so no QEMU/timeout grandchildren survive.
+    # The selftest boots QEMU; serialize it with the exclusive selftest lock
+    # so concurrent selfchecks cannot truncate each other's artifacts.
+    with (selftest_lock() if name == "selftest" else nullcontext()):
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        out, _ = proc.communicate()
+            proc = subprocess.Popen(
+                cmd, cwd=ROOT,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors="replace", start_new_session=True,
+            )
+        except OSError as exc:
+            return False, f"could not start command: {exc}", time.monotonic() - started
+
+        timed_out = False
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            # Kill the whole process group so no QEMU/timeout grandchildren survive.
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            out, _ = proc.communicate()
     elapsed = time.monotonic() - started
     rc = proc.returncode
 
-    # Keep the full output for post-mortem debugging.
-    logpath = os.path.join(LOGDIR, f"r1_os_selfcheck_{name}.log")
+    # Keep the full output for post-mortem debugging.  Per-PID filename so
+    # two concurrent selfchecks never overwrite each other's step logs.
+    logpath = os.path.join(LOGDIR, f"r1_os_selfcheck_{os.getpid()}_{name}.log")
     try:
         with open(logpath, "w", errors="replace") as fh:
             fh.write(out)

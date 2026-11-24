@@ -122,9 +122,10 @@ void CWsServer::New()
 	__ASSERT_ALWAYS(pS!=NULL,Fault(ECreateServer));
 	pS->SetPinClientDescriptors(EFalse);
 	RDebug::Printf("EWSRV-DBG: before Start(%S)\r\n",&KE32WindowServer);
-	// Port ABI: _L("...") builds a proper 2-byte TPtrC16; the _LIT macro
-	// (KE32WindowServer) emits 4-byte chars under g++ -m32 here, which the
-	// kernel rejects with KErrBadName.  Same genuine literal, sound encoding.
+	// Port ABI: the image is built with -fshort-wchar, so _L("...") and the
+	// _LIT macro (KE32WindowServer) both emit proper 2-byte UTF-16 TText
+	// matching prebuilt EUSER.DLL; without the flag g++ -m32 would store
+	// 4-byte chars and the kernel would reject the name (KErrBadName).
 	TInt r=pS->Start(_L("!E32WindowServer"));
 	RDebug::Printf("EWSRV-DBG: Start r=%d\r\n",r);
 	__ASSERT_ALWAYS(r==KErrNone,Fault(EStartServer));

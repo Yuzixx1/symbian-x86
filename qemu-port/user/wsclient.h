@@ -73,4 +73,15 @@ unsigned char* ws_content(int wid);      /* private pixel buffer base         */
 int      ws_window_geom(int wid, int* x, int* y, int* w, int* h);
 int      ws_server_ready(void);           /* server_pid published?             */
 
+/* ---- E32/EWSRV migration additions (docs/WINSRV_MIGRATION_PLAN.md) --------
+ * Implemented genuinely by ws_e32_client.c over the CWsSession opcodes of the
+ * genuine EWSRV (EConsoleSetTitle / EConsoleSetSize / EConsoleScreenSize).
+ * The old exec-based wsclient.c answers these with -1: the R1 shim window
+ * server has no set-title / set-size / screen-size op.  On the E32 path w/h
+ * are character cells (the genuine console window is sized in cells, exactly
+ * like RConsole::Init in ewsrv/co_cli.cpp). */
+int  ws_set_title(int wid, const char* title);
+int  ws_set_size(int wid, int w, int h);
+int  ws_screen_size(int* w, int* h);
+
 #endif /* QPORT_WSCLIENT_H */

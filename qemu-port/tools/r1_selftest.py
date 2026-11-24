@@ -10,17 +10,28 @@ kernel panic.  Exits 0 only if every check passes.
 Usage: python3 tools/r1_selftest.py [--no-rebuild-disk] [--log PATH]
 """
 import argparse
+import fcntl
 import os
 import shlex
 import shutil
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DISK = "/tmp/opencode/r1_selftest.img"
-FS = "/tmp/opencode/r1_selftest_fs.img"
-LOG = "/tmp/opencode/r1_selftest.log"
+# Per-run (per-PID) paths: concurrent selfcheck/final-verify runs must never
+# share or truncate each other's disk images or serial log (see
+# docs/SELFTEST_MARKER_REGRESSION.md).
+RUNDIR = f"/tmp/opencode/r1_selftest_{os.getpid()}"
+DISK = os.path.join(RUNDIR, "r1_selftest.img")
+FS = os.path.join(RUNDIR, "r1_selftest_fs.img")
+LOG = os.path.join(RUNDIR, "r1_selftest.log")
+# Exclusive lock so only one selftest runs at a time.
+LOCK = "/tmp/opencode/r1_selftest.lock"
+# QEMU prints this line itself when `timeout` SIGTERMs it; its presence means
+# the redirected serial log is complete.
+TERMINATOR = "terminating on signal"
 KERNEL = os.path.join(ROOT, "build/kernfull.elf")
 E32 = os.path.join(ROOT, "build/user/SELFTEST.E32")
 DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
@@ -44,6 +55,31 @@ MARKERS = [
 EXC_KEYS = ("Exc ", "PanicKernExec")
 
 
+@contextmanager
+def selftest_lock():
+    """Exclusive flock so only one selftest runs at a time.
+
+    A parent harness (r1_os_selfcheck.py / r1_final_verify.py) that already
+    holds the lock exports R1_SELFTEST_LOCK_HELD=1; in that case this is a
+    no-op so a nested r1_selftest.py never deadlocks on the same lock file.
+    """
+    if os.environ.get("R1_SELFTEST_LOCK_HELD") == "1":
+        yield
+        return
+    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+    fh = open(LOCK, "a+")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        os.environ["R1_SELFTEST_LOCK_HELD"] = "1"   # inherited by children
+        print(f"== selftest lock acquired: {LOCK}", flush=True)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
+
+
 def sh(*args, **kw):
     print("+", " ".join(shlex.quote(a) for a in args))
     return subprocess.run(args, **kw)
@@ -55,6 +91,7 @@ def scan_exceptions(text):
 
 
 def build_disk():
+    os.makedirs(RUNDIR, exist_ok=True)
     for path in (DISK, FS):
         if os.path.exists(path):
             os.remove(path)
@@ -108,12 +145,19 @@ def run_qemu(log):
     print("== QEMU (90s cap), feeding 'selftest' ==")
     r = subprocess.run(["bash", "-c", cmd], check=False)
     print(f"qemu wrapper exit: {r.returncode} (124 == timeout expected)")
-    time.sleep(1.0)   # let timeout's SIGTERM flush redirected serial stdio
-    try:
-        with open(log, "r", errors="replace") as f:
-            return f.read()
-    except FileNotFoundError:
-        return ""
+    # Serial stdio can lag the wrapper's exit: re-read the log until QEMU's
+    # own terminating line shows up (or a short grace deadline passes)
+    # instead of trusting one fixed-delay snapshot.
+    deadline = time.monotonic() + 10.0
+    while True:
+        try:
+            with open(log, "r", errors="replace") as f:
+                text = f.read()
+        except FileNotFoundError:
+            text = ""
+        if TERMINATOR in text or time.monotonic() >= deadline:
+            return text
+        time.sleep(0.25)
 
 
 def main():
@@ -124,10 +168,18 @@ def main():
     for tool in ("qemu-system-i386", "mkfs.fat", "mcopy", "mdir", "timeout"):
         if not shutil.which(tool):
             sys.exit(f"missing tool: {tool}")
-    if not (args.no_rebuild_disk and os.path.exists(DISK)):
-        build_disk()
-
-    text = run_qemu(args.log)
+    os.makedirs(RUNDIR, exist_ok=True)
+    with selftest_lock():
+        if not (args.no_rebuild_disk and os.path.exists(DISK)):
+            build_disk()
+        text = run_qemu(args.log)
+    # Keep the per-PID log for post-mortem; drop the bulky images so repeated
+    # runs do not fill the log filesystem.
+    for path in (DISK, FS):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
     ok = True
     pos = [text.find(m) for m in MARKERS]

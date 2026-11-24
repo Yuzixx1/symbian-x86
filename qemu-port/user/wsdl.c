@@ -1,23 +1,73 @@
 /*
- * wsdl.c -- WINDOWED CALCULATOR client for the R1 window server.
+ * wsdl.c -- WINDOWED CALCULATOR client, WINSRV_MIGRATION_PLAN chunk A pilot:
+ * linked against ws_e32_client.c (NOT the old exec-based wsclient.c), so the
+ * session + window come from the GENUINE EWSRV over RSessionBase PE2 imports
+ * (EUSER.DLL ordinals 211/1547/120/915; IAT slots 0x408000-0x40800c seeded by
+ * --defsym and packed by genuine/pack_multi.py, the WSE32TEST pattern).
  *
  * This is a real client E32, not a screen-taking full-frame app: it opens ONE
- * window with ws_window_create(), paints its display + 20-key keypad into that
- * window's private content buffer, and services mouse/key events from
- * ws_get_event() until the user closes it.  The long-lived WINSRV compositor
- * keeps the desktop (and this window) painted while we run.
+ * console window with ws_window_create() (on the E32 path w/h are CHARACTER
+ * CELLS, genuine RConsole::Init semantics), paints its display + 20-key keypad
+ * through the ws_* draw calls (STUBS in this chunk -- pixel drawing over
+ * RWindow/GC is the next chunk), and polls ws_get_event().  The event read is
+ * STUBBED to "no event" here (genuine-EWSRV input injection is the pending
+ * chunk); the deterministic demo self-drive below still drives the full
+ * key/click handler locally.  No winsrv execs (271/272/273) remain.
  *
  * Serial markers ride the genuine PE2 import of EUSER.DLL ordinal 915
- * (RDebug::Printf); IAT slot wsdl_printf_slot lives at 0x408000.
+ * (RDebug::Printf); IAT slot ws_e32_iat_printf lives at 0x40800c.
  */
 #include "runtime.h"
-#include "wsclient.h"
 
-extern void (*wsdl_printf_slot)(const char*);
+/* Self-contained decls (the retired winsrv shim client header is gone):
+ * fixed-width types, the client colour constants, the event record + WSE_*
+ * codes, and the ws_* API prototypes implemented by the linked
+ * ws_e32_client.c translation unit. */
+#if !defined(__cplusplus)
+typedef unsigned int       uint32_t;
+typedef unsigned short     uint16_t;
+typedef unsigned char      uint8_t;
+#endif
+#define WSC_BLACK        0x00000000u
+#define WSC_NAVY         0x00000080u
+#define WSC_BLUE         0x000060A0u
+#define WSC_TITLEBAR     0x000080C0u
+#define WSC_CYAN         0x0000C0C0u
+#define WSC_GREEN        0x0000FF00u
+#define WSC_YELLOW       0x00FFFF00u
+#define WSC_WHITE        0x00FFFFFFu
+#define WSC_GRAY         0x00808080u
+#define WSC_LIGHTGRAY    0x00C0C0C0u
+#define WSC_RED          0x00FF3020u
+#define WSE_MOVE  1u
+#define WSE_DOWN  2u
+#define WSE_UP    3u
+#define WSE_KEY   4u
+#define WS_CONTENT_W  320u    /* retired shim window content geometry */
+#define WS_CONTENT_H  200u
+struct ws_event
+    {
+    volatile unsigned int type;
+    volatile int x, y;
+    volatile unsigned int key;
+    volatile int target_wid;
+    };
+int  ws_open(void);
+int  ws_window_create(int x, int y, int w, int h, const char* title);
+int  ws_window_geom(int wid, int* x, int* y, int* w, int* h);
+void ws_fill(int wid, int x, int y, int w, int h, uint32_t color);
+void ws_text(int wid, int x, int y, const char* s, uint32_t fg);
+void ws_button(int wid, int x, int y, int w, int h,
+                const char* label, int hover);
+void ws_present(int wid);
+int  ws_get_event(struct ws_event* e);
+void ws_close(void);
+
+extern unsigned ws_e32_iat_printf;   /* 0x40800c, ord 915 via pack_multi */
 
 static void marker(const char* text)
 {
-    unsigned fn = *(unsigned*)(void*)&wsdl_printf_slot;
+    unsigned fn = *(unsigned*)&ws_e32_iat_printf;
     if (fn != 915u && fn != 0u)
         ((void (*)(const char*))fn)(text);   /* EUSER.DLL ordinal 915 */
     print(text);                              /* DebugPrint fallback   */
@@ -149,6 +199,12 @@ static int dc_eval(const char* e, int* value)
 #define WIN_W     ((int)WS_CONTENT_W)
 #define WIN_H     ((int)WS_CONTENT_H)
 
+/* E32 path: ws_e32_client's ws_window_create() takes character cells, not
+ * pixels (genuine RConsole::Init semantics); 40x13 cells ~ 320x208 px at the
+ * 8x16 glyph cell.  WIN_W/WIN_H above stay as the (stubbed) pixel layout. */
+#define WDL_CELLS_W  40
+#define WDL_CELLS_H  13
+
 #define KX_OFF    7
 #define KY_OFF    64
 #define KEY_W     72
@@ -226,9 +282,9 @@ static void draw_frame(int wid, const char* expr,
         key_rect(0, 0, i, &x, &y, &w, &h);
         ws_button(wid, x, y, w, h, kLabel[i], hover == i);
         }
-    /* The server now blits the whole 320x200 content buffer through RLE
-     * GC_RECT display lists, so no block-origin stamping is needed -- every
-     * button, glyph and display pixel reaches the composited desktop. */
+    /* CHUNK A: ws_fill/ws_text/ws_button/ws_present are no-op stubs on the
+     * E32 path (pixel drawing over RWindow/GC is the next chunk); the frame
+     * is still announced so the host sees the client alive. */
     ws_present(wid);
 }
 
@@ -288,10 +344,8 @@ static void event_marker(unsigned type, int x, int y)
 /* ---- event targeting ----------------------------------------------------- */
 /* Every ring event carries the id of the window it was aimed at (-1/0 =
  * broadcast).  WSDL owns exactly one window: acting on an event aimed at
- * WINSRV or another client is what made our composited window vanish when the
- * harness sent ESC to the server.  The wsclient console fallback also stamps
- * our own window id on bytes it steals from PortCon, so a targeting filter
- * alone cannot catch that path -- see the ESC long-press guard in app_main. */
+ * another client is what made our composited window vanish when the harness
+ * sent ESC to the server -- see the ESC long-press guard in app_main. */
 static int event_for_me(int wid, const struct ws_event* e)
 {
     return e->target_wid == wid || e->target_wid == -1 || e->target_wid == 0;
@@ -320,7 +374,7 @@ int app_main(void)
     char line[160];
     char expr[32], result[24];
     int wid, rc, i, idx, key, hover = -1, dirty = 1;
-    int quit = 0, just_eval = 0, polls, demo = 0, esc_run = 0;
+    int quit = 0, just_eval = 0, polls, demo = 0, esc_run = 0, stub_reported = 0;
 
     expr[0] = 0;
     result[0] = 0;
@@ -336,7 +390,7 @@ int app_main(void)
         return 1;
         }
 
-    wid = ws_window_create(80, 60, WIN_W, WIN_H, "WSDL Calculator");
+    wid = ws_window_create(80, 60, WDL_CELLS_W, WDL_CELLS_H, "WSDL Calculator");
     if (wid < 0)
         {
         marker("WDL: FAIL window create");
@@ -369,7 +423,18 @@ int app_main(void)
             have = 1;
             }
         else
+            {
             have = ws_get_event(&e);
+            if (!have && !stub_reported)
+                {
+                /* CHUNK A: the old winsrv event ring (execs 271/272/273 via
+                 * wsclient.c) is gone; ws_e32_client's ws_get_event() is a
+                 * stub returning "no event" until the genuine-EWSRV input
+                 * injection chunk lands.  Report it once, keep polling. */
+                stub_reported = 1;
+                marker("WDL: EVENT RING STUBBED (ws_get_event=0; input injection pending)");
+                }
+            }
 
         /* Input aimed at another window (typically the ESC that quits WINSRV)
          * must never reach this client, or we would destroy our own window. */

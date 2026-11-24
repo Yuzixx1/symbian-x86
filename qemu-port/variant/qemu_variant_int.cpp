@@ -11,6 +11,9 @@
 
 #include <x86.h>
 #include <nk_priv.h>
+#include <kernel/kernel.h>       // Kern::AddEvent, Kern::DfcQue0, TRawEvent (e32event.h)
+#include <kernel/kern_priv.h>    // K::EventThread / K::EventHeadPtr / K::EventTailPtr
+#include <e32keys.h>             // genuine TStdScanCode (EStdKey*) values
 #include "qemu_variant.h"
 
 static inline void Out8(unsigned short aPort, unsigned char aVal)
@@ -226,6 +229,317 @@ extern "C" void QemuTickIsr(TAny* /*aPtr*/)
     q->Tick();
     }
 
+// --- Genuine EWSRV raw-input bridge -----------------------------------------
+// PS/2 ISRs -> genuine EKA2 kernel event queue -> genuine EWSRV CEvent::RunL.
+// Design mirrors the genuine interrupt-driven keyboard driver
+// (kernelhwsrv bsptemplate .../keyboard_interrupt.cpp): the ISR only queues a
+// DFC, and the DFC (thread context, kernel unlocked, interrupts on) calls the
+// public Kern::AddEvent API — never from ISR context, whose preconditions
+// (eventq.cpp: "call in a thread context", "interrupts enabled") forbid it.
+//
+// Gate: \KBINJ.TXT on the boot FAT volume, resolved once from QemuKbdArm() at
+// shell time (FAT is mounted only after Asic::Init3's FatMount).  Content
+// selects the source mask ("ptr"=pointer only, "key"=keyboard only, else both);
+// absent file => gate OFF => the ws-ring path is unchanged.
+namespace
+    {
+    const TUint kInjRingSize = 16;
+    struct InjEnt
+        {
+        TRawEvent iEv;   // full genuine-layout event copy
+        TInt iAux;       // key: TStdScanCode; pointer: (x<<16)|(y&0xffff); button: bit<<8|down
+        };
+    volatile TUint gInjHead = 0, gInjTail = 0;   // SPSC ring: ISR=producer, DFC=consumer
+    InjEnt gInjRing[kInjRingSize];
+    volatile TUint gInjQueued = 0, gInjDelivered = 0, gInjDropped = 0;
+    // Gate mask: 0=off (or unresolved), bit0=pointer ISR, bit1=keyboard ISR.
+    // 0x80000000 flag = unresolved (no volume yet at Init3); resolved once a
+    // FAT volume is mounted (shell-time QemuKbdArm).
+    volatile TUint gInjGate = 0x80000000u;
+    volatile TBool gInjDfcQueued = EFalse;
+
+    void KbdInjDfcFn(TAny*);
+    TDfc gInjDfc(KbdInjDfcFn, 0, 1);             // priority 1 < KNumDfcPriorities => real DFC
+
+    // TRawEvent's payload fields are protected; a local subclass initialises
+    // them through the genuine <e32event.h> layout (same trick as the pointer
+    // bridge's TPointerRawEvent in qemu_display.cpp — no magic offsets, no
+    // #define protected public, no kernel patch).
+    struct TPortRawEvent : public TRawEvent
+        {
+        void SetKey(TType aType, TInt aStdScanCode)
+            {
+            iType = (TUint8)aType;
+            iTip = 0;
+            iPointerNumber = 0;
+            iDeviceNumber = 1;        // DeviceNumber() == iDeviceNumber-1 == 0
+            iTicks = Kern::TickCount();
+            iU.key.scanCode = aStdScanCode;
+            iU.key.repeats = 0;
+            }
+        void SetPointer(TType aType, TInt aX, TInt aY)
+            {
+            iType = (TUint8)aType;
+            iTip = 0;
+            iPointerNumber = 0;
+            iDeviceNumber = 1;
+            iTicks = Kern::TickCount();
+            iU.pos.x = aX;             // button events carry Pos() in EWSRV's RunL
+            iU.pos.y = aY;
+            }
+        };
+
+    // ISR-safe push into the ring + queue the DFC (TDfc::Add is ISR-safe).
+    // aKindBit is the gate bit for this event source (1=pointer, 2=keyboard).
+    void InjPush(const TRawEvent& aEv, TInt aAux, TUint aKindBit)
+        {
+        if (!(gInjGate & aKindBit))
+            return;
+        TUint h = gInjHead;
+        TUint n = (h + 1) % kInjRingSize;
+        if (n == (TUint)gInjTail)
+            { ++gInjDropped; return; }          // ring full: drop, never block in ISR
+        gInjRing[h].iEv = aEv;
+        gInjRing[h].iAux = aAux;
+        gInjHead = n;                            // x86 TSO: entry store precedes head store
+        ++gInjQueued;
+        if (gInjDfcQueued)
+            gInjDfc.Add();
+        }
+
+    // DFC: thread context on Kern::DfcQue0()'s thread.  Wrap Kern::AddEvent in
+    // ThreadEnterCS exactly like the genuine ExecHandler::AddEvent wrapper
+    // (eventq.cpp:67-69); the rest of the preconditions (thread context, kernel
+    // unlocked, interrupts enabled, no fast mutex held) already hold for a DFC.
+    void KbdInjDfcFn(TAny*)
+        {
+        for (;;)
+            {
+            TUint t = gInjTail;
+            if (t == (TUint)gInjHead)
+                break;
+            InjEnt e = gInjRing[t];
+            gInjTail = (t + 1) % kInjRingSize;
+            TRawEvent* tailBefore = K::EventTailPtr;
+            DThread* evtThread = K::EventThread;
+            NKern::ThreadEnterCS();
+            TInt add = Kern::AddEvent(e.iEv);
+            NKern::ThreadLeaveCS();
+            ++gInjDelivered;
+            // consumed=1 <=> K::TryDeliverEvent handed this event to the pending
+            // K::EventRequest, i.e. genuine EWSRV's UserSvr::RequestEvent -> RunL.
+            TBool consumed = K::EventTailPtr != tailBefore;
+            const char* nm = "?";
+            switch (e.iEv.Type())
+                {
+                case TRawEvent::EKeyDown:      nm = "EKeyDown"; break;
+                case TRawEvent::EKeyUp:        nm = "EKeyUp"; break;
+                case TRawEvent::EPointerMove:  nm = "EPointerMove"; break;
+                case TRawEvent::EButton1Down:  nm = "EButton1Down"; break;
+                case TRawEvent::EButton1Up:    nm = "EButton1Up"; break;
+                case TRawEvent::EButton2Down:  nm = "EButton2Down"; break;
+                case TRawEvent::EButton2Up:    nm = "EButton2Up"; break;
+                case TRawEvent::EButton3Down:  nm = "EButton3Down"; break;
+                case TRawEvent::EButton3Up:    nm = "EButton3Up"; break;
+                default: break;
+                }
+            if (e.iEv.Type() == TRawEvent::EKeyDown || e.iEv.Type() == TRawEvent::EKeyUp)
+                KPrintf("KBINJ: %s std=0x%02x add=%d consumed=%d evtThread=%x head=%x tail=%x\r\n",
+                        nm, (unsigned)(e.iAux & 0xFFu), add, (TInt)consumed,
+                        (TUint)evtThread, (TUint)K::EventHeadPtr, (TUint)K::EventTailPtr);
+            else
+                KPrintf("KBINJ: %s aux=%d add=%d consumed=%d evtThread=%x head=%x tail=%x\r\n",
+                        nm, e.iAux, add, (TInt)consumed,
+                        (TUint)evtThread, (TUint)K::EventHeadPtr, (TUint)K::EventTailPtr);
+            }
+        }
+
+    // PS/2 set-1 scancode -> genuine TStdScanCode (<e32keys.h>).  Letters and
+    // digits map to their ASCII codes exactly like the genuine bsptemplate
+    // convertCode tables do; everything else uses the EStdKey* enum, so there
+    // are no magic numbers.  aSc is the full byte (break bit included); the
+    // returned value is the same for make and break — the caller picks
+    // EKeyDown/EKeyUp from the break bit, as a genuine driver does.
+    TInt KbdStdScancode(TBool aExt, TUint aSc)
+        {
+        TUint mk = aSc & 0x7Fu;
+        if (aExt)
+            {
+            switch (mk)
+                {
+                case 0x1C: return EStdKeyNkpEnter;
+                case 0x1D: return EStdKeyRightCtrl;
+                case 0x35: return EStdKeyNkpForwardSlash;
+                case 0x37: return EStdKeyPrintScreen;
+                case 0x38: return EStdKeyRightAlt;
+                case 0x47: return EStdKeyHome;
+                case 0x48: return EStdKeyUpArrow;
+                case 0x49: return EStdKeyPageUp;
+                case 0x4B: return EStdKeyLeftArrow;
+                case 0x4D: return EStdKeyRightArrow;
+                case 0x4F: return EStdKeyEnd;
+                case 0x50: return EStdKeyDownArrow;
+                case 0x51: return EStdKeyPageDown;
+                case 0x52: return EStdKeyInsert;
+                case 0x53: return EStdKeyDelete;
+                case 0x5B: return EStdKeyLeftFunc;
+                case 0x5C: return EStdKeyRightFunc;
+                case 0x5D: return EStdKeyMenu;
+                default: return 0;
+                }
+            }
+        switch (mk)
+            {
+            case 0x01: return EStdKeyEscape;
+            case 0x02: return '1';  case 0x03: return '2';  case 0x04: return '3';
+            case 0x05: return '4';  case 0x06: return '5';  case 0x07: return '6';
+            case 0x08: return '7';  case 0x09: return '8';  case 0x0A: return '9';
+            case 0x0B: return '0';
+            case 0x0C: return EStdKeyMinus;
+            case 0x0D: return EStdKeyEquals;
+            case 0x0E: return EStdKeyBackspace;
+            case 0x0F: return EStdKeyTab;
+            case 0x10: return 'Q';  case 0x11: return 'W';  case 0x12: return 'E';
+            case 0x13: return 'R';  case 0x14: return 'T';  case 0x15: return 'Y';
+            case 0x16: return 'U';  case 0x17: return 'I';  case 0x18: return 'O';
+            case 0x19: return 'P';
+            case 0x1A: return EStdKeySquareBracketLeft;
+            case 0x1B: return EStdKeySquareBracketRight;
+            case 0x1C: return EStdKeyEnter;
+            case 0x1D: return EStdKeyLeftCtrl;
+            case 0x1E: return 'A';  case 0x1F: return 'S';  case 0x20: return 'D';
+            case 0x21: return 'F';  case 0x22: return 'G';  case 0x23: return 'H';
+            case 0x24: return 'J';  case 0x25: return 'K';  case 0x26: return 'L';
+            case 0x27: return EStdKeySemiColon;
+            case 0x28: return EStdKeySingleQuote;
+            case 0x29: return EStdKeyXXX;
+            case 0x2A: return EStdKeyLeftShift;
+            case 0x2B: return EStdKeyBackSlash;
+            case 0x2C: return 'Z';  case 0x2D: return 'X';  case 0x2E: return 'C';
+            case 0x2F: return 'V';  case 0x30: return 'B';  case 0x31: return 'N';
+            case 0x32: return 'M';
+            case 0x33: return EStdKeyComma;
+            case 0x34: return EStdKeyFullStop;
+            case 0x35: return EStdKeyForwardSlash;
+            case 0x36: return EStdKeyRightShift;
+            case 0x38: return EStdKeyLeftAlt;
+            case 0x39: return EStdKeySpace;
+            case 0x3A: return EStdKeyCapsLock;
+            case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F:
+            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44:
+                return EStdKeyF1 + (TInt)(mk - 0x3B);   // F1..F10 are contiguous
+            case 0x45: return EStdKeyNumLock;
+            case 0x46: return EStdKeyScrollLock;
+            case 0x47: return EStdKeyNkp7;  case 0x48: return EStdKeyNkp8;
+            case 0x49: return EStdKeyNkp9;
+            case 0x4A: return EStdKeyNkpMinus;
+            case 0x4B: return EStdKeyNkp4;  case 0x4C: return EStdKeyNkp5;
+            case 0x4D: return EStdKeyNkp6;
+            case 0x4E: return EStdKeyNkpPlus;
+            case 0x4F: return EStdKeyNkp1;  case 0x50: return EStdKeyNkp2;
+            case 0x51: return EStdKeyNkp3;
+            case 0x52: return EStdKeyNkp0;
+            case 0x53: return EStdKeyNkpFullStop;
+            case 0x57: return EStdKeyF11;
+            case 0x58: return EStdKeyF12;
+            default: return 0;
+            }
+        }
+    }  // namespace
+
+void QemuEwsrvPushKey(TBool aDown, TUint aStdScanCode)
+    {
+    TPortRawEvent ev;
+    ev.SetKey(aDown ? TRawEvent::EKeyDown : TRawEvent::EKeyUp, (TInt)aStdScanCode);
+    InjPush(ev, (TInt)aStdScanCode, 2u);
+    }
+
+void QemuEwsrvPushPointerMove(TInt aX, TInt aY)
+    {
+    TPortRawEvent ev;
+    ev.SetPointer(TRawEvent::EPointerMove, aX, aY);
+    InjPush(ev, (aX << 16) | (aY & 0xFFFF), 1u);
+    }
+
+void QemuEwsrvPushButton(TUint aPs2ButtonBit, TBool aDown, TInt aX, TInt aY)
+    {
+    // PS/2 flag bits: 1=left -> EButton1, 2=right -> EButton2, 4=middle -> EButton3
+    TRawEvent::TType t;
+    if (aPs2ButtonBit == 1u)      t = aDown ? TRawEvent::EButton1Down : TRawEvent::EButton1Up;
+    else if (aPs2ButtonBit == 2u) t = aDown ? TRawEvent::EButton2Down : TRawEvent::EButton2Up;
+    else                          t = aDown ? TRawEvent::EButton3Down : TRawEvent::EButton3Up;
+    TPortRawEvent ev;
+    ev.SetPointer(t, aX, aY);
+    InjPush(ev, (TInt)((aPs2ButtonBit << 8) | (aDown ? 1u : 0u)), 1u);
+    }
+
+TBool QemuInjGateActive()
+    {
+    return (gInjGate & 3u) != 0;
+    }
+
+TUint QemuInjGateMask()
+    {
+    return gInjGate & 3u;
+    }
+
+TUint QemuInjStats(TUint& aQueued, TUint& aDelivered, TUint& aDropped)
+    {
+    aQueued = gInjQueued;
+    aDelivered = gInjDelivered;
+    aDropped = gInjDropped;
+    return gInjQueued;
+    }
+
+// Resolve the \KBINJ.TXT gate + hook the DFC to Kern::DfcQue0().  Called from
+// QemuKbdArm(): first at Asic::Init3 (before FatMount, so no volume yet — the
+// gate stays unresolved and is resolved by the shell-time call), then from
+// ShellMain / `kbd arm` once C: is mounted.  File content selects the source
+// mask: "ptr" -> pointer only (1), "key" -> keyboard only (2), anything else
+// -> both (3); absent file -> 0 (OFF).
+void QemuKbdInjArm()
+    {
+    if (!gInjDfcQueued && Kern::DfcQue0())
+        {
+        gInjDfc.SetDfcQ(Kern::DfcQue0());   // exists only after K::Init3
+        gInjDfcQueued = ETrue;
+        }
+    if ((gInjGate & 0x80000000u) && FatCurLetter())
+        {
+        TUint8 buf[32];
+        TUint got = 0;
+        for (TUint i = 0; i < sizeof(buf); ++i) buf[i] = 0;
+        char prev = FatCurLetter();
+        if (!prev) FatUse('C');
+        TInt r = FatReadPath("\\KBINJ.TXT", buf, sizeof(buf), got);
+        if (prev) FatUse(prev);
+        TUint mask = 0;
+        if (r == KErrNone && got > 0)
+            {
+            // lowercase copy for the content match
+            TUint8 lb[32];
+            for (TUint i = 0; i < got && i < sizeof(lb); ++i)
+                {
+                TUint8 c = buf[i];
+                lb[i] = (c >= 'A' && c <= 'Z') ? (TUint8)(c + 32) : c;
+                }
+            TBool hasPtr = EFalse, hasKey = EFalse;
+            for (TUint i = 0; i + 2 < got; ++i)
+                {
+                if (lb[i] == 'p' && lb[i+1] == 't' && lb[i+2] == 'r') hasPtr = ETrue;
+                if (lb[i] == 'k' && lb[i+1] == 'e' && lb[i+2] == 'y') hasKey = ETrue;
+                }
+            if (hasPtr && !hasKey) mask = 1u;
+            else if (hasKey && !hasPtr) mask = 2u;
+            else mask = 3u;
+            }
+        gInjGate = mask;
+        KPrintf("KBINJ: genuine EWSRV input bridge gate %s mask=%u "
+                "(\\KBINJ.TXT r=%d got=%u; 1=ptr 2=key)\r\n",
+                mask ? "ON" : "OFF", mask, r, got);
+        }
+    }
+
 // --- PS/2 keyboard ISR: Set-1 decode into the shell ring (kern_shell.cpp) ---
 extern "C" void QemuKbdPush(char aC);  // kern_shell.cpp (shared input ring)
 
@@ -262,7 +576,16 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         unsigned char sc = In8(0x60);
         ++gKbdScancodes;
         if (sc == 0xE0) { sE0 = 1; continue; }
-        if (sE0) { sE0 = 0; continue; }
+        TBool ext = sE0; sE0 = 0;
+        // Genuine EWSRV input bridge: every decoded scancode (including
+        // E0-extended keys, which have no shell ASCII entry) also becomes a
+        // TRawEvent(EKeyDown/EKeyUp, TStdScanCode) queued for the kernel event
+        // queue.  No-op unless the \KBINJ.TXT gate is ON.
+        TInt std = KbdStdScancode(ext, sc);
+        if (std)
+            QemuEwsrvPushKey((sc & 0x80u) == 0u, (TUint)std);
+        if (ext)
+            continue;   // extended keys were always skipped for the shell ring
         if (sc == 0x2A || sc == 0x36) { sShift = 1; continue; }
         if (sc == 0xAA || sc == 0xB6) { sShift = 0; continue; }
         // Set-1 break scancodes have bit 7 set; the matching make scancode is
@@ -357,6 +680,10 @@ extern "C" void QemuKbdArm()
     Interrupt::Bind(1, QemuKbdIsr, 0);
     Interrupt::Clear(1);                    // drop stale request/in-service
     QemuIrq::Enable(1);                     // read-modify-write: spares IRQs 0/4
+    // Genuine EWSRV input bridge: hook the drain DFC to Kern::DfcQue0() (exists
+    // after K::Init3) and resolve the \KBINJ.TXT gate once a volume is mounted
+    // (at Init3 FAT is not mounted yet; the shell-time call resolves it).
+    QemuKbdInjArm();
     }
 
 extern "C" void QemuKbdStats(TUint& aIsrCount, TUint& aScancodes, TUint& aKeys,

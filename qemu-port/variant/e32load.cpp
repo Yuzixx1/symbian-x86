@@ -1058,11 +1058,12 @@ TInt E32Run(const TUint8* aFileBuf, TUint aFileLen, const char* aName,
     return r;
     }
 
-// Kill a user process by container id (shell `kill`, exec 269). Refuse the
-// kernel process and the caller's own process by object identity (pointer
-// comparison, not numeric id). exec 269 is reachable from ring 3 (KILLPROC),
-// so a user process passing the kernel's pid must not be able to Die() ekern:
-// the self-only check used to let that through and fault the kernel.
+// Kill a user process by container id (shell `kill`, exec 269 — bound to
+// PortKillExec by PortTrapExecInstall). Refuse the kernel process and the
+// caller's own process by object identity (pointer comparison, not numeric
+// id). exec 269 is reachable from ring 3 (KILLPROC), so a user process
+// passing the kernel's pid must not be able to Die() ekern: the self-only
+// check used to let that through and fault the kernel.
 // Locking mirrors OpenById (sexec.cpp): Open under the container lock,
 // release it, then Die (container+process nesting faults otherwise).
 TUint E32LastPid()
@@ -1264,8 +1265,8 @@ extern const TUint32 EpocSlowExecTable[];
 namespace { TUint8 sSvcImg[512 * 1024]; }  // fit large E32s (DOOM ~338 KiB) + margin
 
 // exec 270: ctl(op, arg) — op 2: FBO_FBINFO; op 3: FBO_FBBLIT; op 4: PTRINJ
-// sink.  Ops 0/1 (dead/reap) and launch/kill slots 268/269 retired with
-// svcmgr; the genuine estart/ewsrv/eshell chain supervises processes now.
+// sink.  Ops 0/1 (dead/reap) and launch slot 268 stay retired with svcmgr;
+// kill slot 269 is reinstalled by PortTrapExecInstall (cp4 peer kill).
 static TInt PortCtlExec(TInt aOp, TInt aArg)
     {
     // Append-only capability: bulk framebuffer blit / info.  These are new
@@ -1374,6 +1375,75 @@ static TInt PortFsRegisterThread(TInt aUnused)
     return r;
     }
 
+// exec 269: kill(pid, 0) -> E32Kill result.  Restored for cp4_stress:
+// user/killproc.c does exec2(269, pid, 0) to kill a peer process mid-test;
+// with the slot uninstalled the call lands on genuine slot 269
+// (KernMsgTest) and the kill silently does nothing.  Body is the pre-dd22ae2
+// SvcMgrKillExec verbatim.  Slot 268 (launch) stays retired with svcmgr.
+static TInt PortKillExec(TInt aPid, TInt)
+    { return E32Kill((TUint)aPid); }
+
+// --- exec 127/128 trace wrappers (server publish / session create) -----------
+// EUSER ord 211 RSessionBase::CreateSession forwards to Exec::SessionCreate,
+// slow exec 128 (EExecSessionCreate; us_ksvr.cpp:2290).  The genuine handler
+// returns the new session handle in EAX (sipc.cpp:1355 -> DSession::MakeHandle
+// -> K::MakeHandle); a zero/negative return makes SetReturnedHandle store 0 /
+// KNullHandle in the client object (e32cmn.inl:3037-3060).  Wrap slots 127/128
+// so every publish/connect logs its 8-bit name and result; kernelhwsrv/ and
+// the genuine table flags stay untouched (only the function words are swapped,
+// exactly like the slot-81 FsRegisterThread wrapper above).
+static void PortDumpExecName(const char* aTag, TInt aR, const TDesC8& aName)
+    {
+    TKName n;
+    n.Zero();
+    Kern::KUDesGet(n, aName);
+    char buf[256];
+    TInt len = n.Length();
+    if (len > (TInt)n.MaxLength()) len = (TInt)n.MaxLength();
+    if (len > (TInt)sizeof(buf) - 1) len = (TInt)sizeof(buf) - 1;
+    for (TInt i = 0; i < len; ++i)
+        buf[i] = (char)n[i];
+    buf[len] = 0;
+    TUint pid = 0;
+    if (TheCurrentThread && TheCurrentThread->iOwningProcess)
+        pid = (TUint)TheCurrentThread->iOwningProcess->iId;
+    KPrintf("%s: r=%d pid=%u name=<%s>\r\n", aTag, aR, pid, buf);
+    }
+
+typedef TInt (*TServerCreateOptFn)(const TDesC8&, TInt, TInt, TInt);
+static TServerCreateOptFn sOrigServerCreateOpt = 0;
+static TInt PortServerCreateOpt(const TDesC8& aName, TInt a2, TInt a3, TInt a4)
+    {
+    TInt r = sOrigServerCreateOpt(aName, a2, a3, a4);
+    PortDumpExecName("exec127 ServerCreateWithOptions", r, aName);
+    return r;
+    }
+
+typedef TInt (*TSessionCreateFn)(const TDesC8&, TInt, const TAny*, TInt);
+static TSessionCreateFn sOrigSessionCreate = 0;
+static TInt PortSessionCreate(const TDesC8& aName, TInt aSlots,
+                              const TAny* aPol, TInt aMode)
+    {
+    TInt r = sOrigSessionCreate(aName, aSlots, aPol, aMode);
+    PortDumpExecName("exec128 SessionCreate", r, aName);
+    // Port-name fallback: g++ -m32 builds emit _L() literals with 32-bit
+    // TText, and the prebuilt EUSER.DLL (true 2-byte TText) truncates them at
+    // the first NUL word, so port-built servers register a "!"-prefixed name
+    // as plain "!" (see the exec127 trace).  A hand-built full-length client
+    // name ("!E32WindowServer", user/ws_e32_client.c) then misses with
+    // KErrNotFound and SetReturnedHandle stores KNullHandle.  Retry once with
+    // the port-registered "!" form so the session handle propagates; the
+    // genuine handler is called through unchanged both times.
+    if (r == KErrNotFound && aName.Length() > 1 && aName[0] == (TUint8)'!')
+        {
+        TBuf8<8> bang;
+        bang.Copy(TPtrC8((const TUint8*)"!", 1));
+        r = sOrigSessionCreate(bang, aSlots, aPol, aMode);
+        PortDumpExecName("exec128 SessionCreate retry '!'", r, bang);
+        }
+    return r;
+    }
+
 void PortTrapExecInstall()
     {
     TUint32* tab = (TUint32*)EpocSlowExecTable;
@@ -1387,12 +1457,33 @@ void PortTrapExecInstall()
         tab[4 + 2 * 81] = (TUint32)(TLinAddr)&PortFsRegisterThread;
         KPrintf("PortTrap: FsRegisterThread wrapper installed (slot 81)\r\n");
         }
+    // Slot 269: restore the pre-dd22ae2 peer-kill path (cp4_stress asserts it
+    // via killproc's exec2(269, pid, 0)).  Slot 268 stays retired with svcmgr.
+    tab[3 + 2 * 269u] = 0;  // flags: no claim/preprocess/extra args
+    tab[4 + 2 * 269u] = (TUint32)(TLinAddr)&PortKillExec;
+    KPrintf("PortTrap: kill exec installed (slot 269 -> E32Kill)\r\n");
     // Slot 270 stays installed, slimmed to the port ops 2/3/4 (fbblit +
-    // PTRINJ).  svcmgr's dead/reap ops 0/1 and launch/kill slots 268/269 are
-    // retired with svcmgr.
+    // PTRINJ).  svcmgr's dead/reap ops 0/1 and launch slot 268 are retired
+    // with svcmgr.
     tab[3 + 2 * 270u] = 0;  // flags: no claim/preprocess/extra args
     tab[4 + 2 * 270u] = (TUint32)(TLinAddr)&PortCtlExec;
     KPrintf("PortTrap: ctl exec installed (slot 270, ops 2/3/4)\r\n");
+    // Slots 127/128: trace wrappers around the genuine publish/session-create
+    // handlers (flags words stay genuine).  Diagnostic for the ord-211
+    // CreateSession handle-return path; the genuine handlers are called
+    // through unchanged and their EAX result is returned verbatim.
+    if (!sOrigServerCreateOpt)
+        {
+        sOrigServerCreateOpt = (TServerCreateOptFn)tab[4 + 2 * 127u];
+        tab[4 + 2 * 127u] = (TUint32)(TLinAddr)&PortServerCreateOpt;
+        KPrintf("PortTrap: exec 127 (ServerCreateWithOptions) trace wrapper installed\r\n");
+        }
+    if (!sOrigSessionCreate)
+        {
+        sOrigSessionCreate = (TSessionCreateFn)tab[4 + 2 * 128u];
+        tab[4 + 2 * 128u] = (TUint32)(TLinAddr)&PortSessionCreate;
+        KPrintf("PortTrap: exec 128 (SessionCreate) trace wrapper installed\r\n");
+        }
     }
 
 // --- G-01: genuine Symbian startup chain (boot list) --------------------------

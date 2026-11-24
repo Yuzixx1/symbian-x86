@@ -41,7 +41,11 @@ FLAGS = ["-m32", "-march=i486", "-Os", "-ffreestanding", "-nostdlib",
          "-mpreferred-stack-boundary=2", "-fno-common",
          # Match genuine EUSER.DLL's MSVC/Symbian x86 register-return ABI for
          # small structs (TPoint etc.); avoid gcc's hidden-sret arg shift.
-         "-freg-struct-return", "-w"]
+         "-freg-struct-return",
+          # 16-bit wchar_t so _L("!E32WindowServer") is UTF-16 like prebuilt
+          # EUSER.DLL's 2-byte TText (otherwise the name reads as "!" and
+          # CreateSession returns KErrNotFound for correct UTF-16 clients).
+          "-fshort-wchar", "-w"]
 
 SOURCES = [
     HERE / "patched/co_cli.cpp",

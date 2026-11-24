@@ -1,8 +1,10 @@
 // Port-layer shims for the genuine EWSRV E32 build.  These are NOT Symbian
 // source: they supply the handful of symbols that genuine EWSRV would normally
-// import from HAL.DLL, DOMAINCLI.DLL and EFSRV.DLL.  Our kernel loader supports
-// only one DLL dependency (EUSER), so those small client sides are provided
-// here.  Everything else is compiled unmodified from kernelhwsrv/.
+// import from DOMAINCLI.DLL and EFSRV.DLL (the HAL client side moved to
+// edisp_glue.cpp, which answers the display attributes from the VBE LFB).
+// Our kernel loader supports only one DLL dependency (EUSER), so those small
+// client sides are provided here.  Everything else is compiled unmodified
+// from kernelhwsrv/.
 #include <e32std.h>
 #include <e32base.h>
 #include <hal.h>
@@ -49,17 +51,11 @@ void operator delete(void* aPtr, unsigned int) { QFree(0, aPtr); }
 void* operator new[](unsigned int aSize){ return QAlloc(0, (int)aSize); }
 void operator delete[](void* aPtr)      { QFree(0, aPtr); }
 
-// -- HAL: we have no HAL.DLL.  Display attributes are answered by the QEMU
-//    display HAL through UserSvr::HalFunction (already in EUSER IAT); the rest
-//    report "not supported" so EWSRV skips optional brightness/contrast paths.
-TInt HAL::Get(HALData::TAttribute /*aAttribute*/, TInt& /*aValue*/)
-    { return KErrNotSupported; }
-TInt HAL::Set(HALData::TAttribute /*aAttribute*/, TInt /*aValue*/)
-    { return KErrNotSupported; }
-TInt HAL::Get(TInt, HALData::TAttribute aAttribute, TInt& aValue)
-    { return HAL::Get(aAttribute, aValue); }
-TInt HAL::Set(TInt, HALData::TAttribute aAttribute, TInt aValue)
-    { return HAL::Set(aAttribute, aValue); }
+// -- HAL: we have no HAL.DLL.  HAL::Get/HAL::Set now live in edisp_glue.cpp:
+//    the display attributes (EDisplay*) are answered from the QEMU VBE LFB
+//    via the ScreenInfo bridge so the GENUINE edisp wd_generic.cpp compiles
+//    unmodified; every other attribute still returns KErrNotSupported so
+//    EWSRV skips the optional brightness/contrast/backlight paths.
 
 // -- Domain manager client: no DOMAINSRV in this port; transitions are no-ops.
 TInt RDmDomainManager::Connect()                                    { return KErrNone; }

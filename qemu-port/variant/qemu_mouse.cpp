@@ -25,6 +25,9 @@
 // On every decoded packet the ISR publishes gButtons/gButtonSeq into the
 // userland-visible gui_shared via gui_publish_buttons() (qemu_gui_exec.cpp),
 // so ring-3 desktops can read clicks without issuing a display-list exec.
+// When the \KBINJ.TXT gate is ON (see qemu_variant_int.cpp), the packet also
+// becomes genuine TRawEvents (EPointerMove + EButtonNDown/Up) fed to the EKA2
+// kernel event queue, so genuine EWSRV receives pointer input too.
 //
 // Public API (qemu_variant.h): mouse_init / mouse_info / mouse_render_cursor /
 // mouse_poll / mouse_test / mouse_inject_buttons.
@@ -151,6 +154,7 @@ namespace
         TUint8 flags = gPkt[0];
         TInt dx = (gPkt[1] & 0x80u) ? (TInt)gPkt[1] - 256 : (TInt)gPkt[1];
         TInt dy = (gPkt[2] & 0x80u) ? (TInt)gPkt[2] - 256 : (TInt)gPkt[2];
+        TUint oldButtons = gButtons;
         TUint newButtons = (TUint)(flags & 0x07u);
         if (newButtons != gButtons)
             { gButtons = newButtons; ++gButtonSeq; }
@@ -167,6 +171,22 @@ namespace
         // every frame from gSh->mouse_x/y without waiting for a DRAW exec.
         gui_publish_position(gX, gY);
         wsrv_publish_mouse(gX, gY, gButtons, gButtonSeq);  // window-server ring
+        // Genuine EWSRV input bridge (same \KBINJ.TXT gate as the keyboard
+        // ISR in qemu_variant_int.cpp): emit one EPointerMove plus an
+        // EButtonNDown/Up per click-bit transition, queued as genuine
+        // TRawEvents for the kernel event queue.  No-op unless the pointer
+        // bit of the gate mask is set.
+        if (QemuInjGateMask() & 1u)
+            {
+            QemuEwsrvPushPointerMove(gX, gY);
+            for (TUint bit = 1u; bit <= 4u; bit <<= 1u)
+                {
+                TBool was = (oldButtons & bit) != 0;
+                TBool now = (newButtons & bit) != 0;
+                if (now != was)
+                    QemuEwsrvPushButton(bit, now, gX, gY);
+                }
+            }
         ++gPackets;
         gEventPending = ETrue;
         gPktIdx = 0;

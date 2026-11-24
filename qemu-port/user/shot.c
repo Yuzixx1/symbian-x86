@@ -1,26 +1,34 @@
 /*
  * shot.c -- PE2 E32 SCREENSHOT tool for the R1 QEMU port.
  *
- * Discovers the VBE linear framebuffer through slow execs 249 (physical base)
- * and 250 (byte size), obtains the low-RAM gui_shared frame buffer from exec
- * 251 (arg1==0), and submits a capture display list through exec 251 (arg1>0)
- * so the kernel paints the real LFB in ring-0 context (qemu_gui_exec.cpp).
+ * MIGRATED 2026-11-24 off the winsrv path: no winsrv GUI host header, no
+ * GUI slow execs (the old winsrv display-list slots are gone from this
+ * file).  The
+ * winsrv-migrated SHOTE32.E32 (user/shot_e32.c, genuine
+ * EWSRV RConsole + exec 270) supersedes the old flow; this SHOT.E32 keeps the
+ * same plain-C runtime.h shape as FBBLITTEST.E32 and now uses:
  *
- * A ring-3 PE2 cannot dereference the LFB itself: the flat PDE map marks the
- * high half (where the VBE LFB lives) U/S=0, so a direct read raises #PF and
- * PdPageFaultC calls PanicKernExec (mmu/pd.cpp).  The user-visible copy of the
- * frame is therefore the low-RAM gui_shared display list the kernel executes.
- * We render that exact 64x64 region into a private RGBA buffer -- the same
- * pixels we asked the kernel to put on VRAM -- and save the raw bytes to
- * SCREEN.RAW through PortFile IPC (runtime.c file_save).  If portfilesrv is
- * not running the capture still succeeds and is reported as such.
+ *   1. Framebuffer geometry from slow exec 270 op 2 (FBO_FBINFO).  Exec 270
+ *      is the SvcMgr-ctl multiplexed exec (variant/qemu_fbblit.*) -- NOT part
+ *      of the winsrv deletion set (it retires with svcmgr, a separate step).
+ *      Op 2 lazily brings the VBE LFB up; E32Run's PdMapUser()
+ *      (variant/e32load.cpp:936) mapped the LFB U/S=1 into this process, so
+ *      ring-3 can read the real framebuffer back directly.
+ *   2. The 64x64 capture patch is painted with ONE exec 270 op 3 bulk blit
+ *      (FBO_FBBLIT, ring-0 LFB write) instead of a 64-command winsrv
+ *      display list.  32bpp source = LFB-native 0x00RRGGBB words.
+ *   3. SCREENDUMP: the same 64x64 rect is read straight back from the mapped
+ *      LFB (no kernel readback exec needed), converted to raw RGBA and saved
+ *      to SCREEN.RAW through PortFile IPC (runtime.c file_save).  If
+ *      portfilesrv is not running the capture still succeeds and is reported
+ *      as such.
  *
  * Serial markers use the genuine EUSER.DLL ordinal 915 (RDebug::Printf),
  * bound by E32Run from the PE2 IAT slot shot_printf_slot at 0x408000, with
- * the port DebugPrint executive as a fallback (same pattern as guishell.c).
+ * the port DebugPrint executive as a fallback (same pattern as fbblittest.c).
  */
 #include "runtime.h"
-#include "guishost.h"
+#include "../variant/qemu_fbblit.h"   /* exec 270 ops 2/3 ABI (variant/, svcmgr-owned) */
 
 extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 extern unsigned int shot_printf_slot;
@@ -56,116 +64,128 @@ static unsigned hex32(char* p, unsigned k, unsigned v)
     return k;
 }
 
-/* ---- capture geometry / private framebuffer ---- */
+/* ---- capture geometry / private patch buffer ---- */
 #define CAP_W       64u
 #define CAP_H       64u
-#define CAP_BPP     4u
-#define CAP_SIZE    (CAP_W * CAP_H * CAP_BPP)   /* 16384 raw RGBA bytes */
+#define CAP_SIZE    (CAP_W * CAP_H * 4u)   /* 16384 raw RGBA bytes */
 
-static unsigned char s_pixels[CAP_SIZE];
-static struct gui_shared* gSh;
-static unsigned gN;
+/* Patch destination on the LFB (safe inside 320x200 and 1024x768). */
+#define CAP_X       16u
+#define CAP_Y       96u
 
-static unsigned rgb(unsigned r, unsigned g, unsigned b)
-    { return ((r & 0xffu) << 16) | ((g & 0xffu) << 8) | (b & 0xffu); }
+static unsigned s_words[CAP_W * CAP_H];   /* 32bpp 0x00RRGGBB, LFB-native */
+static unsigned char s_pixels[CAP_SIZE];  /* raw RGBA screendump          */
 
-static void put_pixel(unsigned x, unsigned y, unsigned col)
+static void zero8(void* p, unsigned n)
 {
-    unsigned off = (y * CAP_W + x) * CAP_BPP;
-    s_pixels[off]      = (unsigned char)(col >> 16);
-    s_pixels[off + 1u] = (unsigned char)(col >> 8);
-    s_pixels[off + 2u] = (unsigned char)col;
-    s_pixels[off + 3u] = 0xffu;
+    unsigned char* b = (unsigned char*)p;
+    for (unsigned i = 0; i < n; ++i) b[i] = 0;
 }
 
-static void cmd(unsigned type, unsigned a, unsigned b,
-                unsigned c, unsigned d, unsigned e)
+/* Render the 64x64 patch.  The colour ramp is seeded with the discovered fb
+ * base/size, tying the dump to this boot's actual LFB rather than to a
+ * constant fixture (same idea as the old winsrv display-list version). */
+static void build_patch(unsigned fbBase, unsigned fbSize)
 {
-    if (gN >= GUI_MAX_CMDS) return;
-    struct gui_cmd* q = &gSh->cmds[gN++];
-    q->type = type; q->a = a; q->b = b; q->c = c; q->d = d; q->e = e;
-}
-
-/* Render a 64x64 patch into s_pixels and mirror it into the kernel display
- * list so the very same bytes land on the real VBE framebuffer.  The colour
- * ramp is seeded with the discovered fb base/size, tying the dump to this
- * boot's actual LFB rather than to a constant fixture. */
-static void grab_region(unsigned fbBase, unsigned fbSize)
-{
-    const unsigned x0 = 16u, y0 = 96u;   /* safe inside 320x200 and 1024x768 */
     unsigned y, x;
-
     for (y = 0; y < CAP_H; ++y)
         {
-        unsigned col = rgb(((y * 4u) + (fbBase & 0xffu)) & 0xffu,
-                           (0x30u + y * 2u) & 0xffu,
-                           (0x80u + ((fbSize >> 8) & 0x3fu)) & 0xffu);
-        for (x = 0; x < CAP_W; ++x) put_pixel(x, y, col);
+        unsigned col = (((y * 4u) + (fbBase & 0xffu)) << 16)
+                     | ((0x30u + y * 2u) << 8)
+                     | (0x80u + ((fbSize >> 8) & 0x3fu));
+        for (x = 0; x < CAP_W; ++x)
+            s_words[y * CAP_W + x] = col;
         }
-
-    /* white cross-hair, both in the raw image and in the LFB paint list */
+    /* white cross-hair */
     for (x = 24u; x < 40u; ++x)
-        { put_pixel(x, 31u, 0x00FFFFFFu); put_pixel(x, 32u, 0x00FFFFFFu); }
+        { s_words[31u * CAP_W + x] = 0x00FFFFFFu; s_words[32u * CAP_W + x] = 0x00FFFFFFu; }
     for (y = 24u; y < 40u; ++y)
-        { put_pixel(31u, y, 0x00FFFFFFu); put_pixel(32u, y, 0x00FFFFFFu); }
-
-    gN = 0;
-    /* Desktop backdrop + title strip make the kernel's first-frame VRAM
-       readback at (0,0)/(100,20) report OK, proving real LFB writes. */
-    cmd(GC_CLEAR, 0x00000080u, 0, 0, 0, 0);
-    if (gSh->fb_w > 24)
-        cmd(GC_RECT, 8u, 8u, (unsigned)gSh->fb_w - 16u, 32u, 0x000080C0u);
-    for (y = 0; y < CAP_H; ++y)
-        {
-        unsigned off = y * CAP_W * CAP_BPP;
-        unsigned col = ((unsigned)s_pixels[off] << 16)
-                     | ((unsigned)s_pixels[off + 1u] << 8)
-                     | (unsigned)s_pixels[off + 2u];
-        cmd(GC_RECT, x0, y0 + y, CAP_W, 1u, col);   /* one row per scanline */
-        }
-    cmd(GC_RECT, x0 + 24u, y0 + 31u, 16u, 2u, 0x00FFFFFFu);
-    cmd(GC_RECT, x0 + 31u, y0 + 24u, 2u, 16u, 0x00FFFFFFu);
-
-    /* arg1>0: kernel executes the list on the real LFB and does its own
-       pixel readback; no ring-3 access to supervisor-only VRAM is attempted. */
-    exec2(QE_EXEC_GUI_DRAW, gN, 0);
+        { s_words[y * CAP_W + 31u] = 0x00FFFFFFu; s_words[y * CAP_W + 32u] = 0x00FFFFFFu; }
 }
 
 int app_main(void)
 {
     char line[160];
-    unsigned k, fbBase, fbSize;
-    int shb, r;
+    unsigned k, match;
+    int r, rblit;
 
     marker("SHOT: START");
 
-    fbBase = (unsigned)exec2(QE_EXEC_GUI_FBBASE, 0, 0);
-    fbSize = (unsigned)exec2(QE_EXEC_GUI_FBSIZE, 0, 0);
+    /* 1. framebuffer geometry via exec 270 op 2 (NOT a winsrv GUI exec). */
+    struct fbblit_info info;
+    zero8(&info, sizeof(info));
+    r = exec2(QE_EXEC_FBCTL, FBO_FBINFO, (unsigned)&info);
+    k = append(line, 0, "SHOT: fbinfo r=");
+    k = dec(line, k, (unsigned)r);
+    line[k] = 0;
+    marker(line);
+    if (r != 0 || !info.base)
+        {
+        marker("SHOT: FAIL no fbinfo (exec 270 op 2)");
+        return 1;
+        }
     k = append(line, 0, "SHOT: fb=");
-    k = hex32(line, k, fbBase);
+    k = hex32(line, k, info.base);
     k = append(line, k, " size=");
-    k = dec(line, k, fbSize);
+    k = dec(line, k, info.size);
+    k = append(line, k, " ");
+    k = dec(line, k, info.width);
+    k = append(line, k, "x");
+    k = dec(line, k, info.height);
+    k = append(line, k, "x");
+    k = dec(line, k, info.bpp);
+    k = append(line, k, " pitch=");
+    k = dec(line, k, info.pitch);
     line[k] = 0;
     marker(line);
 
-    shb = exec2(QE_EXEC_GUI_DRAW, 0, 0);   /* arg1==0 -> shared frame buffer */
-    if (shb <= 0)
-        {
-        marker("SHOT: FAIL no shared buffer (exec 251)");
-        return 1;
-        }
-    gSh = (struct gui_shared*)shb;
-    if (gSh->magic != GUI_MAGIC || gSh->version != GUI_VERSION)
-        {
-        marker("SHOT: FAIL shared magic");
-        return 1;
-        }
+    /* 2. paint the capture patch with ONE exec-270 op-3 bulk blit (not a
+     *    64-command winsrv display list). */
+    build_patch(info.base, info.size);
+    struct fbblit_req req;
+    zero8(&req, sizeof(req));
+    req.buf = (unsigned)s_words;
+    req.len = CAP_W * CAP_H * 4u;
+    req.src_bpp = 32u;
+    req.x = (int)CAP_X; req.y = (int)CAP_Y;
+    req.w = (int)CAP_W; req.h = (int)CAP_H;
+    rblit = exec2(QE_EXEC_FBCTL, FBO_FBBLIT, (unsigned)&req);
+    k = append(line, 0, "SHOT: blit r=");
+    k = dec(line, k, (unsigned)rblit);
+    line[k] = 0;
+    marker(line);
 
-    grab_region(fbBase, fbSize);
+    /* 3. screendump: read the same rect straight back from the U/S=1-mapped
+     *    LFB and verify the blit round trip. */
+    {
+    volatile unsigned* lfb = (volatile unsigned*)info.base;
+    const unsigned pitchWords = info.pitch >> 2;
+    unsigned y, x;
+    match = 0;
+    for (y = 0; y < CAP_H; ++y)
+        {
+        for (x = 0; x < CAP_W; ++x)
+            {
+            unsigned w = lfb[(CAP_Y + y) * pitchWords + (CAP_X + x)];
+            unsigned off = (y * CAP_W + x) * 4u;
+            s_pixels[off]      = (unsigned char)(w >> 16);
+            s_pixels[off + 1u] = (unsigned char)(w >> 8);
+            s_pixels[off + 2u] = (unsigned char)w;
+            s_pixels[off + 3u] = 0xffu;
+            if (w == s_words[y * CAP_W + x]) ++match;
+            }
+        }
+    }
 
     k = append(line, 0, "SHOT: captured 64x64 (");
     k = dec(line, k, CAP_SIZE);
     k = append(line, k, " bytes)");
+    line[k] = 0;
+    marker(line);
+    k = append(line, 0, "SHOT: readback match=");
+    k = dec(line, k, match);
+    k = append(line, k, "/");
+    k = dec(line, k, CAP_W * CAP_H);
     line[k] = 0;
     marker(line);
     marker("SHOT: capture OK");
@@ -173,6 +193,11 @@ int app_main(void)
     r = file_save("SCREEN.RAW", s_pixels, CAP_SIZE);
     if (r >= 0) marker("SHOT: saved SCREEN.RAW");
     else        marker("SHOT: PortFile save unavailable (capture retained)");
+
+    /* Re-blit after the last marker so the patch is the final frame on the
+     * LFB (serial text mirrors into the console area of the LFB). */
+    if (rblit == 0)
+        (void)exec2(QE_EXEC_FBCTL, FBO_FBBLIT, (unsigned)&req);
 
     marker("SHOT: DONE");
     return 0;

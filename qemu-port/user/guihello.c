@@ -2,16 +2,19 @@
  * guihello.c -- demonstration program for the reusable PE2 GUI toolkit.
  *
  * Opens a titled window with three focusable buttons, a live status panel and
- * a mouse readout, all painted on the real VBE framebuffer through guilib.c.
+ * a mouse readout through guilib.c, which now runs on the GENUINE EWSRV
+ * client path (user/ws_e32_client.c): a real EConsole window on
+ * "!E32WindowServer", screen geometry from EConsoleScreenSize, text drawn
+ * with EConsoleWrite.  No winsrv execs 249/250/251 remain in this file.
  * Arrow keys (ANSI ESC [ A/B/C/D on the serial console) move the focus ring,
  * Enter "presses" a button and Esc quits.  A bounded auto-exit keeps the
  * end-to-end QEMU test short.  Serial markers use the genuine EUSER.DLL
- * ordinal 915 import; IAT slot guihello_printf_slot lives at 0x408000.
+ * ordinal 915 import; IAT slot guihello_printf_slot lives at 0x408010 (the
+ * ws_e32_client slots occupy 0x408000-0x40800c).
  */
 #include "runtime.h"
 #include "guilib.h"
 
-extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 extern unsigned int guihello_printf_slot;
 typedef void (*NbPrintf)(const char*, ...);
 
@@ -37,14 +40,6 @@ static unsigned dec(char* p, unsigned k, unsigned v)
     while (n) p[k++] = t[--n];
     return k;
 }
-static unsigned hex32(char* p, unsigned k, unsigned v)
-{
-    const char* h = "0123456789abcdef";
-    k = append(p, k, "0x");
-    for (int i = 28; i >= 0; i -= 4) p[k++] = h[(v >> i) & 0xfu];
-    return k;
-}
-
 static const char* key_name(int k)
 {
     switch (k) {
@@ -78,16 +73,10 @@ int app_main(void)
 
     marker("GH: GUI HELLO START");
 
-    k = append(line, 0, "GH: framebase=");
-    k = hex32(line, k, (unsigned)exec2(249, 0, 0));
-    k = append(line, k, " size=");
-    k = dec(line, k, (unsigned)exec2(250, 0, 0));
-    line[k] = 0;
-    marker(line);
-
     rc = gui_init();
     if (rc != 0) {
         k = append(line, 0, "GH: FAIL gui_init rc=");
+        if (rc < 0) line[k++] = '-';
         k = dec(line, k, (unsigned)(rc < 0 ? -rc : rc));
         line[k] = 0;
         marker(line);

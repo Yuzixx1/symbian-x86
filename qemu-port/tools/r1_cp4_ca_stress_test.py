@@ -26,6 +26,18 @@ VICTIM = 2           # which client instance is killed mid-test
 DONE = 'CPSTRESS: done'
 CPSTRESS_CYCLES = 100  # user/cpstress.c CYCLES: each client's full async drain
 
+# Robustness windows (env-overridable). An async E32 launch returns the shell
+# prompt immediately, but the new process must still be validated, created and
+# connected before its first serial line; under host CPU contention (parallel
+# QEMU agents) that can take far longer than the old fixed 15 s, which caused
+# the 'start1 not seen' flake. Poll generously instead, but fail FAST on any
+# hard failure/fault marker so the wide window can never mask a real break.
+# The kill-survivor and drain-count asserts below stay strict.
+BOOT_TIMEOUT = int(os.environ.get('CP4_BOOT_TIMEOUT', '120'))
+PROMPT_TIMEOUT = int(os.environ.get('CP4_PROMPT_TIMEOUT', '120'))
+MARKER_TIMEOUT = int(os.environ.get('CP4_MARKER_TIMEOUT', '180'))
+DONE_TIMEOUT = int(os.environ.get('CP4_DONE_TIMEOUT', '180'))
+
 FAIL_MARKERS = (
     'CPSTRESS: connect failed', 'CPSTRESS: connect2 failed',
     'CPSTRESS: send1 failed', 'CPSTRESS: send2 failed',
@@ -54,7 +66,7 @@ def done_tail_pairs(n):
             re.findall(r'CPSTRESS: done(\d+) (\d+)', text)][-n:]
 
 
-def wait_for_done(target, timeout=30):
+def wait_for_done(target, timeout=DONE_TIMEOUT):
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         seen = total_done()
@@ -64,15 +76,23 @@ def wait_for_done(target, timeout=30):
     raise AssertionError(f'expected >= {target} clean completions, saw {seen}')
 
 
-def wait_after(pos, marker, timeout=15):
+def wait_after(pos, marker, timeout=MARKER_TIMEOUT):
     """Async E32 launch may print after the shell prompt; poll only the bytes
-    following this command's start offset (cycle-aware, no stale matches)."""
+    following this command's start offset (cycle-aware, no stale matches).
+    The window is generous because a busy host can starve the guest launch,
+    but any hard failure/fault marker in the scanned bytes fails immediately,
+    so the longer window cannot hide a real break."""
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         with open(LOG, 'rb') as src:
             src.seek(pos)
-            if marker in src.read():
-                return
+            data = src.read()
+        if marker in data:
+            return
+        for bad in FAIL_MARKERS + FAULT_KEYS:
+            if bad.encode() in data:
+                raise AssertionError(
+                    f'{bad!r} seen while waiting for {marker!r} after offset {pos}')
         time.sleep(0.1)
     raise AssertionError(f'{marker!r} not seen after offset {pos}')
 
@@ -83,7 +103,7 @@ def read_range(pos, end):
         return src.read(end - pos).decode('utf-8', 'replace')
 
 
-def boot_prompt(timeout=30):
+def boot_prompt(timeout=BOOT_TIMEOUT):
     """Return (offset-after-prompt, needs_mount). Some kernels auto-mount and
     boot straight to C:/>, others start at EKA2> and require `mount`."""
     until = time.monotonic() + timeout
@@ -98,7 +118,12 @@ def boot_prompt(timeout=30):
 
 
 def run(vm, pos, cmd, expected=b''):
-    end = test_cli.run_command(vm, LOG_FH, pos, cmd, b'', b'C:/> ')
+    # Same as test_cli.run_command but with a contention-tolerant prompt
+    # timeout (run_command hardcodes 30 s, which can also starve).
+    vm.stdin.write(cmd.encode() + b'\n')
+    vm.stdin.flush()
+    end = test_cli.wait_for(LOG_FH, b'C:/> ', pos, PROMPT_TIMEOUT)
+    LOG_FH.flush()
     if expected:
         wait_after(pos, expected)
     return end

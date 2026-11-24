@@ -250,6 +250,35 @@ TUint windowsrv_size();
 void wsrv_publish_mouse(TInt aX, TInt aY, TUint aButtons, TUint aSeq);
 void wsrv_publish_key(TUint aKey);
 
+// --- Genuine EWSRV raw-input bridge (variant/qemu_variant_int.cpp) ----------
+// Opt-in via \KBINJ.TXT on the boot FAT volume (presence = enable, same idea
+// as \PTRINJ.TXT for the one-shot boot pointer bridge in qemu_display.cpp).
+// When ON, the PS/2 ISRs (IRQ1 keyboard here, IRQ12 mouse in qemu_mouse.cpp)
+// turn each scancode/packet into a genuine TRawEvent (EKeyDown/EKeyUp carrying
+// a TStdScanCode from <e32keys.h>, EPointerMove/EButtonNDown/Up carrying a
+// position) and queue it in a small ISR ring; a TDfc on Kern::DfcQue0() drains
+// the ring and feeds every event to the EKA2 kernel event queue through the
+// public Kern::AddEvent API under NKern::ThreadEnterCS — exactly where a
+// genuine keyboard/pointer driver's DFC puts it (cf. the bsptemplate
+// keyboard_interrupt.cpp EventDfc).  Kern::AddEvent is never called from ISR
+// context (its documented preconditions forbid it: thread context, CS held,
+// kernel unlocked, interrupts enabled); the ISR only fills the ring and queues
+// the DFC.  Genuine EWSRV, as the kernel event-hook owner (K::EventThread),
+// then consumes the events in CEvent::RunL (ws_main.cpp: pending
+// UserSvr::RequestEvent -> EKeyDown/EKeyUp -> ScanCode()/TranslateKey ->
+// CWsWindow::KeyPress).  OFF (default, no \KBINJ.TXT) leaves every boot on the
+// old ws-ring path, byte-for-byte.
+void QemuKbdInjArm();        // resolve gate + DFC queue; called from QemuKbdArm()
+TBool QemuInjGateActive();   // any injection enabled (\KBINJ.TXT present)
+// Gate mask: bit0 (1) = pointer ISR events, bit1 (2) = keyboard ISR events.
+// \KBINJ.TXT content selects: "ptr" -> 1, "key" -> 2, anything else -> 3 (both).
+TUint QemuInjGateMask();
+void QemuEwsrvPushKey(TBool aDown, TUint aStdScanCode);          // ISR-safe
+void QemuEwsrvPushPointerMove(TInt aX, TInt aY);                 // ISR-safe
+// aPs2ButtonBit: 1=left, 2=right, 4=middle (PS/2 packet flag bits).
+void QemuEwsrvPushButton(TUint aPs2ButtonBit, TBool aDown, TInt aX, TInt aY);
+TUint QemuInjStats(TUint& aQueued, TUint& aDelivered, TUint& aDropped);
+
 // ATA PIO driver (variant/qemu_ata.cpp). Devices 0..3 = pri-master,
 // pri-slave, sec-master, sec-slave. LBA28, polled.
 TInt AtaInit();

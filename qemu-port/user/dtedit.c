@@ -5,19 +5,22 @@
  * guilib.c toolkit: a decorated "EKA2 Notepad" window on the VBE LFB, a
  * clickable toolbar (SAVE / CLEAR / QUIT), a live text area with a blinking
  * cursor, and genuine keyboard editing (type / Backspace / Enter / arrows).
- * Mouse clicks are detected from gui_shared's PS/2 button word and button_seq
- * (the same rising-edge/seq-jump logic desktop.c uses) and hit-tested against
- * the toolbar, the title-bar close box and the text cell grid.
+ * Mouse clicks are detected from the pointer button word + change-sequence
+ * (rising-edge/seq-jump logic, fed by guilib's gui_mouse_full) and hit-tested
+ * against the toolbar, the title-bar close box and the text cell grid.
  *
  * File I/O uses PortFile IPC (file_save) exactly like textedit.c.  Markers go
  * through the genuine PE2 import of EUSER.DLL ordinal 915 (RDebug::Printf);
- * IAT slot dtedit_printf_slot lives at 0x408000 (textSize).
+ * IAT slot dtedit_printf_slot lives at 0x408010 (the ws_e32_client slots
+ * occupy 0x408000-0x40800c; textSize stays 0x8000).
  */
+/* WINSRV_MIGRATION_PLAN chunk B: no winsrv display-list exec here
+ * anymore -- pointer state comes from guilib's gui_mouse_full() on the
+ * genuine EWSRV client path (zeros until the EWSRV input bridge lands,
+ * plan section 5). */
 #include "runtime.h"
 #include "guilib.h"
-#include "guishost.h"
 
-extern int exec2(unsigned number, unsigned arg1, unsigned arg2);
 extern unsigned int dtedit_printf_slot;
 typedef void (*NbPrintf)(const char*, ...);
 
@@ -368,8 +371,10 @@ static void draw_frame(void)
 int app_main(void)
 {
     char line[96];
-    unsigned n, shb;
+    unsigned n;
     int tick, key;
+    int m0x = 0, m0y = 0;
+    unsigned m0b = 0, m0s = 0;
 
     marker("DTE: WINDOWED EDITOR READY");
     n = append(line, 0, "DTE: window ");
@@ -383,20 +388,11 @@ int app_main(void)
         marker("DTE: FAIL gui_init");
         return 1;
     }
-    shb = (unsigned)exec2(QE_EXEC_GUI_DRAW, 0, 0);
-    if (shb == 0u || shb == (unsigned)-1) {
-        marker("DTE: FAIL no shared buffer");
-        gui_shutdown();
-        return 1;
-    }
-    struct gui_shared* sh = (struct gui_shared*)shb;
-    if (sh->magic != GUI_MAGIC || sh->version != GUI_VERSION) {
-        marker("DTE: FAIL shared magic");
-        gui_shutdown();
-        return 1;
-    }
-    gPrevButtons = sh->buttons;
-    gPrevSeq = sh->button_seq;
+    /* Pointer state via guilib on the genuine EWSRV client path (no exec 251
+     * gui_shared anymore). */
+    gui_mouse_full(&m0x, &m0y, &m0b, &m0s);
+    gPrevButtons = m0b;
+    gPrevSeq = m0s;
 
     gLines[0][0] = 0;
     marker_chars();
@@ -406,14 +402,14 @@ int app_main(void)
     line[n] = 0;
     marker(line);
 
-    marker_mouse((int)sh->mouse_x, (int)sh->mouse_y, sh->buttons);
-    gLastMx = (int)sh->mouse_x;
-    gLastMy = (int)sh->mouse_y;
+    marker_mouse(m0x, m0y, m0b);
+    gLastMx = m0x;
+    gLastMy = m0y;
 
     for (tick = 0; tick < 3000 && !gDone; ++tick) {
-        unsigned buttons = sh->buttons;
-        unsigned seq = sh->button_seq;
-        int mx = (int)sh->mouse_x, my = (int)sh->mouse_y;
+        unsigned buttons, seq;
+        int mx, my;
+        gui_mouse_full(&mx, &my, &buttons, &seq);
         if (mx != gLastMx || my != gLastMy) {
             gLastMx = mx; gLastMy = my;
             marker_mouse(mx, my, buttons);
