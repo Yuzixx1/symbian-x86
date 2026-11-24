@@ -1,7 +1,7 @@
 # Documentation index — `qemu-port/docs/`
 
 This is the comprehensive index of every Markdown document in this directory
-(92 files). For a top-down description of how the OS actually works, start with
+(189 files). For a top-down description of how the OS actually works, start with
 [`ARCHITECTURE.md`](ARCHITECTURE.md). For the exact commands to boot the
 primary GRUB image, run bundled programs and execute the self-test, the
 **canonical usage document** is
@@ -889,4 +889,110 @@ this index update.
 
 These two newly indexed reports bring the indexed Markdown total to **182**,
 matching the 182 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 authority-gate backfill (append-only)
+
+Four newest reports existed on disk but had no entry in this index; they are
+linked below (all named candidates — `AUTHORITY_GATE_REVIEW.md`,
+`CLEANUP_AUTHORITY_CHECK.md`, `CLEANUP_PHASE_STATUS.md`,
+`FOLLOWUP_COMMIT_PLAN.md` — exist on disk and are indexed).
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [CLEANUP_PHASE_STATUS.md](CLEANUP_PHASE_STATUS.md) — read-only ~19:03 EET
+  snapshot of the whole cleanup phase at HEAD `e29a072`: svcmgr-apply edits
+  landed uncommitted (post-apply gates only partially run, `svcmgr.cpp`
+  deletion pending), edisp client blockers fixed with gate PASS, authority
+  runs certified clean only at `d26fade`, plus per-workstream next actions.
+- [AUTHORITY_GATE_REVIEW.md](AUTHORITY_GATE_REVIEW.md) — read-only ~19:02 EET
+  independent review of the full 11/11 strict verification, verdict **PARTIAL**:
+  a trustworthy 11/11 PASS exists only for the `d26fade` tree; the current
+  post-cleanup tree's strict run never concluded (10/11 with one transient
+  mid-rebuild FAIL).
+- [CLEANUP_AUTHORITY_CHECK.md](CLEANUP_AUTHORITY_CHECK.md) — authoritative
+  clean-tree verdict (17:01 UTC, HEAD `d26fade`) required before file
+  deletions: effective 11/11 PASS strict, retire 4/4, fullchain 14/14,
+  `kernelhwsrv/` clean at both checkpoints.
+- [FOLLOWUP_COMMIT_PLAN.md](FOLLOWUP_COMMIT_PLAN.md) — staging plan for the
+  post-apply follow-up commit on top of pushed `d26fade`: lands the r1_fs
+  kernel-glue removal plus the in-flight svcmgr apply in one commit, with
+  pre-conditions and grouped `git add` paths (never `git add -A`); the
+  document itself staged/committed nothing.
+
+These four newly indexed reports bring the indexed Markdown total to **186**,
+matching the 186 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 svcmgr/r1_fs commit `dd22ae2` (append-only)
+
+The cleanup commit `dd22ae2` ("Retire svcmgr and drop r1_fs kernel glue:
+genuine boot chain is sole path") was committed and pushed
+(HEAD = origin/main = `dd22ae2`, push `e29a072..dd22ae2`; apply-agent gates
+all PASS, 0 KERN-4). It added **no new `docs/*.md` files** — candidates
+`POST_SVCMGR_VERIFY.md` and edisp progress docs were checked and do not exist
+on disk — so no new link entries are needed here; `CLEANUP_LOG.md` (step 4
+LANDED + COMMITTED `dd22ae2`, steps 5/6 IN FLIGHT, Commits table) and
+`CLEANUP_PHASE_STATUS.md` record the commit. `kernelhwsrv/` untouched; no QEMU
+run was made by this index update.
+
+The indexed Markdown total stays **186**, matching the 186 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked (188 link entries, some files referenced in several backfill sections).
+
+## Added — 2026-11-24 edisp / svcmgr / euser_shim doc sweep (append-only)
+
+Post-`dd22ae2` sweep for new docs from the edisp port / svcmgr / `euser_shim`
+work: the named candidates `POST_SVCMGR_VERIFY.md` and
+`WINSRV_MIGRATION_PLAN.md` do not exist on disk, no edisp-named doc exists
+beyond the already-indexed `WINSRV_EDISP_SCOPE.md`, and no `.md` under `docs/`
+is newer than this index. `genuine/ewsrv/` contains no README or `.md` at all
+(build scripts and sources only); the other `genuine/` READMEs
+(`genuine/README.md`, `genuine/efat32/README.md`, `genuine/estart_eshell/README.md`)
+remain unindexed per the docs/-only convention (as already noted for
+`genuine/F32_EFSRV_REPORT.md`). No new link entries are needed;
+`kernelhwsrv/` untouched; no QEMU run was made by this index update.
+
+The indexed Markdown total stays **186**, matching the 186 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked (186 unique link targets, verified equal to the on-disk set).
+
+## Added — 2026-11-24 winsrv migration plan backfill (append-only)
+
+One report existed on disk but had no entry in this index; it is linked below.
+Of the named candidates, `EWSRV_INPUT_INJECTION.md` and `POST_SVCMGR_VERIFY.md`
+were checked and do not exist on disk, so they have no entries. `kernelhwsrv/`
+was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_MIGRATION_PLAN.md](WINSRV_MIGRATION_PLAN.md) — read-only 2026-11-24
+  plan to migrate all 14 GUI/DOOM binaries (GUISHELL, SAVER, SHOT, GUIHELLO,
+  BREAKOUT, GUIMENU, DESKTOP, DTEDIT, DTCALC, GCBLITTEST, WINSRV, WSDL,
+  FBBLITTEST, DOOM) off the winsrv execs 249/250/251 (display list) and
+  271/272/273 (window/event ring) onto the genuine EWSRV client API
+  (`RWsSession` et al. via the EWCLIENT `pack_multi` ordinal pattern), then
+  delete the winsrv shim files; edisp is landed and the EWCLIENT client gate
+  PASSES, exec 270 fbblit stays out of the deletion set.
+
+This newly indexed report brings the indexed Markdown total to **187**,
+matching the 187 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 EUSER-shim closure / post-svcmgr verify backfill (append-only)
+
+Two reports existed on disk but had no entry in this index; they are linked
+below. Of the named candidates, `EWSRV_INPUT_INJECTION.md` was checked and does
+not exist on disk, so it has no entry. `kernelhwsrv/` was untouched and no QEMU
+run was made by this index update.
+
+- [EUSER_SHIM_REVIEW.md](EUSER_SHIM_REVIEW.md) — read-only closure review
+  (verdict CLEAN) of the `user/euser_shim.cpp` deletion: the `user/user.mk`
+  diff and `ca_glue.cpp` link, PE2 ord-915 import-slot evidence, symbol audit,
+  and the two non-blocking references left behind (`build_server.sh`, retire-gate string).
+- [POST_SVCMGR_VERIFY.md](POST_SVCMGR_VERIFY.md) — post-apply gate verification
+  on the uncommitted svcmgr-applied tree (HEAD `e29a072`): 7/7 standalone gates
+  PASS (smoke, retire 4/4, fullchain 14/14, pointer/PTRINJ exec-270 op 4, ewsrv,
+  efsrv, eshell 8/8), clean fault scan with the exec-81 wrapper intact (no
+  KERN-4), verdict SAFE, isolated strict-verify re-run pending.
+
+These two newly indexed reports bring the indexed Markdown total to **189**,
+matching the 189 `.md` files under `docs/` (including this index); every
 Markdown document in the directory is now linked.

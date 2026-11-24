@@ -191,17 +191,25 @@ build/user/NTPC.E32: build/user/ntpc.elf tools/elf2e32.py tools/mke32.py
 
 # R1 web-browser fixture: user/ca_test.c is the text-mode browser (DNS A lookup,
 # TCP/HTTP via !SocketServer, HTML tag-strip renderer).  Built two ways:
-#   ca_test_static.e32 -- compiled/import-free proof via elf2e32.py.
 #   ca_test.e32        -- genuine PE2 image importing EUSER.DLL ordinal 915
-#                         (RDebug::Printf), the fixture used by the QEMU test.
+#                         (RDebug::Printf), the fixture used by the QEMU test
+#                         (tools/mke32_webbrowser.py).
+#   ca_test_static.e32 -- the same C source compiled with -DWEB_USE_EUSER and
+#                         linked shim-free: user/ca_glue.cpp supplies
+#                         web_euser_printf() through the PE2 IAT slot
+#                         web_rdebug_printf_slot (SHN_ABS 0x408000 via
+#                         --defsym) plus the C++ runtime stubs, and
+#                         elf2e32.py --euser-import 915 packs it as a genuine
+#                         PE2 import image.  (The static euser_shim.cpp shim is
+#                         retired; dd22ae2 left ca_test as its last consumer.)
 build/user/ca_test.o: user/ca_test.c user/runtime.h user/ipc.h | build/user
-	$(CC) $(USER_FLAGS) -c $< -o $@
+	$(CC) $(USER_FLAGS) -DWEB_USE_EUSER -c $< -o $@
 
-build/user/ca_test.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/malloc.o build/user/euser_shim.o build/user/ca_test.o user/link.ld
-	ld -m elf_i386 --emit-relocs -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
+build/user/ca_test.elf: build/user/start.o build/user/runtime.o build/user/ipc.o build/user/malloc.o build/user/ca_glue.o build/user/ca_test.o user/link.ld
+	ld -m elf_i386 --emit-relocs --defsym=web_rdebug_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)
 
 build/user/ca_test_static.e32: build/user/ca_test.elf tools/elf2e32.py tools/mke32.py
-	python3 tools/elf2e32.py $< $@
+	python3 tools/elf2e32.py $< $@ --euser-import 915
 	python3 tools/e32read.py $@ --quiet
 
 build/user/ca_test.e32: tools/mke32_webbrowser.py tools/mke32.py
@@ -254,7 +262,7 @@ build/user:
 build/user/%.o: user/%.c user/runtime.h | build/user
 	$(CC) $(USER_FLAGS) -c $< -o $@
 
-# S-04: euser_shim.cpp and portfilesrv.cpp are C++ — they need $(CXX), not $(CC).
+# ca_glue.cpp is C++ — it needs $(CXX), not $(CC).
 build/user/%.o: user/%.cpp user/e32base.h | build/user
 	$(CXX) $(USER_FLAGS) -c $< -o $@
 
@@ -340,9 +348,6 @@ build/user/malloc.elf: build/user/start.o build/user/runtime.o build/user/malloc
 build/user/MALLOC.E32: build/user/malloc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
-
-# S-04: EUSER shim object (still linked into ca_test.elf).
-build/user/euser_shim.o: user/euser_shim.cpp user/e32base.h user/e32cmn.h user/f32ver.h
 
 # I-08: genuine CServer2/CSession2 file server (fs/r1_fs_server.cpp).
 build/user/r1_fs_server.o: fs/r1_fs_server.cpp fs/r1_fs_server.h fs/r1_fs_core.h user/e32base.h user/e32cmn.h user/f32ver.h | build/user
