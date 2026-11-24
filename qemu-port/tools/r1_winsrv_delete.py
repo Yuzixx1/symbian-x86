@@ -26,8 +26,10 @@ HARD CONTRACT
     imported safe_target() (inside qemu-port/, resolved, never under
     kernelhwsrv/).
   * Every `edit` op asserts its `old` string occurs EXACTLY ONCE (imported
-    check_edits); 0 or many aborts before writing.  `delete` ops are only
-    accepted for paths in the static DELETE_SET.
+    check_edits); MANY occurrences aborts before writing, but ZERO means the
+    change is already applied (e.g. landed by an earlier commit such as
+    0f03f7e) and the op auto-skips as "already applied" -- never a failure.
+    `delete` ops are only accepted for paths in the static DELETE_SET.
   * Phases run in fixed order P1 -> P2 -> P3 with an incremental `make`
     (NEVER `make clean`) and a phase gate between them.  ANY failure after
     a write auto-rolls back every touched file (edits AND deletes) via the
@@ -95,14 +97,16 @@ FORBIDDEN_ARGV = ("git commit", "git push", "make clean", "rm -rf", "rm -r ")
 
 # ---------------------------------------------------------------- op set --
 # Static DELETE_SET: the ONLY paths a `delete` op may ever remove
-# (docs/WINSRV_DELETION_EXECUTOR.md §3 phase P3, D1-D9).
+# (docs/WINSRV_DELETION_EXECUTOR.md §3 phase P3, D1-D9).  Refreshed at HEAD
+# 0f03f7e after chunks A-D / P4 landed: user/wsdl.c and user/guilib.c are now
+# MIGRATED live sources (ws_e32_client.c backend, zero winsrv refs -- P1 grep
+# decides they stay, see user/user.mk:1227 guilib.o and :1384 wsdl.o), so they
+# are NOT in the set; only the 7 genuine old-winsrv files are.
 DELETE_SET = frozenset({
     "user/winsrv.c",
     "user/guishost.h",
     "user/wsclient.c",
     "user/wsclient.h",
-    "user/wsdl.c",
-    "user/guilib.c",
     "variant/qemu_windowsrv.cpp",
     "variant/qemu_windowsrv.h",
     "variant/qemu_gui_exec.cpp",
@@ -112,15 +116,19 @@ DELETE_SET = frozenset({
 # all r1_* harnesses, netstack, PS/2 / AC'97 / storage / display bridges, the
 # KBINJ genuine-EWSRV bridge (qemu_variant.h:253-280, qemu_variant_int.cpp
 # :232-530,579-586, qemu_mouse.cpp:157-190 pointer side), user/ws_e32_client.c,
-# user/shot_e32.c orphan.
+# user/shot_e32.c orphan, AND the migrated user/wsdl.c + user/guilib.c (chunks
+# A-B landed at 0f03f7e: both now build on ws_e32_client.c with zero winsrv
+# refs -- P1 grep decides they stay; WSDL.E32/GUIHELLO/DTEDIT/DTCALC live on).
 KEPT_NOTE = ("KEPT: qemu_fbblit.* (exec 270), r1_* harnesses, netstack, "
              "PS/2+AC'97+storage+display bridges, KBINJ bridge "
              "(qemu_variant.h:253-280 / qemu_variant_int.cpp:232-530,579-586 / "
-             "qemu_mouse.cpp:157-190), user/ws_e32_client.c, user/shot_e32.c")
+             "qemu_mouse.cpp:157-190), user/ws_e32_client.c, user/shot_e32.c, "
+             "migrated user/wsdl.c + user/guilib.c")
 
 # Edit ops: {id, phase, path, location, old, new}.  `old` must occur exactly
-# once in the target file (asserted at plan AND at apply time).  Multi-line
-# blocks are exact bytes, tabs written as \t.
+# once in the target file (asserted at plan AND at apply time); 0 occurrences
+# = already applied -> auto-skip (not a failure).  Multi-line blocks are
+# exact bytes, tabs written as \t.
 EDIT_OPS = [
     # ---- Phase P1: kernel hooks + exec-table (file deletion comes in P3) ----
     {"id": "E1", "phase": "P1", "path": "variant/qemu_variant.h",
@@ -210,10 +218,19 @@ EDIT_OPS = [
      "location": "Makefile:318",
      "old": "build/qemu_gui_exec.o build/qemu_windowsrv.o ",
      "new": ""},  # keep build/qemu_fbblit.o
+    # Refreshed at 0f03f7e: the guishost.h dep token is already gone from the
+    # winsrv.o row (chunk landed), so the block now starts at the comment.
     {"id": "E10", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1367-1374",
-     "old": ("userland: build/user/WINSRV.E32\n"
-             "build/user/winsrv.o: user/winsrv.c user/runtime.h user/guishost.h | build/user\n"
+     "location": "user/user.mk:1359-1374 (WINSRV.E32 comment+rules)",
+     "old": ("\n# WINDOW SERVER E32 (WSV) -- a genuine PE2 E32 process that owns the VBE LFB,\n"
+             "# composites client windows from the kernel's struct ws_shared (slow execs\n"
+             "# WS_BASE / WS_SIZE / WS_OP), draws title bars / borders / focus highlight plus\n"
+             "# a desktop and taskbar, and dispatches MOVE / DOWN / KEY events from the\n"
+             "# shared input ring.  Falls back to a local shared instance when the kernel\n"
+             "# window-server executives are unavailable.  Genuine PE2 import of EUSER.DLL\n"
+             "# ordinal 915 (RDebug::Printf); IAT slot winsrv_printf_slot at 0x408000.\n"
+             "userland: build/user/WINSRV.E32\n"
+             "build/user/winsrv.o: user/winsrv.c user/runtime.h | build/user\n"
              "\t$(CC) $(USER_FLAGS) -c $< -o $@\n"
              "build/user/winsrv.elf: build/user/start.o build/user/runtime.o build/user/winsrv.o user/link.ld\n"
              "\tld -m elf_i386 --emit-relocs --defsym=winsrv_printf_slot=0x408000 -T user/link.ld -o $@ $(filter %.o,$^) $(LIBGCC)\n"
@@ -221,105 +238,19 @@ EDIT_OPS = [
              "\tpython3 tools/elf2e32.py $< $@ --euser-import 915\n"
              "\tpython3 tools/e32read.py $@ --quiet\n"),
      "new": ""},
+    # Refreshed at 0f03f7e: wsdl.c is MIGRATED (kept; WSDL.E32 stays, built from
+    # wsdl.o + ws_e32_client.o).  Only the dead wsclient.o rule goes (its
+    # source user/wsclient.c is in DELETE_SET and nothing links wsclient.o).
     {"id": "E11", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1381-1385",
-     "old": ("userland: build/user/WSDL.E32\n"
-             "build/user/wsclient.o: user/wsclient.c user/wsclient.h variant/qemu_windowsrv.h user/runtime.h | build/user\n"
-             "\t$(CC) $(USER_FLAGS) -c $< -o $@\n"
-             "build/user/wsdl.o: user/wsdl.c user/wsclient.h user/runtime.h variant/qemu_windowsrv.h | build/user\n"
+     "location": "user/user.mk:1382-1383 (dead wsclient.o rule)",
+     "old": ("build/user/wsclient.o: user/wsclient.c user/runtime.h | build/user\n"
              "\t$(CC) $(USER_FLAGS) -c $< -o $@\n"),
      "new": ""},
-    {"id": "E12-guishell", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:100",
-     "old": "build/user/guishell.o: user/guishell.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/guishell.o: user/guishell.c user/runtime.h | build/user"},
-    {"id": "E12-saver", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:561",
-     "old": "build/user/saver.o: user/saver.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/saver.o: user/saver.c user/runtime.h | build/user"},
-    {"id": "E12-breakout", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1260",
-     "old": "build/user/breakout.o: user/breakout.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/breakout.o: user/breakout.c user/runtime.h | build/user"},
-    {"id": "E12-guimenu", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1301",
-     "old": "build/user/guimenu.o: user/guimenu.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/guimenu.o: user/guimenu.c user/runtime.h | build/user"},
-    {"id": "E12-desktop", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1316",
-     "old": "build/user/desktop.o: user/desktop.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/desktop.o: user/desktop.c user/runtime.h | build/user"},
-    {"id": "E12-gcblittest", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1536",
-     "old": "build/user/gcblittest.o: user/gcblittest.c user/runtime.h user/guishost.h | build/user",
-     "new": "build/user/gcblittest.o: user/gcblittest.c user/runtime.h | build/user"},
-    {"id": "E12-guilib", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1227",
-     "old": ("build/user/guilib.o: user/guilib.c user/guilib.h user/ws_e32_client.c user/wsclient.h "
-             "variant/qemu_windowsrv.h user/runtime.h | build/user"),
-     "new": "build/user/guilib.o: user/guilib.c user/guilib.h user/ws_e32_client.c user/runtime.h | build/user"},
-    {"id": "E12-ws_e32_client", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1406",
-     "old": ("build/user/ws_e32_client.o: user/ws_e32_client.c user/wsclient.h user/runtime.h "
-             "variant/qemu_windowsrv.h | build/user"),
-     "new": "build/user/ws_e32_client.o: user/ws_e32_client.c user/runtime.h | build/user"},
-    {"id": "E12-ws_e32_test", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1408",
-     "old": ("build/user/ws_e32_test.o: user/ws_e32_client.c user/wsclient.h user/runtime.h "
-             "variant/qemu_windowsrv.h | build/user"),
-     "new": "build/user/ws_e32_test.o: user/ws_e32_client.c user/runtime.h | build/user"},
-    {"id": "E12-ws_e32_draw_test", "phase": "P2", "path": "user/user.mk",
-     "location": "user/user.mk:1428",
-     "old": ("build/user/ws_e32_draw_test.o: user/ws_e32_draw_test.c user/wsclient.h user/runtime.h "
-             "variant/qemu_windowsrv.h | build/user"),
-     "new": "build/user/ws_e32_draw_test.o: user/ws_e32_draw_test.c user/runtime.h | build/user"},
-    # ---- Phase P3: DOOM P4 consumer edits (source deletes are D1-D9 below) ----
-    {"id": "D10-a", "phase": "P3", "path": "ports/doom/e32_platform.c",
-     "location": "ports/doom/e32_platform.c:31",
-     "old": "#include \"guishost.h\"         /* user/guishost.h: GC_RECT fallback list */\n",
-     "new": ""},
-    {"id": "D10-b", "phase": "P3", "path": "ports/doom/e32_platform.c",
-     "location": "ports/doom/e32_platform.c:181-211",
-     "old": ("/* Fallback: 40x25 coarse GC_RECT mosaic from the RGBA frame.  Each DOOM\n"
-             " * pixel word is already 0x00RRGGBB, so the low 24 bits are the LFB colour. */\n"
-             "static void blit_via_gcrect(void)\n"
-             "{\n"
-             "    struct gui_shared *sh;\n"
-             "    const unsigned COLS = 40u, ROWS = 25u;\n"
-             "    unsigned row;\n"
-             "    sh = (struct gui_shared *)exec2(QE_EXEC_GUI_DRAW, 0, 0);\n"
-             "    if (!sh || sh->magic != GUI_MAGIC) return;\n"
-             "    for (row = 0; row < ROWS; ++row)\n"
-             "        {\n"
-             "        unsigned col, n = 0;\n"
-             "        for (col = 0; col < COLS; ++col)\n"
-             "            {\n"
-             "            unsigned sx = col * (DOOM_FB_W / COLS) + (DOOM_FB_W / COLS) / 2u;\n"
-             "            unsigned sy = row * (DOOM_FB_H / ROWS) + (DOOM_FB_H / ROWS) / 2u;\n"
-             "            unsigned color = 0;\n"
-             "            if (DG_ScreenBuffer && sx < DOOM_FB_W && sy < DOOM_FB_H)\n"
-             "                color = ((unsigned)DG_ScreenBuffer[sy * DOOM_FB_W + sx]) & 0x00FFFFFFu;\n"
-             "            sh->cmds[n].type = GC_RECT;\n"
-             "            sh->cmds[n].a = sXOff + col * (DOOM_FB_W / COLS);\n"
-             "            sh->cmds[n].b = sYOff + row * (DOOM_FB_H / ROWS);\n"
-             "            sh->cmds[n].c = DOOM_FB_W / COLS;\n"
-             "            sh->cmds[n].d = DOOM_FB_H / ROWS;\n"
-             "            sh->cmds[n].e = color;\n"
-             "            if (++n == GUI_MAX_CMDS)\n"
-             "                { (void)exec2(QE_EXEC_GUI_DRAW, n, 0); n = 0; }\n"
-             "            }\n"
-             "        if (n) (void)exec2(QE_EXEC_GUI_DRAW, n, 0);\n"
-             "        }\n"
-             "}\n"),
-     "new": ""},
-    {"id": "D10-c", "phase": "P3", "path": "ports/doom/e32_platform.c",
-     "location": "ports/doom/e32_platform.c:246-250",
-     "old": ("    if (r != 0)\n"
-             "        {\n"
-             "        if (sFrames == 1) doom_marker(\"DOOM: fbblit unavailable, GC_RECT fallback\");\n"
-             "        blit_via_gcrect();\n"
-             "        }\n"),
-     "new": ""},  # KEEP :245 exec2(QE_EXEC_FBCTL, FBO_FBBLIT, ...) primary
+    # E12-* dep-token ops and D10-a/b/c (DOOM P4) DROPPED at 0f03f7e:
+    # chunks A-D / P4 already landed -- user.mk dep rows no longer name
+    # guishost.h / wsclient.h / qemu_windowsrv.h and ports/doom/e32_platform.c
+    # is already fbblit-only (no guishost include, no blit_via_gcrect), so
+    # those old strings occur 0 times and would REFUSE the apply.
 ]
 
 # Delete ops are derived from DELETE_SET (phase P3, LAST).
@@ -331,8 +262,6 @@ DELETE_OPS = [
         ("user/guishost.h", "also referenced by user/shot.c -- P1 must clear that first"),
         ("user/wsclient.c", "old exec backend"),
         ("user/wsclient.h", "ws_e32_client.c / ws_e32_draw_test.c includes re-pointed first"),
-        ("user/wsdl.c", "old backend"),
-        ("user/guilib.c", "residual old display-list backend only (P1 grep decides)"),
         ("variant/qemu_windowsrv.cpp", "WsExecInstall :215-258 -> exec count 274->271"),
         ("variant/qemu_windowsrv.h", "included by qemu_windowsrv.cpp + user.mk dep tokens"),
         ("variant/qemu_gui_exec.cpp", "execs 249/250/251 install + gui_publish_* + GuiGeometryReset"),
@@ -343,7 +272,7 @@ PHASES = ("P1", "P2", "P3")
 PHASE_LABEL = {
     "P1": "kernel hooks + exec-table (edits; exec count 274->271 self-heals)",
     "P2": "build wiring (Makefile object rows + user.mk rows/dep tokens)",
-    "P3": "source deletion LAST (DELETE_SET + DOOM P4 edits), after P1+P2 gates",
+    "P3": "source deletion LAST (DELETE_SET; DOOM P4 already landed at 0f03f7e), after P1+P2 gates",
 }
 
 
@@ -398,15 +327,24 @@ def p6_standing_invariants() -> tuple[bool, str]:
         for n, line in enumerate(e32load.read_text(encoding="utf-8",
                                                     errors="ignore").splitlines(), 1):
             s = line.lstrip()
-            if "trampoline" in s.lower() and not s.startswith(("//", "*", "/*")):
+            # HEAD=0f03f7e (11/11-blessed) carries the KPrintf string
+            # "imports bound trampoline" at e32load.cpp:1014; strip string
+            # literals so only real code references count as "active".
+            code_only = re.sub(r'"(?:[^"\\]|\\.)*"', "", s)
+            if "trampoline" in code_only.lower() and not s.startswith(("//", "*", "/*")):
                 return False, f"EFILE trampoline active at variant/e32load.cpp:{n}"
     return True, "kernelhwsrv/ clean; EFILE guard-only (no active trampoline); " \
                  "never accept SessionPath r=-15; !E32WindowServer keeps ECapabilityProtServ"
 
 
-def op_targets_clean(ops: list[dict]) -> tuple[bool, str]:
-    """Refuse if any op target is already modified (no stacking)."""
-    rels = sorted({o["path"] for o in ops})
+def op_targets_clean(ops: list[dict], checks: list[dict] | None = None) -> tuple[bool, str]:
+    """Refuse if any op target that will actually be WRITTEN is already
+    modified (no stacking).  Ops that auto-skip (old-string already absent =
+    applied by an earlier commit / a concurrent worker) are excluded: their
+    files are never written by this run, so their working-tree state is not
+    this run's concern."""
+    skip_ids = {c["op"] for c in checks or [] if c.get("skip")}
+    rels = sorted({o["path"] for o in ops if o["id"] not in skip_ids})
     return git_porcelain([str(Path("qemu-port") / r) for r in rels])
 
 
@@ -424,7 +362,15 @@ def check_ops(ops: list[dict]) -> list[dict]:
                 "path": o["path"], "location": o["location"]}
         if o["type"] == "edit":
             c = edit_checks[o["location"]]
-            info.update(ok=c["ok"], count=c.get("count", 0), reason=c["reason"])
+            count = c.get("count", 0)
+            if count == 0:
+                # Already applied by an earlier commit (e.g. 0f03f7e): the
+                # old-string is absent, so this op auto-skips -- NOT a failure.
+                info.update(ok=True, count=0, skip=True,
+                            reason="already applied (0 occurrences) -- auto-skip")
+            else:
+                info.update(ok=c["ok"], count=count, reason=c["reason"],
+                            skip=False)
         else:
             p = PORT / o["path"]
             if o["path"] not in DELETE_SET:
@@ -449,10 +395,19 @@ def print_plan(checks: list[dict], gate_status: str | None) -> None:
     by_phase: dict[str, list[dict]] = {p: [] for p in PHASES}
     for c in checks:
         by_phase[c["phase"]].append(c)
+    p1ok, p1hits = p1_consumers_clean()  # read-only consumer grep
+    print(f"P1 consumer grep hits outside DELETE_SET: {len(p1hits)}"
+          + ("" if p1ok else "  REFUSE: " + "; ".join(p1hits)))
     for ph in PHASES:
-        print(f"\n=== Phase {ph} -- {PHASE_LABEL[ph]} ===")
+        n_apply = sum(1 for c in by_phase[ph] if c["ok"] and not c.get("skip"))
+        n_skip = sum(1 for c in by_phase[ph] if c.get("skip"))
+        print(f"\n=== Phase {ph} -- {PHASE_LABEL[ph]} ===  "
+              f"{ph}={n_apply} op(s) to apply, {n_skip} already applied (auto-skip)")
         for c in by_phase[ph]:
-            tag = "unique" if c["ok"] else "AMBIGUOUS"
+            if c.get("skip"):
+                tag = "applied"
+            else:
+                tag = "unique" if c["ok"] else "AMBIGUOUS"
             print(f"  [{tag}] {c['op']:>18}  {c['location']}  ({c['reason']})")
             if c["type"] == "edit":
                 op = next(o for o in ops if o["id"] == c["op"])
@@ -624,9 +579,15 @@ def apply_op(o: dict) -> None:
     if o["type"] == "edit":
         data = p.read_bytes()
         needle, repl = o["old"].encode("utf-8"), o["new"].encode("utf-8")
-        if data.count(needle) != 1:
+        cnt = data.count(needle)
+        if cnt == 0:
+            # Already applied (old-string absent): auto-skip, not a failure.
+            print(f"  skip (already applied, 0 occurrences)  "
+                  f"{o['location']} -> {o['path']}")
+            return
+        if cnt != 1:
             raise RuntimeError(f"ambiguity at apply time: {o['location']} "
-                               f"(count={data.count(needle)})")
+                               f"(count={cnt})")
         p.write_bytes(data.replace(needle, repl, 1))
         print(f"  edited  {o['location']} -> {o['path']}")
     else:
@@ -647,8 +608,10 @@ def apply_winsrv() -> int:
             print(f"REFUSE: op {c['op']} not verifiable: {c['location']}: {c['reason']}",
                   file=sys.stderr)
         return 2
+    nskip = sum(1 for c in checks if c.get("skip"))
     print(f"  op set: {len(ops)} ops ({sum(1 for o in ops if o['type'] == 'edit')} edits, "
-          f"{sum(1 for o in ops if o['type'] == 'delete')} deletes), all unique/allowlisted")
+          f"{sum(1 for o in ops if o['type'] == 'delete')} deletes), "
+          f"{nskip} already applied (auto-skip), rest unique/allowlisted")
 
     clean, detail = kernelhwsrv_clean()
     if not clean:
@@ -656,7 +619,7 @@ def apply_winsrv() -> int:
         return 2
     print(f"  kernelhwsrv/ clean: {detail}")
 
-    oclean, odetail = op_targets_clean(ops)
+    oclean, odetail = op_targets_clean(ops, checks)
     if not oclean:
         print(f"REFUSE: op target(s) already modified: {odetail!r}. Nothing changed.",
               file=sys.stderr)

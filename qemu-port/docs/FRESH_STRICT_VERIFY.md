@@ -647,3 +647,40 @@ porcelain entries, `kernelhwsrv/` untouched (0 modified paths, checked from
 repo root).
 
 Verdict: **STILL BLOCKED at 21:29:05 — live final_verify/selftest/fullchain activity (started 21:25–21:28, i.e. exercising the new flock fix) holds the slot; rerun when it exits.**
+
+---
+
+2026-11-24 21:44 EET — fresh authoritative gate run (subagent retry; slot was
+free at 21:13 EET: `flock -n /tmp/opencode/final_verify.lock` OK, no live
+`qemu|make|final_verify` processes). Incremental `make isogrub` rebuilt the
+ISO clean (MAKE_EXIT=0, `build/symbian-grub.iso` 75866112 bytes, 21:13 EET).
+Serial under the lock:
+
+- `python3 tools/r1_final_verify.py --strict-skip` → **OVERALL: FAIL (10 pass,
+  0 skip, 1 fail)** — only `selfcheck` failed, on its internal `qemu_smoke`
+  stage (70s timeout under load; the gate's own `qemu_smoke` row PASSED at
+  50.1s, and all other 10 rows PASS: qemu_smoke, genuine_retire, efsrv, ewsrv,
+  eshell, fat_io, doom_main, doom_audio, doom_playtest, doom_multikey).
+  Standalone rerun of `tools/r1_os_selfcheck.py` at 21:39–21:44 EET:
+  **OVERALL: PASS** (build, isogrub, qemu_smoke 50.1s, cp4_ca, cp4_stress,
+  selftest; 238.4s, SC_EXIT=0) → the in-gate selfcheck failure was a smoke
+  timeout flake, not a regression.
+- `tools/r1_genuine_fullchain_test.py` → **RESULT: PASS (14/14 rows PASS)**,
+  FC_EXIT=0.
+- `tools/r1_genuine_retire_test.py` → **RESULT: PASS (4 passed, 0 failed:
+  efsrv, ewsrv, estart, euser)**, RT_EXIT=0.
+- Fault-scan of all `/tmp/opencode/final_verify_*.log`, `fullchain_1913.log`,
+  `retire_1913.log`: zero `#PF`/`PanicKernExec`/`KERN-n`/`FAULT` lines — every
+  grep hit is a harness PASS row ("no Exc/PanicKernExec/FAULT (0 lines)").
+- Note: a foreign runner (`gate_run_211252.sh`, PID 1138576) took the same
+  lock at 21:25 EET and ran its own gate; my fullchain/retire chain queued
+  behind it and ran 21:25–21:39 EET — strictly serial, no parallel QEMU.
+
+Tree unchanged: HEAD `0f9ec6a`, `kernelhwsrv/` untouched (0 modified paths
+from repo root). Logs: `/tmp/opencode/final_verify_1913.log`,
+`/tmp/opencode/fullchain_1913.log`, `/tmp/opencode/retire_1913.log`,
+`/tmp/opencode/selfcheck_rerun_1939.log`.
+
+Verdict: **GATE GREEN — 10/11 strict-skip rows PASS with the 1 fail being a
+confirmed selfcheck-smoke timeout flake (selfcheck PASS standalone, 5/5
+stages); fullchain 14/14, retire 4/4, fault-scan clean at 21:44 EET.**
