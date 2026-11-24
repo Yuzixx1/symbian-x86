@@ -19,7 +19,7 @@
 #include <kernel/x86/x86.h>
 #include <e32ldr_private.h>
 #include "qemu_variant.h"
-#include "qemu_fbblit.h"   // fb blit/info ops appended to SvcMgr ctl exec 270
+#include "qemu_fbblit.h"   // fb blit/info ops appended to port ctl exec 270
 #include "../mmu/pd.h"  // M-03: per-process PD side-table (port-side only)
 
 extern "C" TUint8 qemu_tss[];  // 104B bootstrap TSS (bootcpu_gas.S BSS)
@@ -32,7 +32,7 @@ static TUint sSvcLastPid = 0;   // S-02: pid of the most recent E32Run success
 // the name when the first owner's thread exits (DServer::Close detaches every
 // session with KErrServerTerminated, seen by F32CLIENT as -15).  The guard
 // below refuses a second EFILE-family image from any boot path (genuine boot
-// table, prove script shell command, or the svcmgr fallback).
+// table or prove script shell command).
 static TBool IsEwsrvProcess(const char* n);  // defined below; EWSRV shares UID3
 
 // Genuine EFILE UID3 (also shared by genuine EWSRV, hence the name check).
@@ -1255,72 +1255,19 @@ TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName)
     return EFalse;
 }
 
-// --- S-02: service-manager launch / supervision exec handlers ---------------
-// Re-expose E32Run (and its death primitives) to the user-mode svcmgr as a
-// trusted exec. The genuine slow exec table is generated in kernelhwsrv (which
-// is read-only here), so SvcMgrExecInstall() repurposes three test-only slots
-// (268/269/270) at boot. kernelhwsrv source is not touched. Flags=0: the
-// callees enter CS themselves (as the shell's RunImage path does).
+// --- S-02: port control exec (slot 270) + exec-81 trap installer -----------
+// The genuine slow exec table is generated in kernelhwsrv (which is
+// read-only here), so PortTrapExecInstall() repurposes the test-only slot 270
+// at boot for port operations. kernelhwsrv source is not touched. Flags=0:
+// the callees enter CS themselves (as the shell's RunImage path does).
 extern const TUint32 EpocSlowExecTable[];
 namespace { TUint8 sSvcImg[512 * 1024]; }  // fit large E32s (DOOM ~338 KiB) + margin
 
-static TInt SvcDesc(TInt aDesc, TBuf8<160>& aOut)
+// exec 270: ctl(op, arg) — op 2: FBO_FBINFO; op 3: FBO_FBBLIT; op 4: PTRINJ
+// sink.  Ops 0/1 (dead/reap) and launch/kill slots 268/269 retired with
+// svcmgr; the genuine estart/ewsrv/eshell chain supervises processes now.
+static TInt PortCtlExec(TInt aOp, TInt aArg)
     {
-    if (!aDesc) return KErrArgument;
-    Kern::KUDesGet(aOut, *(const TDesC8*)aDesc);  // TDesC8: {type|length, ptr}
-    return aOut.Length() ? KErrNone : KErrArgument;
-    }
-
-// exec 268: launch(image-path desc, cmdline desc) -> new pid (>0), or error.
-static TInt SvcMgrLaunchExec(TInt aPath, TInt aCmd)
-    {
-    TBuf8<160> path;
-    TInt r = SvcDesc(aPath, path);
-    if (r != KErrNone) return r;
-    char p[161];
-    TUint n = 0;
-    while (n < (TUint)path.Length() && n < 160) { p[n] = (char)path[n]; ++n; }
-    p[n] = 0;
-    char cmd[161];
-    const char* cmdLine = 0;
-    if (aCmd)
-        {
-        TBuf8<160> c;
-        Kern::KUDesGet(c, *(const TDesC8*)aCmd);
-        if (c.Length())
-            {
-            TUint k = 0;
-            while (k < (TUint)c.Length() && k < 160) { cmd[k] = (char)c[k]; ++k; }
-            cmd[k] = 0;
-            cmdLine = cmd;
-            }
-        }
-    // E32Run allocates TProcessCreateInfo before its own ThreadEnterCS, so
-    // the caller must already hold CS (as the shell's RunImage path does).
-    NKern::ThreadEnterCS();
-    char prev = FatCurLetter();
-    if (!prev) FatUse('C');
-    TUint got = 0;
-    r = FatReadPath(p, sSvcImg, sizeof(sSvcImg), got);
-    if (prev) FatUse(prev);
-    if (r == KErrNone)
-        r = E32Run(sSvcImg, got, p, cmdLine);
-    NKern::ThreadLeaveCS();
-    if (r != KErrNone)
-        { KPrintf("SvcMgr: launch %s r=%d\r\n", p, r); return r; }
-    KPrintf("SvcMgr: launch %s pid=%u\r\n", p, sSvcLastPid);
-    return (TInt)sSvcLastPid;
-    }
-
-// exec 269: kill(pid, 0) -> E32Kill result.
-static TInt SvcMgrKillExec(TInt aPid, TInt)
-    { return E32Kill((TUint)aPid); }
-
-// exec 270: ctl(op, arg) — op 0: dead(pid)?1:0; op 1: E32Reap() count.
-static TInt SvcMgrCtlExec(TInt aOp, TInt aArg)
-    {
-    if (aOp == 0) return E32ProcessDead((TUint)aArg) ? 1 : 0;
-    if (aOp == 1) return E32Reap();
     // Append-only capability: bulk framebuffer blit / info.  These are new
     // operations on this existing genuine slow exec; slots 274/275 cannot be
     // added safely (they overlap EpocFastExecTable -- see qemu_fbblit.h).
@@ -1350,7 +1297,7 @@ static TInt SvcMgrCtlExec(TInt aOp, TInt aArg)
 // arg: this=[ebp+8], x=[this+8] -> EAX, y=[this+0xc] -> EDX.  The wrapper is
 // transparent: it re-pushes the caller's `this`, calls the genuine export,
 // records EAX:EDX, emits slow exec 270 op 4 (logged from ring 0 by
-// SvcMgrCtlExec), restores EAX:EDX and returns.  Only caller-saved EAX/ECX/EDX
+// PortCtlExec), restores EAX:EDX and returns.  Only caller-saved EAX/ECX/EDX
 // are touched; EBX/ESI/EDI/EBP and the stack are balanced (cdecl caller still
 // cleans its own `this`).
 TUint32 sPortOrigPos = 0;   // genuine ord-1868 address (set at bind)
@@ -1370,7 +1317,7 @@ asm(
     "  movl 4(%esp), %edx\n"              // x
     "  shll $16, %edx\n"
     "  orl (%esp), %edx\n"                // packed (x<<16)|y
-    "  movl $270, %eax\n"                 // slow exec: SvcMgrCtlExec
+    "  movl $270, %eax\n"                 // slow exec: PortCtlExec
     "  int $0x21\n"                       // ring 0 -> KPrintf (QEMU serial)
     "  popl %edx\n"                       // y  (genuine Pos return)
     "  popl %eax\n"                       // x  (genuine Pos return)
@@ -1427,57 +1374,35 @@ static TInt PortFsRegisterThread(TInt aUnused)
     return r;
     }
 
-void SvcMgrExecInstall()
+void PortTrapExecInstall()
     {
     TUint32* tab = (TUint32*)EpocSlowExecTable;
-    if (tab[0] < 271u)  // unexpected table size: refuse to patch
-        { KPrintf("SvcMgr: exec table count %u, install skipped\r\n", tab[0]); return; }
+    if (tab[0] < 271u)  // guard: table must hold the slot-270 install
+        { KPrintf("PortTrap: exec table count %u, install skipped\r\n", tab[0]); return; }
     // Wrap the genuine FsRegisterThread so an exiting file-server thread does
     // not fault K::ESystemThreadPanic when this port tears EFILE down.
     if (!sOrigFsRegister)
         {
         sOrigFsRegister = (TFsRegisterFn)tab[4 + 2 * 81];
         tab[4 + 2 * 81] = (TUint32)(TLinAddr)&PortFsRegisterThread;
-        KPrintf("SvcMgr: FsRegisterThread wrapper installed (slot 81)\r\n");
+        KPrintf("PortTrap: FsRegisterThread wrapper installed (slot 81)\r\n");
         }
-    const TInt slots[3] = {268, 269, 270};
-    TInt (*fns[3])(TInt, TInt) = {&SvcMgrLaunchExec, &SvcMgrKillExec, &SvcMgrCtlExec};
-    for (TInt i = 0; i < 3; ++i)
-        {
-        TInt s = slots[i];
-        tab[3 + 2 * (TUint)s] = 0;  // flags: no claim/preprocess/extra args
-        tab[4 + 2 * (TUint)s] = (TUint32)(TLinAddr)fns[i];
-        }
-    KPrintf("SvcMgr: launch execs installed (268/269/270)\r\n");
-    }
-
-// Boot-time launch of SVCMGR.E32 — mirrors the shell's RunImage load path.
-void SvcMgrBootLaunch()
-    {
-    char prev = FatCurLetter();
-    if (!prev) FatUse('C');
-    TUint got = 0;
-    TInt r = FatReadPath("\\SVCMGR.E32", sSvcImg, sizeof(sSvcImg), got);
-    if (prev) FatUse(prev);
-    if (r != KErrNone)
-        { KPrintf("SvcMgr: SVCMGR.E32 not found r=%d\r\n", r); return; }
-    char name[] = "SVCMGR.E32";
-    r = E32Run(sSvcImg, got, name, 0);
-    KPrintf("SvcMgr: boot launch r=%d pid=%u\r\n", r, sSvcLastPid);
+    // Slot 270 stays installed, slimmed to the port ops 2/3/4 (fbblit +
+    // PTRINJ).  svcmgr's dead/reap ops 0/1 and launch/kill slots 268/269 are
+    // retired with svcmgr.
+    tab[3 + 2 * 270u] = 0;  // flags: no claim/preprocess/extra args
+    tab[4 + 2 * 270u] = (TUint32)(TLinAddr)&PortCtlExec;
+    KPrintf("PortTrap: ctl exec installed (slot 270, ops 2/3/4)\r\n");
     }
 
 // --- G-01: genuine Symbian startup chain (boot list) --------------------------
 // Init3 spawns GenuineBootLaunch() on a supervisor DThread (see the Asic) after
-// SvcMgrExecInstall(). The genuine chain EUSER.DLL (already resident) ->
+// PortTrapExecInstall(). The genuine chain EUSER.DLL (already resident) ->
 // EFILE.E32 / EFSRV.E32 (genuine !FileServer) -> ESTART.E32 -> EWSRV.E32 ->
 // ESHELL.E32 is probed on the boot volume by FAT presence, in genuine order;
 // every component staged under its genuine name is launched through the same
-// FatReadPath + E32Run path the shell's RunImage and SvcMgrLaunchExec use.
-// Anything absent falls
-// back to the hand-written shims: with no genuine file server staged, the boot
-// falls back to SvcMgrBootLaunch() (svcmgr -> \PORTFILESRV.E32), and boots
-// without EWSRV/ESHELL keep the console shell + GUI execs. Detection is by
-// FAT presence, so shim-only disks (no genuine names) boot exactly as before.
+// FatReadPath + E32Run path the shell's RunImage uses. Detection is by FAT
+// presence, so disks without the genuine names simply skip those entries.
 namespace {
 struct GenuineBootEnt
     {
@@ -1526,7 +1451,7 @@ void GenuineBootLaunch()
     {
     KPrintf("GenuineBoot: probing boot volume for the genuine startup chain\r\n");
     TBool genuineFs = EFalse;
-    TBool serverUp = PortFileServerPublished();  // e.g. svcmgr shim won boot race
+    TBool serverUp = PortFileServerPublished();  // e.g. a shim won the boot race
     if (serverUp)
         KPrintf("GenuineBoot: !FileServer already published, skipping "
                 "genuine file-server slot\r\n");
@@ -1549,5 +1474,4 @@ void GenuineBootLaunch()
         KPrintf("GenuineBoot: file server up, svcmgr fallback skipped\r\n");
         return;
         }
-    // RETIRED by r1_shim_retire_apply: SvcMgrBootLaunch();  // fallback: our svcmgr starts \PORTFILESRV.E32
     }

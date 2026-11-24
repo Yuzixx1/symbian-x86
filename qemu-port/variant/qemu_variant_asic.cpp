@@ -11,18 +11,6 @@
 #include <kernel/kernel.h>
 #include <kernel/kern_priv.h>   // SThreadCreateInfo / Kern::ThreadCreate (boot DThread)
 #include "qemu_variant.h"
-#include "../fs/r1_fs_core.h"
-#include "../fs/r1_fs_fat.h"
-
-// Global R1 file service instance (Core + FAT32 backend).
-namespace {
-R1Fs::FatBackend* gFatBackend = 0;
-R1Fs::Core* gCore = 0;
-uint32_t gSession = 0;
-} // namespace
-
-extern "C" TInt R1FsSession() { return gSession; }
-extern "C" R1Fs::Core* R1FsCore() { return gCore; }
 
 // QEMU drivers (variant/qemu_assp.cpp, linked in): plain builtins here so the
 // genuine e32def.h typedefs never clash textually (cf. genuine_glue.cpp).
@@ -45,7 +33,7 @@ namespace QemuIrq
 
 // (VgaTeletype, X86IrqDispatcher, ShellSpawnFull shared via qemu_variant.h.)
 void GenuineBootLaunch();  // variant/e32load.cpp: genuine startup-chain boot
-                           // list; falls back to SvcMgrBootLaunch() internally
+                           // list (EFILE/EFSRV -> ESTART -> EWSRV -> ESHELL)
 
 extern "C" void* memclr(void* aTrg, unsigned aLength);
 _LIT(KLitGenuineBoot, "GenuineBoot");
@@ -145,23 +133,13 @@ void QemuVariantAsic::Init3()
     // so the display group can be registered from pure variant code.
     QemuDisplayRegisterHal();
 
-    // Start the R1 file server (!FileServer) on the FAT32 volume.
     // Mount the first partition of the first AHCI disk (dev 4, part 0 as
-    // discovered by QEMU: "ahci: port 0 QEMU HARDDISK").
-    gFatBackend = new R1Fs::FatBackend();
-    if (gFatBackend) {
-        TInt mr = gFatBackend->Mount(4, 0);  // dev 4, part 0
-        if (mr == R1Fs::Success) {
-            gCore = new R1Fs::Core(*gFatBackend);
-            if (gCore) {
-                gSession = 0;
-                TInt sr = gCore->Connect(0x100039e5, gSession);  // SID from portfilesrv
-                if (sr != R1Fs::Success) {
-                    gSession = 0;
-                }
-            }
-        }
-    }
+    // discovered by QEMU: "ahci: port 0 QEMU HARDDISK"). The first FatMount
+    // claims the next free drive letter, i.e. C: — the boot volume that
+    // GenuineBootTry/E32LoadDll read via FatUse('C') + FatReadPath.
+    TInt mr = FatMount(4, 0);  // dev 4, part 0 -> C:
+    if (mr != KErrNone)
+        KPrintf("KERN FatMount(4,0) failed r=%d\r\n", mr);
     // Plain `qemu -cdrom ... -boot d` has no -drive at all: the end-user
     // programs arrive as a GRUB Multiboot module, snapshotted into high RAM
     // as read-only block device 8. Mount that image as X:. When an AHCI disk
@@ -183,15 +161,14 @@ void QemuVariantAsic::Init3()
         const char* marker = "X: mounted (programs)\r\n";
         while (*marker) QemuUart::PutC(*marker++);
     }
-    // S-02/G-01: install trusted service-manager execs, then boot the GENUINE
-    // startup chain where its components are staged on the boot volume
-    // (\EFILE/\EFSRV -> \ESTART -> \EWSRV -> \ESHELL, probed by FAT presence).
-    // GenuineBootLaunch() runs on a supervisor DThread (not Init3's nanokernel
-    // thread, which cannot take kernel mutexes) and falls back to
-    // SvcMgrBootLaunch() (svcmgr -> \PORTFILESRV.E32) when no genuine file
-    // server is present, so shim-only disks boot exactly as before. FAT is
-    // mounted above, so images load here just as the shell's RunImage loads.
-    SvcMgrExecInstall();
+    // S-02/G-01: install the port exec traps (exec-81 FsRegisterThread wrap +
+    // slim ctl slot 270 ops 2/3/4), then boot the GENUINE startup chain where
+    // its components are staged on the boot volume (\EFILE/\EFSRV -> \ESTART
+    // -> \EWSRV -> \ESHELL, probed by FAT presence). GenuineBootLaunch() runs
+    // on a supervisor DThread (not Init3's nanokernel thread, which cannot
+    // take kernel mutexes). FAT is mounted above, so images load here just as
+    // the shell's RunImage loads.
+    PortTrapExecInstall();
     GenuineBootSpawn();
     ShellSpawnFull();         // interactive console as genuine NThread
     }

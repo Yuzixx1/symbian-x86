@@ -7,13 +7,6 @@
 
 #include <e32rom.h>
 
-namespace R1Fs { class Core; }
-
-extern "C" {
-TInt R1FsSession();
-R1Fs::Core* R1FsCore();
-}
-
 // Contiguous ROM synth blob (variant/qemu_variant_rom.cpp). Lives at
 // qemu_rom_header_reserve so M::IsRomAddress() covers every image header.
 struct QRomBlob
@@ -403,9 +396,9 @@ TUint E32LastPid();          // pid of the most recent successful E32Run (Ctrl+C
 TInt E32Reap();              // post-mortem code-seg cleanup, returns count
 void E32PrintExits();        // ring of recent exit records (name/id/type/reason)
 TBool E32FindExit(TUint aId, TUint8& aType, TInt& aReason, char* aName);
-// S-02 service manager: trusted launch/supervision execs + boot launch.
-void SvcMgrExecInstall();    // repurpose exec slots 268/269/270 -> launch/kill/ctl
-void SvcMgrBootLaunch();     // load + E32Run \SVCMGR.E32 at boot
+// S-02 port traps: exec-81 FsRegisterThread wrapper + slim ctl exec slot 270
+// (ops 2/3/4: fbblit + PTRINJ). svcmgr launch/kill/boot execs retired.
+void PortTrapExecInstall();  // wrap exec 81; install exec 270 ops 2/3/4 only
 TBool E32ProcessAlive(TUint aId);  // still in the process container?
 TBool E32ProcessDead(TUint aId);   // reaper predicate: husks count as dead
 void VgaTeletype(char aC);

@@ -319,17 +319,9 @@ KERNFULL_OBJS := build/multiboot.o build/bootcpu_gas.o build/bootmain_gas.o buil
 
 KERNFULL_OBJS += build/userfiles.o build/usercon.o
 
-# R1 file service core + FAT32 backend. Compiled unconditionally so the
-# kernel can host a genuine RFs/RFile service on a FAT32 volume.
-# r1_fs_server.cpp (CServer2-based user-space server) is NOT compiled here;
-# it belongs in the user-space portfilesrv.exe host process.
-KERNFULL_OBJS += build/r1_fs_core.o build/r1_fs_fat.o
-
-build/r1_fs_core.o: fs/r1_fs_core.cpp fs/r1_fs_core.h fs/r1_fs_backend.h | build
-	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
-
-build/r1_fs_fat.o: fs/r1_fs_fat.cpp fs/r1_fs_fat.h fs/r1_fs_backend.h | build
-	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c $< -o $@
+# Kernel-side r1_fs glue removed (docs/R1FS_GLUE_FEASIBILITY.md): the sole
+# in-kernel consumer was the Asic::Init3 mount block, now a direct
+# FatMount(4,0). Genuine EFSRV uses the user-mode r1_fs copy + build/fat32.o.
 
 # Genuine G is explicit local research provisioning, never a legacy fallback.
 # Empty by default: ordinary all/ISO builds need no genuine local assets.
