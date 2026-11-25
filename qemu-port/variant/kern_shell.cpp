@@ -1748,7 +1748,6 @@ static void Exec()
         else if (argc > 1 && StrEq(argv[1], "shared"))
             {
             TUint b = 0, s = 0;
-            gui_button_state(b, s);
             KPrintf("mouse shared: buttons=%u (1=L 2=R 4=M) button_seq=%u\r\n", b, s);
             }
         else if (argc > 1 && StrEq(argv[1], "press"))

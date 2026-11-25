@@ -646,7 +646,6 @@ extern "C" void QemuKbdIsr(TAny* /*aPtr*/)
         if (sc < 128) sKeyDown[sc] = 1;
         ++gKbdKeys;
         QemuKbdPush(c);
-        wsrv_publish_key((unsigned int)c);  // window-server event ring
         }
     }
 

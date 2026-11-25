@@ -397,7 +397,6 @@ TInt display_set_mode(TInt aVbeMode)
 
     display_clear(0u);                 // blank the new framebuffer
     FbMirrorReset();                   // console text grid/cursor -> new geometry
-    GuiGeometryReset();                // guishost fb_w/fb_h + cursor
     MouseGeometryReset();              // PS/2 crosshair clamp
 
     KPrintf("VBE: SWITCH OK mode=0x%x %ux%ux%u LFB=0x%08x pitch=%u\r\n",

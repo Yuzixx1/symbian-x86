@@ -97,18 +97,8 @@ void FbMirrorReset();                // reset the VBE text-mirror cursor/grid
 // output still goes to COM1 and 0xB8000 but never touches the framebuffer, so
 // a full-screen GUI app's pixels cannot be scrolled away by console text.
 void QemuFbMirrorSet(int aOn);       // aOn != 0 = suspend LFB mirror
-void GuiGeometryReset();             // refresh guishost shared fb geometry
 void MouseGeometryReset();           // clamp/refresh the PS/2 cursor
 
-// GUI desktop shell exec host (variant/qemu_gui_exec.cpp). Exposes slow execs
-// 249 (fb base), 250 (fb size) and 251 (display-list runner / shared base)
-// to ring-3 E32 programs; layout is in user/guishost.h.
-TInt gui_init();                     // idempotent; installs execs 249/250/251
-// PS/2 button state -> userland bridge (variant/qemu_gui_exec.cpp).  The ISR
-// in qemu_mouse.cpp calls gui_publish_buttons() so gui_shared.buttons is live
-// without a display-list exec; gui_button_state() is the diagnostic readback.
-void gui_publish_buttons(TUint aButtons, TUint aSeq);   // ISR-safe, 2 stores
-void gui_button_state(TUint& aButtons, TUint& aSeq);    // kernel diagnostic
 
 // PS/2 auxiliary (mouse) driver (variant/qemu_mouse.cpp). IRQ12 ISR updates a
 // clamped software cursor; the crosshair is painted through display_rect().
@@ -240,15 +230,6 @@ TInt audio_pcm_stop();                              // halt PCM-OUT DMA, flush q
 // op 0 -> identity-mapped ps_census base (user/pshost.h), op 1 -> refresh.
 TUint PsExecSlot();                                 // == 241, for diagnostics
 
-// Window-server shared memory + slow execs (variant/qemu_windowsrv.cpp).
-// Appended table slots 271 (base) / 272 (size) / 273 (multiplexed ctl);
-// layout + op codes in variant/qemu_windowsrv.h. Boot hook idempotent.
-TInt windowsrv_init();
-TUint32 windowsrv_base();
-TUint windowsrv_size();
-// PS/2 ISR bridges: no-ops until a window server registers via exec 273 op 1.
-void wsrv_publish_mouse(TInt aX, TInt aY, TUint aButtons, TUint aSeq);
-void wsrv_publish_key(TUint aKey);
 
 // --- Genuine EWSRV raw-input bridge (variant/qemu_variant_int.cpp) ----------
 // Opt-in via \KBINJ.TXT on the boot FAT volume (presence = enable, same idea

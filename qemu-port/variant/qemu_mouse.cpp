@@ -39,9 +39,6 @@
 #include <kernel/kernel.h>
 #include "qemu_variant.h"
 
-// Position bridge implemented in variant/qemu_gui_exec.cpp.  Declared locally
-// so the shared variant/qemu_variant.h (owned by another worker) is untouched.
-void gui_publish_position(TInt aX, TInt aY);
 
 // Direct PIC mask helper (variant/qemu_assp.cpp) — see note above.
 namespace QemuIrq
@@ -160,7 +157,6 @@ namespace
             { gButtons = newButtons; ++gButtonSeq; }
         // Publish to the userland-visible shared struct right here in IRQ12
         // context: a click must not depend on anybody running a DRAW exec.
-        gui_publish_buttons(gButtons, gButtonSeq);
         gX += dx;
         gY -= dy;                             // PS/2 +dy is "up" on screen
         if (gPacketSize == 4)
@@ -169,8 +165,6 @@ namespace
         // Publish the live pointer position to gui_shared right here in the
         // ISR, just like the button mask: a desktop can now redraw its cursor
         // every frame from gSh->mouse_x/y without waiting for a DRAW exec.
-        gui_publish_position(gX, gY);
-        wsrv_publish_mouse(gX, gY, gButtons, gButtonSeq);  // window-server ring
         // Genuine EWSRV input bridge (same \KBINJ.TXT gate as the keyboard
         // ISR in qemu_variant_int.cpp): emit one EPointerMove plus an
         // EButtonNDown/Up per click-bit transition, queued as genuine
@@ -299,7 +293,6 @@ void mouse_render_cursor()
     // Re-publish on every kernel-side touch too: gui_init() zeroes the shared
     // region at boot, so this restores the button word even if no packet has
     // arrived since then (and even when the cursor did not move below).
-    gui_publish_buttons(gButtons, gButtonSeq);
     TInt x = (TInt)gX, y = (TInt)gY;
     if (gCursorDrawn)
         {
@@ -343,7 +336,6 @@ void mouse_info()
     KPrintf("mouse: isr=%u isrbytes=%u\r\n",
         (TUint)gIsrCount, (TUint)gIsrBytes);
     TUint sharedBtns = 0, sharedSeq = 0;
-    gui_button_state(sharedBtns, sharedSeq);
     KPrintf("mouse: shared buttons=%u seq=%u (driver buttons=%u seq=%u) %s\r\n",
         sharedBtns, sharedSeq, (TUint)gButtons, (TUint)gButtonSeq,
         (sharedBtns == (TUint)gButtons && sharedSeq == gButtonSeq) ? "OK" : "STALE");
@@ -417,7 +409,6 @@ TInt mouse_inject_buttons(TUint aMask)
         }
     mouse_render_cursor();
     TUint sharedBtns = 0, sharedSeq = 0;
-    gui_button_state(sharedBtns, sharedSeq);
     KPrintf("MOUSE PRESS: mask=%u packets=%u driver buttons=%u seq=%u->%u "
         "shared buttons=%u seq=%u %s\r\n",
         aMask, (TUint)gPackets, (TUint)gButtons, beforeSeq, (TUint)gButtonSeq,
