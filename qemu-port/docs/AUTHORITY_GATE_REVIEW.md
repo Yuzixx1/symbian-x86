@@ -84,3 +84,19 @@ run `python3 tools/r1_final_verify.py --strict-skip` from `qemu-port/` and requi
 then write `docs/CLEANUP_AUTHORITY_CHECK.md` with that run as the authority and update
 `docs/CLEANUP_STEP_STATUS.md` / `docs/SVCMGR_APPLY_STATUS.md`. Rollback snapshots
 (`/tmp/opencode/shim_retire_backup_*`, `git show d26fade:<path>`) remain valid.
+
+---
+
+> **SUPERSESSION 2026-11-26 — authoritative gate is 15 rows, `FINAL27_RC=0`.**
+> The 11/11 figures in the title (`:1` "the full 11/11 strict verification"), the
+> verdict (`:10` "a trustworthy full 11/11 PASS exists only for the `d26fade`
+> tree"), and the recommendation (`:83` "require `OVERALL: PASS (11 pass, 0 skip,
+> 0 fail)`") are **historical** and are all cleared by the authoritative run:
+> `/tmp/opencode/final27_gate.log` at HEAD `ee8490e`, ending
+> `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` → **15/15 PASS, `FINAL27_RC=0`**.
+> Roster confirmed by `tools/r1_final_verify.py --list`: 15 rows, row 15 =
+> `hal_probe` (`tools/r1_genuine_hal_test.py`). The review's standing caution — do
+> not cite an 11-row PASS — is superseded by the 15-row PASS; `FINAL26_RC=0`,
+> `FINAL23_RC=0`, `FINAL20_RC=0` and every 11-row count are superseded history
+> only. Body left unedited. No QEMU, no gates run, no source edits, no commits/push,
+> no `make clean`, `kernelhwsrv/` untouched.

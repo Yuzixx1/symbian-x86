@@ -9,3 +9,10 @@ OVERALL: PASS (11 pass, 0 skip, 0 fail) — FV_EXIT equivalent 0 (no summary fil
 Fault-scan of all 11 logs: clean — no #PF/FAULT/PanicKernExec/KERN-n/Traceback.
 Prior run ending 21:25 (final_verify_1913.log) was OVERALL: FAIL (selfcheck FAIL, FV_EXIT=1);
 this post-fix run is the authoritative 11/11 candidate. kernelhwsrv/ untouched.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above (the `authoritative 11/11`
+candidate in line 11) is superseded by the 15-row gate: FINAL27_RC=0 (15 pass, 0 skip,
+0 fail), log `/tmp/opencode/final27_gate.log`. The body above is retained unchanged for
+historical record only.

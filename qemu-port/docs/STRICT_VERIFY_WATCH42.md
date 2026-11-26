@@ -5,3 +5,9 @@ Log: `/tmp/opencode/final_verify_1913.log` (1.5 KB, no >50 MB tail needed). Snap
 Per-test verdicts so far (8/11 reached): selfcheck FAIL (248.0s, selftest step FAIL, OVERALL: FAIL); qemu_smoke PASS 50.1s; genuine_retire PASS 63.8s; genuine_efsrv PASS 27.2s; genuine_ewsrv PASS 22.7s; genuine_eshell PASS 24.0s; genuine_fat_io PASS 21.3s; doom_main RUNNING (timeout 240s).
 
 No OVERALL / FV_EXIT line yet — run still in flight. Fault scan: no KERN-EXEC/Panic/#PF/page-fault in any per-test log; all executed components report "no Exc/Panic/FAULT". kernelhwsrv/ untouched (git clean there).
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

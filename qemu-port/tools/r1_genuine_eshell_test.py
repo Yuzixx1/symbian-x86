@@ -7,7 +7,7 @@ Stages on a FAT32 disk:
                     build_estart_eshell.py as genuine/build/estart_.E32
   * ESHELL.E32    -- genuine fileserver/etshell text shell (ts_*.cpp +
                     sfile/sf_inflate.cpp + sf_decomp.cpp), genuine/build/etshell_.E32
-  * EUSER.DLL    -- genuine 2503-ordinal EUSER from the Raptor build root
+  * EUSER.DLL    -- genuine 2503-ordinal EUSER, tracked at qemu-port/EUSER.DLL
 
 Boots build/kernfull.elf in QEMU, E32Runs `estart` then `eshell` from the
 serial shell, and asserts:
@@ -70,7 +70,7 @@ FSIMG = ROOT + "/r1_genuine_eshell_fs.img"
 LOG_DEFAULT = ROOT + "/r1_genuine_eshell.log"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KERNEL = REPO + "/build/kernfull.elf"
-EUSER = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
+EUSER = REPO + "/EUSER.DLL"
 ESTART = REPO + "/genuine/build/estart_.E32"
 ESHELL = REPO + "/genuine/build/etshell_.E32"
 SRET_TXT = ROOT + "/r1_genuine_eshell_SRET.TXT"

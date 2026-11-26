@@ -5,3 +5,9 @@
 - **OVERALL: FAIL (10 pass, 0 skip, 1 fail)** — failed: selfcheck.
 - Selfcheck child log (`final_verify_selfcheck.log`) ends mid-run at qemu_smoke step; per-step detail lost (shared child log paths also written by a concurrent selfcheck, PID 1144439). Its own selftest/cp4 child logs show PASS markers.
 - Fault scan of surviving logs: no panic/KERN-EXEC/#PF/segv; only benign `__ASSERT_COMPILE` macro notes in build output. kernelhwsrv/ untouched; no QEMU run by this watcher.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

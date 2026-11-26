@@ -4,3 +4,9 @@
 - This run so far: 10/10 finished tests PASS (selfcheck, qemu_smoke, genuine_retire 4/4, genuine_efsrv, genuine_ewsrv, genuine_eshell, genuine_fat_io, doom_audio, doom_playtest, doom_multikey); doom_main in progress.
 - Fault scan of all current logs: zero Exc/PanicKernExec/FAULT/#PF hits (only linker symbol names); every test reports "no Exc/Panic/FAULT".
 - kernelhwsrv/ untouched (read-only); no QEMU launched by this watcher; no commits.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

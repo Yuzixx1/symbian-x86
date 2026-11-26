@@ -247,3 +247,5 @@ existing display-list ABI.
   (when present); `user/winsrv.c` and `user/wsdl.c` — reference implementations.
 - `tools/r1_window_system_test.py`, `tools/r1_gui_apps_test.py`,
   `tools/r1_graphical_desktop_test.py` — host-side proofs.
+
+> **Correction — 2026-11-26:** this document's live/pending `WINSRV`-or-GUI-desktop premise is superseded. The winsrv/GUI desktop was **RETIRED** in commit `94ce9c9`, which deleted all seven files it describes: `winsrv.c`, `guishost.h`, `wsclient.h`, `wsclient.c`, `qemu_windowsrv.h`, `qemu_windowsrv.c`, `qemu_gui_exec.cpp`. Execs 249/250/251 and the `winsrv` launch path are gone, so sections 4–8 above no longer describe shippable code. The UI today is the console shell plus DOOM/Freedoom; genuine **EWSRV** is the target when a GUI returns, per `AGENTS.md`. The authoritative gate is the **15-row** roster at **15/15 PASS** (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, `/tmp/opencode/final27_gate.log`) at HEAD `ee8490e` with no commits made.

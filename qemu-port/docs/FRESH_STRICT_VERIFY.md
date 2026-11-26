@@ -684,3 +684,10 @@ from repo root). Logs: `/tmp/opencode/final_verify_1913.log`,
 Verdict: **GATE GREEN — 10/11 strict-skip rows PASS with the 1 fail being a
 confirmed selfcheck-smoke timeout flake (selfcheck PASS standalone, 5/5
 stages); fullchain 14/14, retire 4/4, fault-scan clean at 21:44 EET.**
+
+---
+
+**2026-11-26 — HISTORICAL / SUPERSEDED.** Everything above is a dated watch log,
+kept for the record. Its "authoritative 11/11" gate result is superseded by the
+15-row gate: `FINAL27_RC=0` — 15 pass, 0 skip, 0 fail
+(`/tmp/opencode/final27_gate.log`).

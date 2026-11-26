@@ -252,3 +252,7 @@ designed to catch.
   (`user/runtime.c:25-44`). `MsTickPeriod()` returns 1000 us
   (`variant/qemu_variant_asic.cpp:162-173`); the earlier 1 us value made
   `sleep_ms(1000)` expire in ~64 ms because of the 2^14 PIT divisor.
+
+---
+
+**2026-11-26 — correction (append-only; supersedes this file's live/pending winsrv-or-GUI premise):** the winsrv/GUI desktop was **RETIRED** in `94ce9c9` — 7 files deleted (`user/winsrv.c`, `user/guishost.h`, `user/wsclient.c`, `user/wsclient.h`, `variant/qemu_windowsrv.cpp`, `variant/qemu_windowsrv.h`, `variant/qemu_gui_exec.cpp`), all confirmed gone from disk — so the §4 GUI rows above (`GUI fbbase/fbsize/draw = 249/250/251`, `variant/qemu_gui_exec.cpp:152-180`) no longer describe existing code: those slots are now `EExecSlowAtomicAdd64/Tau64/Tas64` (`build/export/exec_enum.h:312-314`) and the `WINSRV` launch path is gone. The UI today is the console shell plus DOOM/Freedoom; genuine **EWSRV** is the target when a GUI returns, per `AGENTS.md`. The 15-row gate is **15/15 PASS** (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits after it.

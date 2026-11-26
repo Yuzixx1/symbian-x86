@@ -167,3 +167,7 @@ and 271/272/273 (pad returns to zero); `Makefile:258,261` + `KERNFULL_OBJS`
   (exec 270 lives there) only if desired; winsrv deletion itself does not touch
   exec 270.
 - `kernelhwsrv/` read-only throughout; no commit/push; no `make clean`.
+
+---
+
+**SUPERSEDED 2026-11-26.** The 11-row / 10-11-pass strict gate asserted above is historical and no longer current. Current authority is **15 rows / `FINAL27_RC=0`** — 15 pass, 0 skip, 0 fail — recorded in `/tmp/opencode/final27_gate.log`. The body above is preserved byte-identical for audit history.

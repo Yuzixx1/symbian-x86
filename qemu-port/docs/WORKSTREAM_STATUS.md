@@ -11,3 +11,7 @@ Read-only monitor pass. No edits besides this file; no QEMU, no commit/push, `ke
 | winsrv exec refs in `user/` | 4 files still live | `shot.c`, `winsrv.c`, `desktop.c`, `ws_e32_draw_test.c` still include `guishost.h`/call `QE_EXEC_GUI_*`; `guilib.c`, `guihello.c`, `dtcalc.c`, `dtedit.c`, `saver.c` migrated | Migrate shot/desktop/ws_e32_draw_test, then delete winsrv.c per WINSRV_DELETION_GATE.md |
 
 Gate state: strict final_verify 03:55 = OVERALL PASS 11/11; authority run 19:18 = OVERALL FAIL (9 pass, selfcheck+ewsrv fail); 20:19 slot269 retry in progress (selfcheck running at snapshot time).
+
+---
+
+**SUPERSEDED 2026-11-26.** The 11-row / 10-11-pass strict gate asserted above is historical and no longer current. Current authority is **15 rows / `FINAL27_RC=0`** — 15 pass, 0 skip, 0 fail — recorded in `/tmp/opencode/final27_gate.log`. The body above is preserved byte-identical for audit history.

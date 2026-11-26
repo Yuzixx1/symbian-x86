@@ -29,7 +29,7 @@ These are the foundation pieces, not the end goal:
 | User heap | Chunk-backed, 64K cap |
 | Wait/exit API | User::WaitForExit() shim |
 | Service manager | Ordered start, restart backoff, shutdown |
-| Smoke tests | 11/11 PASS |
+| Smoke tests | 15/15 PASS |
 
 These are **infrastructure**, not the end goal. They make a PC OS possible, but they are not a PC OS.
 
@@ -67,3 +67,5 @@ These are **infrastructure**, not the end goal. They make a PC OS possible, but 
 ## Rule
 
 If it doesn't help a person sit down and use the computer, it's infrastructure, not the goal. Infrastructure is necessary but not sufficient.
+
+> **2026-11-26 — correction (supersedes the 11/11 and FINAL26 entries):** the old `Smoke tests | 11/11 PASS` row above was a stale single-harness count and has been updated to **15/15 PASS**. The authoritative gate is `tools/r1_final_verify.py`, **15 rows** (`--list` prints 15 rows and exits 0; `DEFAULT_TESTS` at `:134-150`), and the live authoritative run is **`FINAL27_RC=0`** — `/tmp/opencode/final27_gate.log` ends `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, i.e. **15/15 PASS**, at HEAD `ee8490e`, no commits. `FINAL20_RC=0`, `FINAL26_RC=0` and the 11/11 count are superseded history only.

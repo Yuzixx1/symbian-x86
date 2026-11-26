@@ -43,6 +43,11 @@ void operator delete(void* p, unsigned) noexcept { free(p); }
    so the image has no global constructors / .init_array (elf2e32 rejects it). */
 void* operator new(unsigned, void* where) noexcept { return where; }
 
+/* Port glue: e32base.h:431 declares CleanupStack::iStack, but genuine
+   ESTLIB/EUSER (which defines it) is not shipped, so this image defines the
+   one slot here -- EFSRVMIN dispatches on a single owner thread. */
+CBase* CleanupStack::iStack = nullptr;
+
 /*--------------------------------------------------------------------------*/
 /* B5 disk-backed backend for the ring-3 server.                              */
 /*                                                                            */

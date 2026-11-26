@@ -2,6 +2,15 @@
 """r1_shim_retire_plan.py -- AUDIT-ONLY inventory / dry-run planner for retiring
 the hand-written qemu-port userspace shims (see docs/SHIM_RETIREMENT_PLAN.md).
 
+SPENT -- WAVE 2 IS ALREADY APPLIED.  S1 (fs/r1_fs_core.mmp), S2 (the Makefile
+r1_fs rule block) and S3 (the 9 r1_fs_channel residue paths) have all landed
+and the G12 residue count is 0 on this tree.  Every path, sha256, Makefile line
+and residue count below is therefore HISTORICAL pre-state documentation kept
+for the review trail; the tool refuses with exit 2 ("already applied/spent")
+before it parses arguments, so no mode -- --plan, --json, --from-file, --help
+-- reports a live plan on this tree.  Nothing is deleted or edited by that
+refusal.
+
 HARD CONTRACT -- DRY RUN ONLY:
     This tool NEVER deletes, edits, creates, renames or stages any file. It
     never boots QEMU. It only:
@@ -22,7 +31,8 @@ READINESS SEMANTICS (deliberately conservative):
     "extra conditions" but never downgrade or upgrade the gate-derived verdict;
     they are the human review checklist for the actual switch.
 
-Usage:
+Usage (HISTORICAL -- every line below now refuses with rc 2 on this tree,
+because WAVE2 S1-S3 are spent; none of them reads a gate any more):
     python3 tools/r1_shim_retire_plan.py                 # fresh gate --dry-run
     python3 tools/r1_shim_retire_plan.py --from-file LOG  # parse captured log
     python3 tools/r1_shim_retire_plan.py --json           # machine-readable
@@ -57,6 +67,46 @@ def assert_no_mutations(argv: tuple[str, ...] | None = None) -> None:
         assert not any(v in a for a in argv for v in FORBIDDEN_VERBS), argv
     for path in (GATE, PORT / "variant/e32load.cpp", PORT / "user/svcmgr.cpp"):
         assert path.is_file(), f"missing expected read-only input: {path}"
+
+
+# ------------------------------------------------------------------ spent ---
+# WAVE 2 (S1 fs/r1_fs_core.mmp, S2 the Makefile r1_fs rule, S3 the 9
+# r1_fs_channel residue paths) is SPENT.  The probe only stats paths and reads
+# the Makefile -- it never writes, deletes or spawns anything -- so it is safe
+# to run before argparse: on a spent tree no mode is a live plan, and --plan /
+# --json / --help must refuse as well.
+SPENT_RC = 2
+SPENT_PROBES = (("fs/r1_fs_core.mmp", "S1"), ("fs/r1_fs_channel.cpp", "S3"))
+SPENT_MSG = ("REFUSE: WAVE2 S1-S3 are already applied/spent -- there is no "
+             "fs/r1_fs_core.mmp, no r1_fs rule in the Makefile and no "
+             "r1_fs_channel residue left, and the G12 residue count is 0 on "
+             "this tree.  The residue counts, the Makefile:326-331 line and "
+             "the orphan-MMP prose are historical pre-state only, so this "
+             "dry-run planner reports nothing live here and is refused, as are "
+             "--plan/--json/--from-file/--help (rc 2).  No file was read "
+             "beyond the probe, and nothing changed.")
+
+
+def spent_evidence(root: Path | None = None) -> list[str]:
+    """Reasons WAVE2 counts as spent; empty list means a live pre-state tree."""
+    base = PORT if root is None else root
+    why = [f"{rel} absent ({tag})" for rel, tag in SPENT_PROBES
+           if not (base / rel).exists()]
+    mk = base / "Makefile"
+    if not (mk.is_file() and "build/r1_fs_core.o" in mk.read_text(errors="replace")):
+        why.append("Makefile has no r1_fs_core.o rule (S2)")
+    # Spent only when all three legs hold; a partial tree stays a live plan.
+    return why if len(why) == len(SPENT_PROBES) + 1 else []
+
+
+def refuse_if_spent(root: Path | None = None) -> int | None:
+    """Exit code 2 if S1-S3 are already applied, else None to carry on."""
+    why = spent_evidence(root)
+    if not why:
+        return None
+    print(SPENT_MSG, file=sys.stderr)
+    print("  evidence: " + "; ".join(why), file=sys.stderr)
+    return SPENT_RC
 
 
 # --------------------------------------------------------------- inventory --
@@ -94,7 +144,10 @@ SHIMS = [
         "name": "r1_fs_* (core/server/client)",
         "gate": "efsrv",
         "provides": "Private R1Fs wire opcodes, CServer2 server, client channel "
-                    "and in-memory FAT backend; kernel-side FAT glue.",
+                    "and in-memory FAT backend; kernel-side FAT glue.  "
+                    "HISTORICAL: the S1-S3 residue half of this entry "
+                    "(fs/r1_fs_core.mmp and the fs/variant r1_fs_channel* "
+                    "files) is already spent; only the LIVE keepers remain.",
         "replacement": "genuine RFs/RFile client ordinals (efsrv.dll) and the "
                        "real TFsMessage server (efile.exe + efat32.fsy)",
         "files": ["fs/r1_fs_core.cpp", "fs/r1_fs_core.h", "fs/r1_fs_core.mmp",
@@ -106,7 +159,8 @@ SHIMS = [
                   "variant/r1_fs_channel.h", "variant/fat32.cpp"],
         "call_sites": ["user/svcmgr.cpp: includes r1_fs_core.h + r1_fs_server.h; "
                        "FatBackend : R1Fs::Backend; R1Fs::FileServer::NewL",
-                       "Makefile:326-331: build/r1_fs_core.o + build/r1_fs_fat.o "
+                       "Makefile:326-331 (HISTORICAL: S2 spent, no r1_fs rule "
+                       "remains): build/r1_fs_core.o + build/r1_fs_fat.o "
                        "in KERNFULL_OBJS", "tests/r1_fs_core/core_test.cpp "
                        "(keep as a unit-test seam, not production)",
                        "genuine/efsrv_min/efsrv_min.cpp (probe host only)"],
@@ -336,6 +390,11 @@ def print_text(plan: dict) -> None:
 
 
 def main() -> int:
+    # The spent guard runs BEFORE argparse: on a spent tree --plan and --help
+    # must refuse with the applied/spent message instead of a preview.
+    rc = refuse_if_spent()
+    if rc is not None:
+        return rc
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--from-file", metavar="LOG",

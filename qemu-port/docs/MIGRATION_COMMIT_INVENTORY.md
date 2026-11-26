@@ -78,7 +78,7 @@ git add qemu-port/docs/CONNECT_DEBUG_STATUS.md qemu-port/docs/CONNECT_NEG28_STAT
 
 ## Preconditions (before authorizing)
 
-- Fresh strict gate from `qemu-port/`: `python3 tools/r1_final_verify.py --strict-skip` must be **11/11 PASS**.
+- Fresh strict gate from `qemu-port/`: `python3 tools/r1_final_verify.py --strict-skip` must be **15/15 PASS** (authoritative roster; `FINAL27_RC=0`).
 - `python3 tools/r1_os_selfcheck.py` clean.
 - Re-run `git status --short` at commit time; drop any path still IN FLIGHT.
 - Confirm `kernelhwsrv/` shows no entries in `git status` (verified clean at scan time).

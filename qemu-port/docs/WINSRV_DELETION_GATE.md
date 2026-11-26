@@ -135,3 +135,14 @@ KBINJ input bridge, `user/ws_e32_client.c` (WSE32TEST).
 - Never accept `SessionPath r=-15` as IPC success; EFILE stays guard-only.
 - If any gate regresses after deletion, roll back per §5 — do not patch forward in the
   same step.
+
+## Supersession (2026-11-26) — checklist rows pinned to 11/11 and 14/14 are stale
+
+Items 6 and 8 of the deletion checklist (`:100-:101`) pin
+`r1_genuine_fullchain_test.py` at 14/14 and the authoritative
+`r1_final_verify.py --strict-skip` at 11/11. Both row counts are historical. Current
+authority: `DEFAULT_TESTS` in `tools/r1_final_verify.py:134-150` = **15** rows, last full
+run `/tmp/opencode/final27_gate.log` = `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)`,
+`FINAL27_RC=0`. When this gate is next executed, a green run means 15/15, not 11/11.
+The gate conditions themselves (no faults, PNG baseline match, rollback on regression)
+are unchanged; nothing above is rewritten.

@@ -289,3 +289,5 @@ like `DT: launched CALC`, a release marker such as `DT: handing off` (or
 `CALC: CALCULATOR READY`. `tools/r1_desktop_handoff_test.py` drives exactly this
 sequence and compares screendumps before/after the handoff to prove the app is
 actually visible.
+
+> **2026-11-26 correction (supersedes this file's live/pending winsrv-or-GUI premise):** the winsrv/GUI desktop was **RETIRED** in `94ce9c9`, which deleted 7 files — `winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`, `qemu_gui_exec.cpp`; execs **249/250/251** (now `EExecSlowAtomicAdd64/Tau64/Tas64`) and the **WINSRV launch path are gone**, so the desktop described above is historical only. The **console shell + DOOM/Freedoom** are the UI, and genuine **EWSRV** is the target when GUI returns, per `AGENTS.md`. The 15-row gate is **15/15 PASS** (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits.

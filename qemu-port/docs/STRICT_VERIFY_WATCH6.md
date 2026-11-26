@@ -5,3 +5,9 @@
 - Queued `gate_run_211252.sh` (PID 1138578) correctly blocked on `flock /tmp/opencode/final_verify.lock`; gate output empty as expected.
 - Fault scan of final_verify_1913.log: no #PF/KERN/PANIC/FAULT/Traceback markers.
 - kernelhwsrv/ untouched; no QEMU launched by this watcher; sole edit is this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

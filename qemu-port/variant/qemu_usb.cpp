@@ -67,6 +67,21 @@ struct Qh
     TUint32 head, element;
     };
 
+// ---- BOT (bulk-only transport) mass-storage: CBW/CSW wire structs --------
+// USB BOT 1.0: 31-byte CBW on bulk-OUT, optional data phase, 13-byte CSW on
+// bulk-IN. Signatures: 'USBC' (0x43425355) CBW, 'USBS' (0x53425355) CSW.
+struct __attribute__((packed)) Cbw
+    {
+    TUint32 sig, tag, dataLen;
+    TUint8 flags, lun, cbLen;
+    TUint8 cb[16];
+    };
+struct __attribute__((packed)) Csw
+    {
+    TUint32 sig, tag, residue;
+    TUint8 status;
+    };
+
 namespace
     {
     unsigned gIo = 0;          // UHCI I/O base
@@ -75,9 +90,12 @@ namespace
     __attribute__((aligned(4096))) TUint32 gFrames[1024];
     __attribute__((aligned(16))) Qh gQhCtl;
     __attribute__((aligned(16))) Qh gQhInt;
+    __attribute__((aligned(16))) Qh gQhMsd;              // bulk queue for BOT transfers
     __attribute__((aligned(16))) Td gTds[40];
+    __attribute__((aligned(16))) Td gMsdTds[72];         // CBW + data + CSW chain
     TUint8 gSetup[8];
     TUint8 gBuf[256];
+    __attribute__((aligned(512))) TUint8 gMsdBuf[512];   // one-sector READ(10) scratch
 
     struct UsbDev
         {
@@ -91,6 +109,10 @@ namespace
         TUint8 kbdToggle;
         TUint8 mouseEp, mouseInterval, mouseMaxPkt;
         TUint8 mouseToggle;
+        TUint8 msd;            // 1 = BOT mass-storage interface (class 08/06/50)
+        TUint8 msdEpOut, msdEpIn;
+        TUint8 msdMaxOut, msdMaxIn;
+        TUint8 msdTogOut, msdTogIn;   // bulk endpoint data toggles
         TUint8 prevKeys[6];
         };
     UsbDev gDevs[4];
@@ -173,6 +195,131 @@ namespace
         return RunChain(t, n, 2000);
         }
 
+    // ---- polled BOT mass-storage (CBW -> data -> CSW) on the bulk QH ------
+    // One BOT transaction: CBW on bulk-OUT, optional data phase, CSW on
+    // bulk-IN, all as one TD chain on gQhMsd. Per-endpoint data toggles are
+    // tracked in the UsbDev (reset to DATA0 by SET_CONFIGURATION).
+    TInt BotXfer(UsbDev& aDev, const Cbw& aCbw, TUint8* aData, TUint aLen, TBool aIn)
+        {
+        if (aDev.hc)
+            return KErrNotSupported;  // BOT bulk wired on UHCI only
+        Td* t = gMsdTds;
+        int n = 0;
+        MkTd(&t[n], kPidOut, aDev.addr, aDev.msdEpOut, aDev.msdTogOut,
+             &aCbw, 31, aDev.lowspeed);
+        aDev.msdTogOut ^= 1;
+        ++n;
+        TUint left = aLen;
+        TUint8* p = aData;
+        TUint8 tog = aIn ? aDev.msdTogIn : aDev.msdTogOut;
+        TUint8 ep = aIn ? aDev.msdEpIn : aDev.msdEpOut;
+        TUint maxp = aIn ? aDev.msdMaxIn : aDev.msdMaxOut;
+        if (!maxp)
+            maxp = 64;
+        while (left)
+            {
+            TUint chunk = left > maxp ? maxp : left;
+            MkTd(&t[n], aIn ? kPidIn : kPidOut, aDev.addr, ep, tog, p, chunk, aDev.lowspeed);
+            tog ^= 1;
+            p += chunk;
+            left -= chunk;
+            ++n;
+            }
+        if (aIn)
+            aDev.msdTogIn = tog;
+        else
+            aDev.msdTogOut = tog;
+        static Csw csw;
+        MkTd(&t[n], kPidIn, aDev.addr, aDev.msdEpIn, aDev.msdTogIn,
+             &csw, 13, aDev.lowspeed);
+        aDev.msdTogIn ^= 1;
+        ++n;
+        // Run the chain on the bulk QH and wait for completion.
+        for (int i = 0; i < n - 1; ++i)
+            t[i].link = (TUint32)&t[i + 1] | kLinkV;
+        t[n - 1].link = kLinkT;
+        gQhMsd.element = (TUint32)&t[0];
+        TUint32 t0 = NKern::TickCount();
+        for (;;)
+            {
+            TBool done = ETrue;
+            for (int i = 0; i < n; ++i)
+                if (t[i].status & kTdActive)
+                    { done = EFalse; break; }
+            if (done)
+                break;
+            if ((TUint32)(NKern::TickCount() - t0) > 5000)
+                {
+                gQhMsd.element = kLinkT;
+                return KErrTimedOut;
+                }
+            }
+        gQhMsd.element = kLinkT;
+        for (int i = 0; i < n; ++i)
+            if (t[i].status & 0x00FF0000u)
+                return KErrGeneral;
+        if (csw.sig != 0x53425355u || csw.status != 0)
+            return KErrGeneral;
+        return KErrNone;
+        }
+
+    // Build a CBW for a 6-byte (or shorter) SCSI command.
+    void MkCbw(Cbw& aCbw, TUint32 aTag, TUint8 aLun, const TUint8* aCb, TUint8 aCbLen,
+               TUint aDataLen, TBool aIn)
+        {
+        aCbw.sig = 0x43425355u;  // 'USBC'
+        aCbw.tag = aTag;
+        aCbw.dataLen = aDataLen;
+        aCbw.flags = aIn ? 0x80u : 0x00u;
+        aCbw.lun = aLun;
+        aCbw.cbLen = aCbLen;
+        for (int i = 0; i < 16; ++i)
+            aCbw.cb[i] = i < aCbLen ? aCb[i] : 0;
+        }
+
+    // INQUIRY + TEST UNIT READY + READ CAPACITY(10) + one READ(10) of sector
+    // 0, printing markers. Runs only when an MSD is actually attached.
+    void MsdProbe(int aSlot)
+        {
+        UsbDev& d = gDevs[aSlot];
+        static Cbw cbw;
+        TUint32 tag = 1;
+        TUint8 cb[16];
+        // INQUIRY (0x12), 36 bytes IN.
+        for (int i = 0; i < 16; ++i) cb[i] = 0;
+        cb[0] = 0x12; cb[4] = 36;
+        MkCbw(cbw, tag++, 0, cb, 6, 36, ETrue);
+        if (BotXfer(d, cbw, gBuf, 36, ETrue) != KErrNone)
+            { KPrintf("usb msd %d: INQUIRY failed\r\n", aSlot); return; }
+        KPrintf("usb msd %d: INQUIRY %.8s %.16s rev %.4s\r\n", aSlot,
+            &gBuf[8], &gBuf[16], &gBuf[32]);
+        // TEST UNIT READY (0x00), no data phase.
+        for (int i = 0; i < 16; ++i) cb[i] = 0;
+        MkCbw(cbw, tag++, 0, cb, 6, 0, EFalse);
+        BotXfer(d, cbw, 0, 0, EFalse);
+        // READ CAPACITY(10) (0x25), 8 bytes IN.
+        for (int i = 0; i < 16; ++i) cb[i] = 0;
+        cb[0] = 0x25;
+        MkCbw(cbw, tag++, 0, cb, 6, 8, ETrue);
+        if (BotXfer(d, cbw, gBuf, 8, ETrue) != KErrNone)
+            { KPrintf("usb msd %d: READ CAPACITY failed\r\n", aSlot); return; }
+        TUint32 lastLba = ((TUint32)gBuf[0] << 24) | ((TUint32)gBuf[1] << 16) |
+                          ((TUint32)gBuf[2] << 8) | gBuf[3];
+        TUint32 blkLen = ((TUint32)gBuf[4] << 24) | ((TUint32)gBuf[5] << 16) |
+                         ((TUint32)gBuf[6] << 8) | gBuf[7];
+        KPrintf("usb msd %d: capacity %u blocks of %u bytes (%u MB)\r\n", aSlot,
+            lastLba + 1, blkLen, blkLen ? (lastLba + 1) * blkLen / 1048576u : 0);
+        // READ(10) (0x28) sector 0, one block.
+        for (int i = 0; i < 16; ++i) cb[i] = 0;
+        cb[0] = 0x28; cb[7] = 1;  // LBA 0, 1 block
+        MkCbw(cbw, tag++, 0, cb, 10, blkLen && blkLen <= sizeof(gMsdBuf) ? blkLen : 512, ETrue);
+        if (BotXfer(d, cbw, gMsdBuf, blkLen && blkLen <= sizeof(gMsdBuf) ? blkLen : 512, ETrue) != KErrNone)
+            { KPrintf("usb msd %d: READ(10) lba=0 failed\r\n", aSlot); return; }
+        KPrintf("usb msd %d: READ(10) lba=0 ok first=%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+            aSlot, gMsdBuf[0], gMsdBuf[1], gMsdBuf[2], gMsdBuf[3],
+            gMsdBuf[4], gMsdBuf[5], gMsdBuf[6], gMsdBuf[7]);
+        }
+
     TInt UhciReset()
         {
         Out16(gIo + kUsbCmd, kCmdHCR);
@@ -184,11 +331,14 @@ namespace
             }
         if (In16(gIo + kUsbCmd) & kCmdHCR)
             return KErrTimedOut;
-        // Skeleton schedule: every frame -> control QH -> interrupt QH -> end.
+        // Skeleton schedule: every frame -> control QH -> interrupt QH ->
+        // bulk (BOT mass-storage) QH -> end.
         gQhCtl.head = (TUint32)&gQhInt | kLinkQ;
         gQhCtl.element = kLinkT;
-        gQhInt.head = kLinkT;
+        gQhInt.head = (TUint32)&gQhMsd | kLinkQ;
         gQhInt.element = kLinkT;
+        gQhMsd.head = kLinkT;
+        gQhMsd.element = kLinkT;
         for (int i = 0; i < 1024; ++i)
             gFrames[i] = (TUint32)&gQhCtl | kLinkQ;
         Out32(gIo + kFlBase, (unsigned)&gFrames[0]);
@@ -253,6 +403,9 @@ namespace
             d.prevKeys[i] = 0;
         d.kbdEp = 0; d.mouseEp = 0;
         d.kbdMaxPkt = 8; d.mouseMaxPkt = 4;
+        d.msd = 0; d.msdEpOut = 0; d.msdEpIn = 0;
+        d.msdMaxOut = 64; d.msdMaxIn = 64;
+        d.msdTogOut = 0; d.msdTogIn = 0;  // SET_CONFIGURATION resets bulk toggles
         // USB spec: SET_CONFIGURATION resets all endpoint toggles to DATA0.
         d.kbdToggle = 0; d.mouseToggle = 0;
         TBool low = aLow;
@@ -331,6 +484,39 @@ namespace
                         }
                     q += el;
                     }
+                }
+            else if (type == 4 && len >= 9 && gBuf[o + 5] == 8 &&
+                     gBuf[o + 6] == 6 && gBuf[o + 7] == 0x50)
+                {
+                // Mass-storage interface, SCSI transparent command set,
+                // bulk-only (BOT) protocol: collect its bulk endpoints.
+                TUint8 ifn = gBuf[o + 2];
+                (void)ifn;
+                for (TUint q = o + len; q + 7 <= total;)
+                    {
+                    TUint8 el = gBuf[q], et = gBuf[q + 1];
+                    if (!el || q + el > total)
+                        break;
+                    if (et == 4)
+                        break;  // next interface
+                    if (et == 5 && el >= 7 && (gBuf[q + 3] & 3) == 2)
+                        {
+                        TUint8 ep = gBuf[q + 2] & 0x0F;
+                        TUint16 mp = (TUint16)(gBuf[q + 4] | (gBuf[q + 5] << 8));
+                        if (mp > 64)
+                            mp = 64;
+                        if (gBuf[q + 2] & 0x80)
+                            {
+                            if (!d.msdEpIn)
+                                { d.msdEpIn = ep; d.msdMaxIn = mp ? (TUint8)mp : 64; }
+                            }
+                        else if (!d.msdEpOut)
+                            { d.msdEpOut = ep; d.msdMaxOut = mp ? (TUint8)mp : 64; }
+                        }
+                    q += el;
+                    }
+                if (d.msdEpOut && d.msdEpIn)
+                    d.msd = 1;
                 }
             o += len;
             }
@@ -489,7 +675,11 @@ TInt UsbInit()
             if (PortReset(p, low) != KErrNone)
                 continue;
             if (EnumerateDev(0, low, gNDevs) == KErrNone)
+                {
+                if (gDevs[gNDevs].msd && !gDevs[gNDevs].hc)
+                    MsdProbe(gNDevs);  // polled BOT bring-up, UHCI only
                 ++gNDevs;
+                }
             }
         }
     if (OhciPresent() && OhciInit() == KErrNone)
@@ -501,7 +691,12 @@ TInt UsbInit()
             if (OhciPortReset(p, low) != KErrNone)
                 continue;
             if (EnumerateDev(1, low, gNDevs) == KErrNone)
+                {
+                if (gDevs[gNDevs].msd)
+                    KPrintf("usb msd %d: BOT device on OHCI (bulk wired on UHCI only)\r\n",
+                        gNDevs);
                 ++gNDevs;
+                }
             }
         }
     if (!io && !OhciPresent())
@@ -553,9 +748,52 @@ void UsbList()
             KPrintf(" HID-keyboard ep %d", d.kbdEp);
         if (d.mouseEp)
             KPrintf(" HID-mouse ep %d", d.mouseEp);
+        if (d.msd)
+            KPrintf(" BOT-storage ep-out %d ep-in %d", d.msdEpOut, d.msdEpIn);
         KPrintf("\r\n");
         }
     KPrintf("usb: %u key(s) from USB HID so far\r\n", gUsbKeys);
+    }
+
+// Polled BOT READ(10): read aCount sectors at aLba from mass-storage device
+// aSlot into aBuf (capacity in bytes). Exported for a future FAT mount over
+// USB; UHCI-attached devices only.
+TInt UsbMsdRead10(int aSlot, TUint32 aLba, TUint16 aCount, TUint8* aBuf)
+    {
+    if (aSlot < 0 || aSlot >= gNDevs || !gDevs[aSlot].present || !gDevs[aSlot].msd)
+        return KErrNotFound;
+    UsbDev& d = gDevs[aSlot];
+    TUint blkLen = 512;
+    TUint len = (TUint)aCount * blkLen;
+    if (len > 32768)
+        return KErrArgument;
+    static Cbw cbw;
+    TUint8 cb[16];
+    for (int i = 0; i < 16; ++i)
+        cb[i] = 0;
+    cb[0] = 0x28;  // READ(10)
+    cb[2] = (TUint8)(aLba >> 24); cb[3] = (TUint8)(aLba >> 16);
+    cb[4] = (TUint8)(aLba >> 8);  cb[5] = (TUint8)aLba;
+    cb[7] = (TUint8)(aCount >> 8); cb[8] = (TUint8)aCount;
+    MkCbw(cbw, 0x5100u, 0, cb, 10, len, ETrue);
+    return BotXfer(d, cbw, aBuf, len, ETrue);
+    }
+
+// Re-run the BOT probe (INQUIRY/capacity/READ(10) sector 0) on an attached
+// mass-storage device; prints the usb msd markers again.
+void UsbMsdInfo(int aSlot)
+    {
+    if (aSlot < 0 || aSlot >= gNDevs || !gDevs[aSlot].present || !gDevs[aSlot].msd)
+        {
+        KPrintf("usb msd: no mass-storage device\r\n");
+        return;
+        }
+    if (gDevs[aSlot].hc)
+        {
+        KPrintf("usb msd %d: BOT device on OHCI (bulk wired on UHCI only)\r\n", aSlot);
+        return;
+        }
+    MsdProbe(aSlot);
     }
 
 void UsbDebugPoll()

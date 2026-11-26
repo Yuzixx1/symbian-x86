@@ -105,3 +105,18 @@ UI text copied into a window-server descriptor); no values are reproduced here.
 - HEAD `56fbaff` on `main`, tracking `origin/main`; branch and tag
   `archive/handwritten-r25` both at `56fbaff`; tarball `symbian-x86-archive-56fbaff.tar.gz` on disk.
 - Nothing committed or pushed since the pivot; all work above is uncommitted working-tree state.
+
+## 7. Supersession — 2026-11-26 (current scale)
+
+**This report supersedes the §1 snapshot above, which is HISTORICAL and kept verbatim.** The
+`2026-11-24` figures (`10 modified + 21 untracked`, `+434 / −47`) predate the winsrv/GUI retirement
+and the genuine-userspace landings; do not quote them as current.
+
+- Current working tree at HEAD `ee8490e`: **85 modified tracked files (16 of them deletions),
+  +5577 / −1792 lines, 215 untracked entries** (`git status --short` = 300 entries; nothing staged).
+  Substantially larger than the §1 `10 + 21 / +434 / −47` snapshot.
+- Authoritative gate: **`FINAL27_RC=0`, 15/15 PASS, 0 skip, 0 fail/not-run**
+  (`/tmp/opencode/final27_gate.log`); see `FINAL_GATE_STATUS.md` §EOF and `FINAL_VERIFY_REVIEW.md:18`.
+- §3 in-flight items and §5 DO NOT COMMIT rules still stand; `kernelhwsrv/` remains read-only and
+  untouched. No commits, no push, no `make clean`, no QEMU, no downloads for this entry — §1–§6 are
+  unchanged history, appended to only.

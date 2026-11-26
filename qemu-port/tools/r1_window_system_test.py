@@ -15,11 +15,18 @@ a baseline before launching the window system and a final frame afterwards.
 Both are compared with PIL to prove the desktop really changed to coloured
 GUI pixels rather than merely leaving a console-text overlay on screen.
 
+WINSRV is RETIRED: the window system moved to the genuine EWSRV and
+src/user/winsrv.c, guishost.h and the ad-hoc GUI execs were deleted, so this
+test self-skips (`RESULT: SKIP`, exit 0) instead of driving the deleted binary.
+The E32 probe is kept for the day a test provider rebuilds a server, but a
+stale build/user/WINSRV.E32 is not driven while no winsrv source exists.
+
 Usage:
     python3 tools/r1_window_system_test.py [--no-rebuild-iso] [--logdir DIR]
 See docs/WINDOW_SERVER.md for the window-server architecture.
 """
 import argparse
+import glob
 import os
 import shlex
 import shutil
@@ -64,6 +71,21 @@ CLIENT_START = ("WDL: START", "WDL: READY", "WDL: CALC READY",
 def sh(*args, **kw):
     print("+", " ".join(shlex.quote(a) for a in args))
     return subprocess.run(args, **kw)
+
+
+def retired():
+    """Reason string when winsrv no longer exists in the source tree, else None."""
+    for pat in ("src/*/winsrv.*", "src/winsrv.*", "user/winsrv.*",
+                "genuine/*/winsrv.*"):
+        if glob.glob(os.path.join(REPO, pat)):
+            return None
+    return "winsrv retired (source deleted; the window system is genuine EWSRV)"
+
+
+def skip(msg):
+    print("SKIP: " + msg)
+    print("RESULT: SKIP")
+    return 0
 
 
 def check_tools():
@@ -469,11 +491,13 @@ def main():
     ap.add_argument("--no-rebuild-iso", action="store_true")
     ap.add_argument("--logdir", default=ROOT)
     args = ap.parse_args()
+    reason = retired()
+    if reason:
+        return skip(reason)
     check_tools()
     server, clients = probe()
     if not server or not clients:
-        print("RESULT: SKIP (WINSRV and/or WSDL not built yet)")
-        return 0
+        return skip("WINSRV and/or WSDL not built yet")
     os.makedirs(args.logdir, exist_ok=True)
     if not (args.no_rebuild_iso and os.path.exists(ISO)):
         build_iso(server, clients)

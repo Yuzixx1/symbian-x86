@@ -121,3 +121,19 @@ after foreign verify/QEMU went quiet) captured:
   `wsdl.elf`) — re-verify after those land.
 - Rollback point if ever needed: `/tmp/opencode/svcmgr_retire_backup_20261124_185621/`
   or `git show e29a072:<path>`.
+
+---
+
+> **SUPERSESSION 2026-11-26 — authoritative gate is 15 rows, `FINAL27_RC=0`.**
+> The gate counts in §4 Verdict at `:101` ("7/7 standalone gates PASS (smoke,
+> retire 4/4, fullchain 14/14, …)", "`r1_final_verify.py --strict-skip` captured
+> **OVERALL 10/11 in both runs**") and in §1/§3 are **historical** — they describe
+> the 11-row roster on the uncommitted svcmgr-applied tree at `e29a072`. The
+> authoritative run is `/tmp/opencode/final27_gate.log` at HEAD `ee8490e`, ending
+> `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` → **15/15 PASS, `FINAL27_RC=0`**;
+> roster confirmed by `tools/r1_final_verify.py --list` (rows 1–15, row 15 =
+> `hal_probe`). The `selfcheck`/`cp4_stress` 15 s marker-window flake analysed above
+> is resolved green in that run. `FINAL26_RC=0`, `FINAL23_RC=0`, `FINAL20_RC=0` and
+> every 11-row count are superseded history only. Body left unedited. No QEMU, no
+> gates run, no source edits, no commits/push, no `make clean`, `kernelhwsrv/`
+> untouched.

@@ -5,3 +5,9 @@
 - selfcheck sub-log (this run): build PASS, isogrub PASS, qemu_smoke PASS, cp4_ca PASS, cp4_stress PASS, now `RUN selftest` (QEMU booting, AHCI disk detected, boot trace normal).
 - Per-test logs for tests 2–11 are stale from prior runs; no verdicts yet for run 1913. OVERALL/FV_EXIT not yet emitted — run in progress.
 - Fault-scan of run-1913 logs so far: no Exc/PanicKernExec/#PF/FAULT/Traceback. >50 MB logs (ewsrv_exec*.log) skipped. kernelhwsrv/ untouched; no edits except this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

@@ -70,16 +70,16 @@ Legend: **genuine** = lives in read-only `kernelhwsrv/`; **shim** = a file in
 | | |
 |---|---|
 | Genuine | `kernelhwsrv/kernel/eka/ewsrv/` — `ewsrv.mmp` → `ewsrv.exe` (`ws_main.cpp`, `ws_win.cpp`, `ws_dat.cpp`, `ky_tran.cpp`, `co_cli.cpp`, `co_twin.cpp`, …), linked against `econs.lib`, `ektran.lib`, `hal.lib`, `efsrv.lib`, `domaincli.lib`. Its `bld.inf` also builds `../drivers/edisp/` (`edisp`, `edisp_lib`, `edisp_vt100.mmp`). |
-| Shim | `user/winsrv.c` (ring-3 PE2 compositor), `user/guishost.h` (display-list ABI), `variant/qemu_windowsrv.cpp` + `variant/qemu_windowsrv.h` (kernel event ring, slow execs 271/272/273), and the GUI execs in `variant/qemu_gui_exec.cpp` (249/250/251). This is a hand-written `CWsScreen`-equivalent transport; it is not the EKA2 `RWindow`/`CWsScreenDevice` ABI. |
-| Plan | Port the `edisp` LDD/PSL family to the QEMU framebuffer as the kernel half (replacing `qemu_windowsrv.cpp` + raw GUI execs with a genuine display-channel driver), then build and run `ewsrv.exe` unmodified as the ring-3 window server. `winsrv.c` and `guishost.h` are deleted once `e32test/window` tests pass against `ewsrv.exe`. Until then, keep the shim behind the stable exec numbers so `doom` and the GUI apps do not change. |
+| Shim — **RETIRED** | `user/winsrv.c` (ring-3 PE2 compositor), `user/guishost.h` (display-list ABI), `user/wsclient.c` + `user/wsclient.h`, `variant/qemu_windowsrv.cpp` + `variant/qemu_windowsrv.h` (kernel event ring, slow execs 271/272/273) and the GUI execs in `variant/qemu_gui_exec.cpp` (249/250/251) were a hand-written `CWsScreen`-equivalent transport, not the EKA2 `RWindow`/`CWsScreenDevice` ABI. **All seven files are deleted** in commit `94ce9c9`, and `ee8490e` removed the stale build wiring they left behind. None exists in the tree today and none appears in a build input, so execs 249/250/251 and 271/272/273 have no shim implementation behind them. |
+| Plan — **DONE** | The `edisp` LDD/PSL family was ported to the QEMU framebuffer as the kernel half, and the genuine `ewsrv.exe` now runs unmodified as the ring-3 window server. GUI applications reach it through `user/ws_e32_client.c` (migrated off the winsrv execs in `97f224b`), so no client E32 changed interface when the shim was removed. Verified in FINAL26: `genuine_ewsrv` PASS in 16.8s, `EWSRV.E32` startup markers green with 212 PE2 EUSER imports bound, `EWCLIENT.E32` `Create`/`Init`/`SetTitle`/`Write` all `r=0` (232 imports bound), screendump renders a window. |
 
 ### 2.3 EUSER — already genuine at runtime
 
 | | |
 |---|---|
 | Genuine | `kernelhwsrv/kernel/eka/euser/` (`euser.mmp` + `euser.mmh`, ~50 sources in `cbase/`, `maths/`, `unicode/`, `epoc/`). The scratch x86 build produced the genuine `euser.dll` (412,104 B; UIDs `10000079 / 1000008d / 100039e5`; **2503 ordinals** from `kernel/eka/bx86gcc/euseru.def`). |
-| Shim | `user/e32base.h` and `user/e32cmn.h` are *declaration* shims (CBase, descriptors, CServer2/CSession2, TRequestStatus), with `user/euser_shim.cpp` providing static members. `tools/elf2e32.py` currently emits import-free E32s that statically link this shim; `tools/mke32*.py` images bind ordinals from the checked-in `qemu-port/EUSER.DLL`. |
-| Plan | The DLL itself is **already genuine** — do not replace it. Retire only the *static shim*: make `elf2e32.py` emit real PE2 import descriptors so every user E32 binds the genuine ordinals (e.g. `RDebug::Printf`@915, `UserSvr::FsRegisterThread`@1953, `CActiveScheduler::Start`@426) instead of linking `euser_shim.cpp`. Keep `e32base.h` as a thin header exposing genuine layouts only; delete its implementation shim. Note the honest caveat from `r1_e32_validate_filesvc_regression_v1.md`: one relocation in the genuine DLL exceeds a strict section bound, so the loader currently needs a tolerance path — that is a loader fix, not a reason to fork EUSER. |
+| Shim — **RETIRED** | `user/e32base.h` and `user/e32cmn.h` remain as *declaration-only* headers (CBase, descriptors, CServer2/CSession2, TRequestStatus). The implementation shim `user/euser_shim.cpp` is **deleted** (commit `0f9ec6a`) and is absent from the tree and from every build input. Every user E32 now carries real PE2 import descriptors bound against the tracked root `qemu-port/EUSER.DLL` (`tools/elf2e32.py`, `tools/mke32*.py`). |
+| Plan — **DONE** | The DLL itself is **already genuine** — do not replace it, and it is not a shim: the tracked root `qemu-port/EUSER.DLL` is the runtime library. The *static shim* is retired: `elf2e32.py` now emits real PE2 import descriptors so every user E32 binds the genuine ordinals (e.g. `RDebug::Printf`@915, `UserSvr::FsRegisterThread`@1953, `CActiveScheduler::Start`@426) instead of linking `euser_shim.cpp`, and that file no longer exists. `e32base.h` stays a thin header exposing genuine layouts only. Note the honest caveat from `r1_e32_validate_filesvc_regression_v1.md`: one relocation in the genuine DLL exceeds a strict section bound, so the loader keeps a tolerance path — that is a loader fix, not a reason to fork EUSER. |
 
 ### 2.4 Sockets / networking — **ESOCK ABSENT**
 
@@ -159,7 +159,7 @@ clients bind is genuine, and the window server depends on both the file server
 | Step | Change | Gate that must pass before proceeding |
 |---|---|---|
 | 0 — baseline | Freeze current behaviour; no source changes. | `python3 tools/r1_os_selfcheck.py` (**selfcheck**), `python3 tools/r1_doom_test.py` (**doom**, graphics + WAD from FAT), `python3 tools/r1_window_system_test.py`, `python3 tools/r1_winsrv_test.py`. Record hashes/markers. |
-| 1 — EUSER closure | Make `elf2e32.py` emit real PE2 imports to the genuine `EUSER.DLL`; keep `e32base.h` declarations only; delete `euser_shim.cpp`. | selfcheck + doom unchanged; a `CActiveScheduler`/`CServer2` regression proves ordinals bind (426, 915, 1953). |
+| 1 — EUSER closure — **DONE** | `elf2e32.py` emits real PE2 imports to the genuine `EUSER.DLL`; `e32base.h` carries declarations only; `euser_shim.cpp` deleted in `0f9ec6a`. | PASS: `tools/r1_cp4_ca_test.py` binds the `CActiveScheduler`/`CServer2` ordinals (430/428/426/425, `RDebug::Printf`@915) against the tracked `EUSER.DLL`; FINAL26 `selfcheck` PASS (233.9s). |
 | 2 — HAL adoption | Implement `halservices` `halu.def` exports in the QEMU variant; remove ad-hoc HAL execs from user shims. | selfcheck; `e32test` HAL checks (`kerneltest/e32test/hcr`) if ported. |
 | 3 — File server | Build `efsrv.dll`, `efile.exe`, `efat32.fsy`; bind client ordinals; run genuine `!FileServer`, then retire `portfilesrv.cpp` and `fs/r1_fs_*` from the production path. | **efsrv file test**: `tools/r1_fcopy_test.py`, `tools/r1_largefile_test.py`, `tests/r1_file_regression/`, plus genuine `kerneltest/f32test/server` cases; doom must still load its WAD from FAT32. Keep `R1Fs::Backend` only as unit-test seam. |
 | 4 — Startup / domains / shell | Launch `e32strt.exe`, `domainsrv.exe`, `eshell.exe` from the boot image; reduce then remove `svcmgr.cpp` and execs 268–270. | selfcheck + efsrv file test + doom; shutdown/power path via `domainpolicy.dll`. |
@@ -181,8 +181,10 @@ in this `kernelhwsrv/` snapshot and are therefore either shimmed or deferred:
   `netstack.c` is authored port code (§2.4). Bluetooth and the comms DB have no
   replacement at all; features that need them are out of scope, not "compatible".
 - **UI framework (UIKON, EIKON, BAFL, app framework)** — absent. GUI programs
-  here use the hand-written `guilib.c` / `desktop.c` on the shim window server;
-  this is the largest compatibility gap after ESOCK.
+  here use the hand-written `guilib.c` / `desktop.c`, which no longer sit on a
+  shim window server: both render through `user/ws_e32_client.c` onto the
+  **genuine EWSRV** session (FINAL26 `genuine_ewsrv` PASS). The gap is the
+  toolkit, not the server; this is the largest compatibility gap after ESOCK.
 - **GDI / graphics resource server (`CFbsScreenDevice`, font/server bitmap
   server)** — absent beyond the allocator (`CBitMapAllocator`) exported by
   EUSER. Only the EUSER graphics-function ordinals (1211, 1213, 1216, 1225…)
@@ -213,20 +215,23 @@ and is already the runtime library.
 retirement step above. It reports **BUILT / RUNNING / PASS / FAIL / SKIP
 independently per subsystem**:
 
-- **EFSRV/F32** — SKIP until `genuine/build/` holds the genuine efsrv client,
-  `efile` server and `efat32.fsy`; then boots QEMU, launches the genuine
-  `!FileServer` (boot-launch marker `SvcMgr: boot launch r=0`) and drives a
-  user client over the real RFileServer session protocol
-  (`F32CLIENT: IPC round trip OK`). A static check always runs: the wire
+- **EFSRV/F32 — PASS (FINAL26, 14.7s).** `genuine/build/` holds the genuine
+  `EFSRV.DLL` client, `EFILE.E32` server and `EFAT32.FSY` driver, so the row is
+  no longer SKIP. It boots QEMU, `GenuineBootLaunch()` brings up the genuine
+  `!FileServer` (markers `GenuineBoot: file server up, svcmgr fallback skipped`,
+  `EFILE: genuine file server starting`) and drives a user client over the real
+  RFileServer session protocol (`F32CLIENT: IPC round trip OK`), asserting
+  `EFILE: port-shim count == 0`. A static check always runs: the wire
   opcodes in `fs/r1_fs_core.h` must still equal the genuine `TFsMessage`
-  ordinals in `kernelhwsrv/.../F32plugin.h`, and `user/ipc.c` must still be
-  able to connect to `!FileServer` by name — that is what makes our IPC bridge
+  ordinals in `kernelhwsrv/.../F32plugin.h` (13/13), and `user/ipc.c` must still
+  be able to connect to `!FileServer` by name — that is what makes our IPC bridge
   able to talk to the genuine server unchanged.
-- **EWSRV** — SKIP until `genuine/build/EWSRV.E32` exists; then boots it, checks
-  the genuine startup markers and takes a QMP screendump to prove a window
-  actually renders.
-- **ESTART/ESHELL** — SKIP until `E32STRT.E32`/`ESHELL.E32` exist; then boots
-  the genuine shell and checks its boot markers.
+- **EWSRV — PASS (FINAL26, 16.8s).** `genuine/build/EWSRV.E32` exists; the row
+  boots it, checks the genuine startup markers, confirms 212 PE2 EUSER imports
+  bound, and takes a QMP screendump proving a window renders.
+- **ESTART/ESHELL — PASS (FINAL26, 19.9s).** `genuine/build/estart_.E32` and
+  `etshell_.E32` exist; the row boots the genuine shell and checks its boot
+  markers (`ESTART`, `ESHELL`).
 - **EUSER** — the prebuilt genuine `euser.dll` (UIDs `10000079/1000008d/
   100039e5`, 2503 exports) must be present and load resident in every QEMU
   boot (residency is also covered by `tools/r1_qemu_smoke.py`).
@@ -246,21 +251,23 @@ nanokernel start thread had faulted `EMutexWaitNotDThread=98` (`KERN 0x62`).
 server names can publish, and raises PE2 import slots to 512. The genuine chain
 is probed in order — EUSER → EFILE/EFSRV → ESTART → EWSRV → ESHELL — with
 `svcmgr`/`portfilesrv` as fallback when no genuine file server is found. Full
-markers now verify with **0 faults**; `r1_qemu_smoke.py` PASS 11/11 and the
-retire gate reports ewsrv/estart/euser PASS, efsrv SKIP. B7 (the `KERN 0x62`
+markers now verify with **0 faults**; `r1_qemu_smoke.py` PASS and the
+retire gate reports efsrv/ewsrv/estart/euser all PASS. B7 (the `KERN 0x62`
 boot fault) and B4 are **FIXED**; see `GENUINE_PROGRESS.md` §2–§3 and
 `BOOT_CHAIN_VERIFICATION.md`. Because the harness stages the genuine names,
 components are "run" at boot, so a guest fault still correctly fails a gate.
-Remaining EFILE blocker (GDB-proven): `CServer2::Start("!FileServer")` returns
-**KErrBadName (-28)** from `User::ValidateName` in EUSER's `RServer2::CreateGlobal`
-— the genuine build encodes `_LIT` literals as UTF-32 (Linux gcc 32-bit `wchar_t`,
-no `-fshort-wchar`) while prebuilt EUSER reads 16-bit chars. The earlier `KERN 0x4
-EBadHandle` sret mismatch is superseded: `variant/e32load.cpp:1200-1236` wraps
-exec 81 to clear critical/permanent flags (0 FAULT now); `docs/EFILE_START_ANALYSIS.md`
-ranked cause #1 (EUSER translation of a successful create) was also superseded —
-exec 126/127 were never reached. The `-fshort-wchar` (+ `-freg-struct-return`)
-rebuild (tools/genuine_build.py, genuine/f32_efsrv_build.py, genuine/build_efile.py,
-genuine/efat32/build_fsy_dll.py) is **IN FLIGHT**, not verified.
+The former EFILE blocker is **CLOSED** (FINAL26 `genuine_efsrv` PASS, 14.7s):
+`CServer2::Start("!FileServer")` returned **KErrBadName (-28)** from
+`User::ValidateName` in EUSER's `RServer2::CreateGlobal` because the genuine
+build encoded `_LIT` literals as UTF-32 (Linux gcc 32-bit `wchar_t`) while
+prebuilt EUSER reads 16-bit chars. **Fix landed:** `-fshort-wchar` alongside
+`-freg-struct-return` in `tools/genuine_build.py`, `genuine/f32_efsrv_build.py`,
+`genuine/build_efile.py` and `genuine/efat32/build_fsy_dll.py`; EFILE now
+publishes `!FileServer`, registers its server thread and reports port-shim 0.
+The earlier `KERN 0x4 EBadHandle` sret mismatch stays superseded:
+`variant/e32load.cpp` wraps exec 81 to clear critical/permanent flags (0 FAULT);
+`docs/EFILE_START_ANALYSIS.md` ranked cause #1 (EUSER translation of a successful
+create) stays superseded too — exec 126/127 were never reached.
 
 **On-disk FAT I/O VERIFIED (2026-11-24, B5 milestone).** The minimal server
 `genuine/efsrv_min/efsrv_min.cpp` now uses `DiskFatBackend`; the port bridge
@@ -273,7 +280,12 @@ Genuine `TFsMessage` opcodes/descriptors/Core and `r1_fs_server.cpp` are
 untouched; cluster I/O uses the port `R1Fat` adapter, not full `sfat32` (PE2
 slot limit), and F32 BPB parsing remains in `F32PROBE`. See
 `docs/GENUINE_PROGRESS.md` §2/§3 and `genuine/F32_EFSRV_REPORT.md`. The EFSRV
-retire gate is still SKIP (0 shims retired).
+retire gate is **PASS**, not SKIP (FINAL26, 14.7s). The earlier "0 shims
+retired" note is obsolete: `user/portfilesrv.cpp`, `user/svcmgr.cpp` and
+`variant/r1_fs_channel.cpp` are deleted from the tree, and the surviving
+`fs/r1_fs_*` sources plus `variant/fat32.cpp` carry no production wiring — they
+are reached only by `tests/r1_fs_core/` and `genuine/efsrv_min/`, i.e. the
+`R1Fs::Backend` test seam.
 
 ---
 
@@ -290,3 +302,16 @@ retire gate is still SKIP (0 shims retired).
 - `kernelhwsrv/build.config.xml`, `kernelhwsrv/package_definition.xml`,
   `kernelhwsrv/bsptemplate/asspandvariant/` — the genuine per-architecture port
   boundary that motivates the rule.
+
+## 8. Supersession — 2026-11-26 (FINAL27, `FINAL27_RC=0`, 15/15)
+
+Line 263 ("**Fix landed:** `-fshort-wchar` … `build_fsy_dll.py`") is confirmed,
+not pending — the FSY side is no longer in flight. `genuine/build/EFAT32.FSY`
+(264,720 B), `genuine/build/EFSRV.DLL` (263,580 B) and
+`genuine/build/EFILE.E32` (273,044 B) are staged; `-fshort-wchar` is present at
+`genuine/efat32/build_fsy_dll.py:55`. FINAL27 shows `genuine_efsrv` **PASS
+15.1s**, `genuine_fat_io` **PASS 14.7s** (`FATIO-MARKER-42A7` round trip) and
+`genuine_retire` **PASS 44.4s** (efsrv row PASS, not SKIP). Gate of record:
+`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, log
+`/tmp/opencode/final27_gate.log`, HEAD `ee8490e`, no commits. Historical text
+above is left unedited.

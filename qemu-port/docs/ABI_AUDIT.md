@@ -207,3 +207,10 @@ rebuild.
 * This is largely a static audit: "FIXED IN IMAGE" means the mismatch is gone
   from the emitted code; it is not proof that every call path has executed. The
   gaps in §6 are where a latent fault could still surface.
+
+**Supersession footer (2026-11-26, append-only — the body above is preserved as this audit's own state on 2026-11-24 and is NOT current):**
+
+- **Header (:8) "EFILE is not fully fixed … `CServer2::Start` blocker is IN FLIGHT":** cleared. The `-fshort-wchar` rebuild this report called for is landed in all four drivers — `tools/genuine_build.py:92`, `genuine/build_efile.py:87`, `genuine/f32_efsrv_build.py:47`, `genuine/efat32/build_fsy_dll.py:55` — so `_LIT` names are UTF-16 and `CServer2::Start("!FileServer")` no longer returns KErrBadName (-28): `File server thread registered=1, port-shim=0, E32Main=0, 0 faults` (`docs/CHANGE_INVENTORY.md:54`).
+- **§3 EFILE row (:65) "FIXED IN IMAGE (partial) … NOT fully fixed":** EFILE is fixed as an image. The current binary is `genuine/build/EFILE.E32`, 273 044 B / 463 imports; the row's 273 040 B is the pre-`-fshort-wchar` build. The row's "likely shim name collision" guess is dead on its own terms — `user/portfilesrv.cpp` and `user/svcmgr.cpp` no longer exist, so no shim publishes `!FileServer`; the only publishers left are the genuine `efsrv_min` host and the `fs/r1_fs_server.cpp` unit-test seam.
+- **§6 third bullet and §9 second bullet (:154, :201):** the "active blocker" they describe is closed, not pending. The gate that carried it, `tools/r1_genuine_efsrv_test.py`, is `genuine_efsrv PASS 15.1s` in FINAL27 (`/tmp/opencode/final27_gate.log`), ending `F32CLIENT: IPC round trip OK` and `no Exc/PanicKernExec/FAULT`. §6's first two bullets — unexercised pointer/`TRawEvent::Pos` events and eshell command paths — remain a real coverage gap and are unaffected by this note.
+- **Standing evidence for the whole note:** the authoritative gate is 15 rows, `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, HEAD `ee8490e`, `kernelhwsrv/` untouched, nothing committed or pushed.

@@ -4,3 +4,9 @@
 - Verdicts: qemu_smoke, genuine_retire, genuine_efsrv, genuine_ewsrv, genuine_eshell, genuine_fat_io, doom_main, doom_audio, doom_playtest, doom_multikey = PASS; selfcheck = FAIL (248.0s).
 - selfcheck log (`final_verify_selfcheck.log`) truncated after `== RUN qemu_smoke` — no verdict/OVERALL line, no panic/#PF/KernExec faults; earlier in-run snapshot showed build/isogrub/qemu_smoke/cp4_ca/cp4_stress PASS before the final FAIL.
 - kernelhwsrv/ untouched; no QEMU run by this monitor; no commits.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

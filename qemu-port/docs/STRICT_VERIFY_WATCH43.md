@@ -5,3 +5,9 @@
 - In flight: doom_main (7/11); doom_audio, doom_playtest, doom_multikey pending. No OVERALL line, no FV_EXIT yet.
 - Fault scan of 1913 log + per-test logs: 0 fault/panic/#PF/KERN-/EXCEPT matches in 1913; per-test logs show "no guest exceptions"/"no Exc/Panic/FAULT" where applicable.
 - kernelhwsrv/ untouched (read-only monitor; no QEMU run by this watcher).
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

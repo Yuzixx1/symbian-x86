@@ -5,3 +5,9 @@
 - Child log `final_verify_selfcheck.log`: build PASS, isogrub PASS, qemu_smoke PASS (50.2s); currently running cp4_ca.
 - Fault scan (main + selfcheck logs): no fault/panic/KERN-EXEC/Traceback patterns.
 - kernelhwsrv/ untouched; no QEMU launched by this watch. Verdict: IN PROGRESS, healthy so far.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

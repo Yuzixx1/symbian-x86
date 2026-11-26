@@ -7,23 +7,34 @@ development.
 
 Default order (each entry is one subprocess, logged separately):
 
-     1. r1_os_selfcheck.py       build + isogrub + smoke + cp4 + selftest
-     2. r1_qemu_smoke.py         boot / EUSER / process-create markers
-     3. r1_genuine_retire_test   staged genuine-shim retirement gates
-     4. r1_genuine_efsrv_test    genuine F32 + !FileServer IPC
-     5. r1_genuine_ewsrv_test    genuine !E32WindowServer
-     6. r1_genuine_eshell_test   genuine ESTART / ESHELL
-     7. r1_genuine_fat_io_test   genuine EFSRV against real FAT32 volume
-     8. r1_doom_test.py          DOOM title screen (--no-build-iso)
-     9. r1_doom_audio_test.py    DOOM + AC97 PCM audio (--no-build-iso)
-    10. r1_doom_playtest.py      long-run playability (--no-build-iso)
-    11. r1_doom_multikey_test.py multi-key hold / release (--no-build-iso)
+     1. r1_shim_residue_sweep.py static G12 shim-residue sweep (no QEMU)
+     2. r1_g12_negative_test.py  G12 negative-control test (no QEMU)
+     3. r1_missing_statics_check.py W5 missing-statics guard (no QEMU)
+     4. r1_os_selfcheck.py       build + isogrub + smoke + cp4 + selftest
+     5. r1_qemu_smoke.py         boot / EUSER / process-create markers
+     6. r1_genuine_retire_test   staged genuine-shim retirement gates
+     7. r1_genuine_efsrv_test    genuine F32 + !FileServer IPC
+     8. r1_genuine_ewsrv_test    genuine !E32WindowServer
+     9. r1_genuine_eshell_test   genuine ESTART / ESHELL
+    10. r1_genuine_fat_io_test   genuine EFSRV against real FAT32 volume
+    11. r1_doom_test.py          DOOM title screen (--no-build-iso)
+    12. r1_doom_audio_test.py    DOOM + AC97 PCM audio (--no-build-iso)
+    13. r1_doom_playtest.py      long-run playability (--no-build-iso)
+    14. r1_doom_multikey_test.py multi-key hold / release (--no-build-iso)
+    15. r1_genuine_hal_test.py   genuine HALPROBE screen-info (UserSvr)
 
-FAST vs LONG: 1 is the full build+boot self-check and 3 boots QEMU several
-times -- both are the slowest gates. 2, 4-7 are single-boot QEMU tests. The
+FAST vs LONG: 3 is the full build+boot self-check and 5 boots QEMU several
+times -- both are the slowest gates. 4, 6-9 are single-boot QEMU tests. G12
+(rows 1-2) and W5 (row 3) are static greps with no QEMU, sub-second warm. The
 DOOM tests are optional-ish: they SKIP (exit 0) with a clear RESULT: SKIP when
-DOOM.E32 / FREEDOOM1.WAD / EUSER.DLL assets are missing. A SKIP is reported
-but never makes the overall run fail unless --strict-skip is given.
+DOOM.E32 / FREEDOOM1.WAD / EUSER.DLL assets are missing. hal_probe (row 15)
+skips the same way when genuine/build/hal_smoke.E32 or EUSER.DLL is absent.
+A SKIP is FATAL by default: a gate that proved nothing must not let the run
+report PASS, and the old "SKIP is never fatal" behaviour was exactly how a
+missing artifact could go green. --allow-skip downgrades SKIP to advisory for
+a deliberately partial run; --strict-skip is kept (old command lines) and now
+always wins over --allow-skip. Consequence: a DEFAULT invocation passes only
+with every asset staged, i.e. a full 15-row run (FINAL21).
 
 ISO STAGING POLICY (never silently reuse a stale DOOM ISO): the orchestrator
 never builds userland itself, it only invokes the scripts above. Gate 1 builds
@@ -51,7 +62,8 @@ captured output wins (greatest character offset). Only if no explicit verdict
 exists is the process exit status used. HOWEVER a nonzero exit ALWAYS forces
 FAIL even if a PASS/SKIP verdict was parsed: a script that prints PASS and then
 crashes is a failure. A timeout is always a failure. NOT RUN rows (from
---no-keep-going) count as failures. SKIP is non-fatal unless --strict-skip.
+--no-keep-going) count as failures. SKIP is fatal too: only --allow-skip
+downgrades it to advisory, and --strict-skip forces it back to fatal.
 
 Usage:
     python3 tools/r1_final_verify.py                 # run the default set
@@ -60,7 +72,8 @@ Usage:
     python3 tools/r1_final_verify.py --skip doom_playtest doom_multikey
     python3 tools/r1_final_verify.py --skip-selfcheck
     python3 tools/r1_final_verify.py --no-keep-going  # stop on first failure
-    python3 tools/r1_final_verify.py --strict-skip    # make SKIP fatal
+    python3 tools/r1_final_verify.py --allow-skip     # SKIP advisory, not fatal
+    python3 tools/r1_final_verify.py --strict-skip    # kept; SKIP fatal (default)
 """
 import argparse
 import fcntl
@@ -119,6 +132,9 @@ def selftest_lock():
 Test = namedtuple("Test", "name script argv timeout")
 
 DEFAULT_TESTS = [
+    Test("g12_residue",     "tools/r1_shim_residue_sweep.py",      [], 120),
+    Test("g12_negative",    "tools/r1_g12_negative_test.py",      [], 120),
+    Test("missing_statics", "tools/r1_missing_statics_check.py",   [], 120),
     Test("selfcheck",       "tools/r1_os_selfcheck.py",            [], 900),
     Test("qemu_smoke",      "tools/r1_qemu_smoke.py",              [], 150),
     Test("genuine_retire",  "tools/r1_genuine_retire_test.py",     [], 600),
@@ -130,6 +146,7 @@ DEFAULT_TESTS = [
     Test("doom_audio",      "tools/r1_doom_audio_test.py",         ["--no-build-iso"], 240),
     Test("doom_playtest",   "tools/r1_doom_playtest.py",           ["--no-build-iso"], 240),
     Test("doom_multikey",   "tools/r1_doom_multikey_test.py",      ["--no-build-iso"], 360),
+    Test("hal_probe",       "tools/r1_genuine_hal_test.py",        [], 240),
 ]
 
 # A single explicit final verdict is authoritative, chosen by greatest
@@ -143,14 +160,19 @@ BAD = {"FAIL", "TIMEOUT", "ERROR", "NOT RUN"}
 GOOD = {"PASS", "SKIP"}
 
 
-def is_failure(verdict, strict_skip=False):
-    """True when a verdict should make the whole run fail."""
-    return verdict in BAD or (strict_skip and verdict == "SKIP")
+def is_failure(verdict, skip_fatal=True):
+    """True when a verdict should make the whole run fail.
+
+    A SKIP is fatal unless the caller explicitly downgrades it: a gate that
+    proved nothing must not let the run report PASS.  `skip_fatal` is False
+    only for a deliberate --allow-skip run.
+    """
+    return verdict in BAD or (skip_fatal and verdict == "SKIP")
 
 
-def failed_names(results, strict_skip=False):
+def failed_names(results, skip_fatal=True):
     """Names of all results whose verdict is fatal for the run."""
-    return [r["name"] for r in results if is_failure(r["verdict"], strict_skip)]
+    return [r["name"] for r in results if is_failure(r["verdict"], skip_fatal)]
 
 
 def explicit_verdict(text):
@@ -430,8 +452,12 @@ def build_parser():
     ap.add_argument("--rebuild-iso", action="store_true",
                     help="run `make isogrub` then stage a fresh DOOM ISO "
                          "(default: stage the existing build ISO without rebuilding)")
+    ap.add_argument("--allow-skip", action="store_true",
+                    help="treat a RESULT: SKIP verdict as advisory instead of "
+                         "a failure (--strict-skip still wins)")
     ap.add_argument("--strict-skip", action="store_true",
-                    help="treat a RESULT: SKIP verdict as a failure")
+                    help="treat a RESULT: SKIP verdict as a failure "
+                         "(now the default; kept so old command lines work)")
     ap.add_argument("--log-dir", default=None, metavar="DIR",
                     help=f"where per-test logs go (default {DEFAULT_LOGDIR}); "
                          f"the default is auto-moved to {CACHE_ROOT}/ if "
@@ -444,6 +470,9 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
+    # A SKIP proves nothing, so it is fatal by default; --allow-skip is the
+    # only way back to advisory SKIPs and --strict-skip always wins over it.
+    skip_fatal = args.strict_skip or not args.allow_skip
     valid = [t.name for t in DEFAULT_TESTS]
 
     if args.list:
@@ -498,7 +527,7 @@ def main():
         results.append(res)
         print(f'-- {t.name}: {res["verdict"]} ({res["elapsed"]:.1f}s) '
               f'{res["detail"]}', flush=True)
-        if is_failure(res["verdict"], args.strict_skip) and not args.keep_going:
+        if is_failure(res["verdict"], skip_fatal) and not args.keep_going:
             for rest in chosen[len(results):]:
                 results.append(dict(name=rest.name, verdict="NOT RUN",
                                     detail="stopped by --no-keep-going",
@@ -506,7 +535,7 @@ def main():
             break
 
     print_table(results)
-    failed = failed_names(results, args.strict_skip)
+    failed = failed_names(results, skip_fatal)
     overall = "FAIL" if failed else "PASS"
     print(f"\nOVERALL: {overall}  "
           f"({sum(1 for r in results if r['verdict'] == 'PASS')} pass, "

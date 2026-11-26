@@ -5,3 +5,9 @@
 - Verdicts so far: selfcheck **FAIL** (selftest step: all ST markers FAIL, marker order, EUSER ord 915; 0 guest exceptions); qemu_smoke PASS; genuine_retire PASS (4/4); genuine_efsrv PASS; genuine_ewsrv PASS; genuine_eshell PASS (8/8 commands, fault-free).
 - Fault scan: no `#PF` / `PanicKernExec` / `KERN-n` / FAULT in main log; per-test logs clean except the selfcheck selftest FAIL above.
 - kernelhwsrv/ untouched; no QEMU launched by this watch (log-only).
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

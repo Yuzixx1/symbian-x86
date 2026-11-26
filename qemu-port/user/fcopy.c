@@ -168,7 +168,7 @@ static void do_del(const char* name)
 static const char* const kFiles[] = {
     "AUTOEXEC.BAT", "CONFIG.SYS",
     "README.TXT", "NOTES.TXT", "HELLO.TXT", "FCOPY.TXT", "OUT.TXT",
-    "FCOPY.E32", "FILEMGR.E32", "TEXTEDIT.E32", "PORTFILESRV.E32"
+    "FCOPY.E32", "FILEMGR.E32", "TEXTEDIT.E32"
 };
 #define NFILES ((int)(sizeof(kFiles) / sizeof(kFiles[0])))
 

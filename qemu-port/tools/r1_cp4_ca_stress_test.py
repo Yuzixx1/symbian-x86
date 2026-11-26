@@ -136,8 +136,30 @@ def ps(vm, pos, pattern):
     return pos, re.findall(pattern, text)
 
 
+def strip_progress_noise(text, name):
+    """Drop '<name>: <text>' progress lines, each with its own line break.
+
+    Async clients keep printing while `ps` emits its listing, so a listing row
+    can be torn mid-token and resumed on the following line behind a progress
+    line ('CPSTRESS: tick3 10'), hiding that row's id=. Removing the progress
+    line together with its terminator rejoins the torn row before matching; a
+    completed row keeps its own line break, so rows never fuse.
+    """
+    return re.sub(re.escape(name) + r':[^\r\n]*\r?\n?', '', text)
+
+
+def parse_ps_ids(text, name):
+    """Instance ids of every `name` process in a ps listing, robust to client
+    progress output interleaved into a listing row."""
+    text = strip_progress_noise(text, name)
+    return [int(i) for i in
+            re.findall(r'\b' + re.escape(name) + r'\S*\s+id=(\d+)', text)]
+
+
 def ps_ids(vm, pos, name):
-    return ps(vm, pos, r'\b' + re.escape(name) + r'\S*\s+id=(\d+)')
+    before = pos
+    pos = run(vm, pos, 'ps', b'PortFile channels:')
+    return pos, parse_ps_ids(read_range(before, pos), name)
 
 
 def channels(vm, pos):

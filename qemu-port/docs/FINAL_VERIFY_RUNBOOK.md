@@ -1,5 +1,24 @@
 # FINAL VERIFY RUNBOOK — execute only after the five in-flight fixes land
 
+> **CORRECTION 2026-11-26 — authoritative gate is 15 rows, not 11 or 14.**
+> `DEFAULT_TESTS` in `tools/r1_final_verify.py:134-150` is
+> **`g12_residue`, `g12_negative`, `missing_statics`, `selfcheck`,
+> `qemu_smoke`, `genuine_retire`, `genuine_efsrv`, `genuine_ewsrv`,
+> `genuine_eshell`, `genuine_fat_io`, `doom_main`, `doom_audio`,
+> `doom_playtest`, `doom_multikey`, `hal_probe`** (15 total), confirmed by
+> `tools/r1_final_verify.py --list` (15 rows, exit 0, row 15 = `hal_probe`).
+> The live authoritative run is `/tmp/opencode/final27_gate.log`, which ends
+> `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` with `FINAL27_RC=0`
+> (**15/15 PASS**) at HEAD `ee8490e`, no commits.
+> The live count references in §1.3, §2 and the §3 acceptance table have been
+> updated to 15 in place, as have the DOOM row numbers (`doom_main` /
+> `doom_audio` / `doom_playtest` / `doom_multikey` are rows 11-14).
+> Historical only, superseded: the `11` count everywhere below, and the
+> **14-row** reading with `FINAL15_RC=0`/`FINAL16_RC=0`
+> (`/tmp/opencode/final15_gate.log`, `final16_gate.log`), `FINAL20_RC`,
+> `FINAL23_RC` and `FINAL26_RC`.
+> The rest of the page is otherwise unchanged.
+
 **Basis:** `docs/FINAL_GATE_STATUS.md` snapshot 2026-11-24 03:17 EET — **8 GREEN /
 5 IN FLIGHT / 1 FAIL / 1 NOT DONE**; overall **NOT DONE**. This page is a read-only
 plan: no QEMU, no build, no source edit, no commit, no shim retirement was made
@@ -29,17 +48,17 @@ retirement without an explicit user request (§4).
 ### 1.3 Disk / tool guards
 
 - `df -h /tmp/opencode` — need **≥1 GiB** free (`MIN_FREE_BYTES` in `tools/r1_final_verify.py`; currently 5.8 G free). The disk guard auto-selects a unique `~/.cache/sybian-r1/final-verify-<stamp>` dir when the default is low; an explicit `--log-dir` is honored with a warning.
-- `r1_final_verify.py` already contains the landed false-PASS fixes: stale DOOM ISO deleted and a fresh ISO staged before DOOM rows (~232–297) and nonzero rc with a printed PASS/SKIP forced to FAIL (~347–348). Confirm with `--dry-run` (expect 11 commands).
+- `r1_final_verify.py` already contains the landed false-PASS fixes: stale DOOM ISO deleted and a fresh ISO staged before DOOM rows (~232–297) and nonzero rc with a printed PASS/SKIP forced to FAIL (~347–348). Confirm with `--dry-run` (expect 15 commands).
 
 ## 2. ORDERED COMMANDS — all from `qemu-port/`, in this order
 
 ```bash
 cd "/home/yuzi/Documents/Sybian REAL/qemu-port"
 
-# 1. Plan only — confirm the 11 commands; no QEMU, no verdict.
+# 1. Plan only — confirm the 15 commands; no QEMU, no verdict.
 python3 tools/r1_final_verify.py --dry-run
 
-# 2. Authoritative 11-test gate (incl. DOOM). Use --rebuild-iso if §1.2 rebuilt.
+# 2. Authoritative 15-test gate (incl. DOOM). Use --rebuild-iso if §1.2 rebuilt.
 python3 tools/r1_final_verify.py --strict-skip
 #    If an explicit --log-dir is needed: append --log-dir /tmp/opencode
 #    Require EVERY row PASS; a SKIP is fatal here. Logs: /tmp/opencode/final_verify_<name>.log
@@ -55,7 +74,7 @@ python3 tools/r1_efile_acceptance.py --log ~/.cache/sybian-r1/efile_clean_prove.
 # 5. Per-subsystem retire gates — all four must PASS.
 python3 tools/r1_genuine_retire_test.py --log-dir ~/.cache/sybian-r1
 
-# 6. DOOM main/audio/playtest/multikey are rows 8–11 of step 2; do not accept a
+# 6. DOOM main/audio/playtest/multikey are rows 11–14 of step 2; do not accept a
 #    stale-ISO or SKIP DOOM result. Inspect /tmp/opencode/final_verify_doom_*.log.
 ```
 
@@ -68,13 +87,13 @@ read one uninterrupted raw log, never a SIGTERM'd harness log.
 
 | Gate | Command | Required result (exact) | On FAIL — consult / owner |
 |---|---|---|---|
-| Final verify plan | `--dry-run` | 11 commands, exit 0, no verdict | `FINAL_VERIFY_REVIEW.md` |
-| Final verify authoritative | `--strict-skip` | every one of 11 rows PASS; `OVERALL: PASS`, exit 0; **0 SKIP**; logs fresh (§1.2) | `FINAL_VERIFY_REVIEW.md` (false-PASS paths); owning agent of the failing tool |
+| Final verify plan | `--dry-run` | 15 commands, exit 0, no verdict | `FINAL_VERIFY_REVIEW.md` |
+| Final verify authoritative | `--strict-skip` | every one of 15 rows PASS; `OVERALL: PASS`, exit 0; **0 SKIP**; logs fresh (§1.2) | `FINAL_VERIFY_REVIEW.md` (false-PASS paths); owning agent of the failing tool |
 | Full boot chain | `r1_genuine_fullchain_test.py` | **14/14** rows PASS in one boot: `KERN spawning genuine boot DThread`, `GenuineBoot: probing boot volume`, `e32run: EUSER.DLL resident`, `exports=2503`, `GenuineBoot: EFILE/ESTART/EWSRV/ESHELL.E32 r=0`, `ESHELL 0.01(4011)`, `file server up, svcmgr fallback skipped`, `C:/>`, screendump; `Exc `/`PanicKernExec`/`FAULT`/`port-shim` = **0**; `launch refused` = **0**; ESTART `r=-11` absent | `FULLCHAIN_VERIFICATION.md` (marker-drift caveat: kernel dropped the word "genuine" in the file-server-up line — confirm against the tool's `--dry-run` expected list, do not weaken the gate); `GUARD_ESTART_BLOCK_ANALYSIS.md` §4 (fix B/D) |
 | EFILE clean prove | `r1_efile_clean_prove.py` | 464 binds; start=1; registered=1; port-shim=0; IPC OK ≥1; `SessionPath r=-15`=0; `#PF`/`FAULT:`/`PanicKernExec`/`Exc `/SIGTERM=0; ends at `C:/>` | `EFILE_CLEAN_PROVE.md`, `EFILE_GUARD_VS_TRAMPOLINE.md`; owner of `f32_probe` / `~/.cache/sybian-r1` |
 | EFILE strict acceptance | `r1_efile_acceptance.py --log <fresh>` | `RESULT: PASS (9/9)`, exit 0: `genuine file server starting`=1, `File server thread registered`=1, `E32Main returned`=0, `#PF`=0, `EFILE: port-shim`=0, `F32CLIENT: IPC round trip OK`≥1, `SessionPath r=-15`=0, `Exc`/`PanicKernExec`/`FAULT`=0, `GenuineBoot: EFILE.E32 r=0`=1 | `EFILE_ACCEPTANCE.md` (criterion table), `GUARD_TRAMPOLINE_REVIEW.md`; `-15` owner / fix C |
 | Retire gates | `r1_genuine_retire_test.py` | `RESULT: PASS (4 passed, 0 skipped, 0 failed)` — EFSRV/F32, EWSRV, ESTART/ESHELL, EUSER all PASS | `GO_NO_GO.md` §1, `GENUINE_PROGRESS.md`, `SHIM_RETIREMENT_PLAN.md`; per-subsystem `r1_genuine_{efsrv,ewsrv,eshell}_test.py` |
-| DOOM / Freedoom | rows 8–11 of step 2 | main, audio, playtest, multikey PASS; 0 guest faults; `EKA2_CRISP_STOP` absent; fresh ISO staged | `DOOM_INTEGRATION_VERIFICATION.md` §4–6 (`multikey` `diagonal_2` FAIL is a documented marker-attribution artifact); `FINAL_VERIFY_REVIEW.md` §1 (stale ISO) |
+| DOOM / Freedoom | rows 11–14 of step 2 | main, audio, playtest, multikey PASS; 0 guest faults; `EKA2_CRISP_STOP` absent; fresh ISO staged | `DOOM_INTEGRATION_VERIFICATION.md` §4–6 (`multikey` `diagonal_2` FAIL is a documented marker-attribution artifact); `FINAL_VERIFY_REVIEW.md` §1 (stale ISO) |
 
 A FAIL in any row stops the sequence — fix and re-run from step 1 on a fresh,
 stable tree; do not proceed to §4 and do not edit a gate to make it pass.
@@ -103,3 +122,5 @@ stable tree; do not proceed to §4 and do not edit a gate to make it pass.
 above). This runbook is NOT authorization to run QEMU, retire a shim, commit or
 push; it records the sequence and evidence required once the owning agents land
 their fixes and the user explicitly asks for final verification.*
+
+> **CORRECTION 2026-11-26 03:26 EET — authoritative gate is 15 rows, `FINAL27_RC=0`.** This supersedes the earlier 15-row entries (`FINAL20_RC`, `FINAL23_RC`, `FINAL26_RC`) and the 14-row entry: `hal_probe` (`tools/r1_genuine_hal_test.py`) is DEFAULT_TESTS row 15, confirmed by `tools/r1_final_verify.py --list` (15 rows, row 15 = `hal_probe`, roster block `:134-150`). The live authoritative run is `/tmp/opencode/final27_gate.log`, which ends `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` → **15/15 PASS** with **`FINAL27_RC=0`**, at HEAD `ee8490e`, no commits. `FINAL20_RC=0` / `final20_gate.log`, `FINAL23_RC=0` / `final23_gate.log`, `FINAL26_RC=0` / `final26_gate.log` and `FINAL15_RC`/`FINAL16_RC` are superseded history only.

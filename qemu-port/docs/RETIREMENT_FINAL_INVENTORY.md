@@ -113,3 +113,9 @@ kernelhwsrv/ untouched; no shim retired until its gate passed.
   are sha256-verified against HEAD originals; keep them until the commit is
   confirmed, then they may be discarded (rollback tokens recorded in the docs).
 - No commit/push authorization exists here — this is a plan only.
+
+---
+
+## Supersession note — 2026-11-26
+
+**Any 11-row / 11-pass `r1_final_verify.py --strict-skip` requirement or claim in this document is historical.** The current authority is 15 rows: `FINAL27_RC=0` (15 pass, 0 skip, 0 fail), captured in `/tmp/opencode/final27_gate.log`. Read every "11/11", "11 rows", or "PASS (11 pass, 0 skip, 0 fail)" above as a record of the state at its own date, not as a live gate. The body of this file is left byte-identical; this note is the only change.

@@ -7,3 +7,9 @@
 - Process 1194626 alive (STAT S, ~8 min elapsed): `python3 tools/r1_final_verify.py --strict-skip`.
 - Fault scan: 0 real faults in gate log; per-test log hits are only `[PASS] no Exc/Panic/FAULT` lines and linker symbol names (User5PanicE etc.).
 - kernelhwsrv/ untouched (git status clean). No QEMU launched by this watch; logs only.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

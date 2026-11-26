@@ -6,3 +6,9 @@
 - Fault-scan: 0 real faults/panics/#PF in current-run logs (only "no FAULT" PASS lines; qemu exit 124 = expected timeout kill).
 - Prior-run per-test logs (20:36–20:41) all PASS (efsrv/ewsrv/eshell/fat_io/doom×4) but are stale, not this run.
 - kernelhwsrv/ untouched (git clean); no QEMU launched by this monitor; lock `/tmp/opencode/final_verify.lock` held by the verify run.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

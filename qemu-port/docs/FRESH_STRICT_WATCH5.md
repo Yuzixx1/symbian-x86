@@ -6,3 +6,9 @@
 - PID 1194626 ALIVE (6m56s at 21:32:40); holds /tmp/opencode/final_verify.lock; child on genuine_fat_io test.
 - Fault-scan clean: no Exc/PanicKernExec/FAULT/#PF/FAIL in gate log or per-test logs; grep hits were only PASS lines and -fno-exceptions compiler flags.
 - kernelhwsrv/ untouched (git diff empty); no QEMU launched by this watch — logs only.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

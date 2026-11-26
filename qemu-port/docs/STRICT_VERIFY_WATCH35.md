@@ -2,3 +2,9 @@
 Log `/tmp/opencode/final_verify_1913.log` (1.1 KB, <50 MB) — PID 1137836 ALIVE (~7 min), child now `r1_genuine_eshell_test.py` (1170276); lock held.
 Verdicts so far: selfcheck FAIL (248s, selftest sub-step QEMU timeout 124), qemu_smoke PASS, genuine_retire PASS, genuine_efsrv PASS, genuine_ewsrv PASS; genuine_eshell RUNNING; fat_io + 4x doom pending. No OVERALL/FV_EXIT yet.
 Fault-scan: clean — zero guest #PF/KERN/panic; all grep hits are "[PASS] no Exc/Panic/FAULT" assertions or ld defsym lines. kernelhwsrv/ untouched; no QEMU run by this watch.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

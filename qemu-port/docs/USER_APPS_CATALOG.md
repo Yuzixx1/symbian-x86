@@ -319,3 +319,5 @@ banner, the `SND:` INIT/sfx/play and `AU:` PCM-play marker families, a rendered
 `DOOM: TITLE`/`FRAME` and a fault-free log. It skips cleanly while assets are
 missing and its held-open-QMP screendump never fails the run. The driver-only
 check is `tools/r1_qemu_audio_test.py`.
+
+**CORRECTION 2026-11-26 — winsrv/GUI premise superseded.** The live/pending winsrv-or-GUI desktop stated above no longer holds: winsrv/GUI desktop was RETIRED in commit `94ce9c9`, which deleted 7 files (`user/winsrv.c`, `user/guishost.h`, `user/wsclient.c`, `user/wsclient.h`, `variant/qemu_windowsrv.cpp`, `variant/qemu_windowsrv.h`, `variant/qemu_gui_exec.cpp`). Execs 249/250/251 and the `WINSRV` launch path are gone — those slots are now `EExecSlowAtomicAdd64/Tau64/Tas64` in `build/export/exec_enum.h`, and the WINSRV/WSDL rows above are historical only. Console shell + DOOM/Freedoom are the UI; genuine EWSRV is the target when GUI returns, per `AGENTS.md`. The 15-row gate is 15/15 PASS (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits.

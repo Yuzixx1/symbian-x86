@@ -350,17 +350,9 @@ build/user/MALLOC.E32: build/user/malloc.elf tools/elf2e32.py tools/mke32.py
 	python3 tools/elf2e32.py $< $@
 	python3 tools/e32read.py $@ --quiet
 
-# I-08: genuine CServer2/CSession2 file server (fs/r1_fs_server.cpp).
-build/user/r1_fs_server.o: fs/r1_fs_server.cpp fs/r1_fs_server.h fs/r1_fs_core.h user/e32base.h user/e32cmn.h user/f32ver.h | build/user
-	$(CXX) $(USER_FLAGS) -Iuser -Ifs -c $< -o $@
-
 # S-04: malloc.o for the EUSER shim
 build/user/malloc.o: user/malloc.c
 	$(CC) $(USER_FLAGS) -c $< -o $@
-
-# S-04: r1_fs_core.o from fs/ directory
-build/user/r1_fs_core.o: fs/r1_fs_core.cpp
-	$(CXX) $(USER_FLAGS) -Ifs -c $< -o $@
 
 # End-user system-information utility: CPUID (leaves 0/1), genuine tick exec,
 # heap chunk probe, netbridge/e1000 probe. Genuine PE2 import of EUSER.DLL

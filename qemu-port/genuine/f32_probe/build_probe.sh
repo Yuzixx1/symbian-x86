@@ -2,6 +2,7 @@
 # Link a PE2 E32 that runs ACTUAL genuine F32 code from kernelhwsrv.
 # Output stays inside qemu-port/genuine/f32_probe/.
 set -e
+unset LD_LIBRARY_PATH
 cd "$(dirname "$0")/../.."   # qemu-port/
 D=genuine/f32_probe
 mkdir -p "$D"

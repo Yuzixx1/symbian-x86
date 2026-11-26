@@ -36,8 +36,8 @@ OFFSET_BYTES = PART_START_LBA * 512  # 1048576
 
 # Output of tools/mke32_ca_test.py (may be overridden with --e32).
 CA_TEST_E32 = "/tmp/opencode/ca_test.e32"
-EUSER_DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
-DEFAULT_KERNEL = "/home/yuzi/Documents/Sybian REAL/qemu-port/build/kernfull.elf"
+EUSER_DLL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EUSER.DLL")
+DEFAULT_KERNEL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "kernfull.elf")
 
 # Ordinals the fixture imports from EUSER.DLL (see tools/mke32_ca_test.py).
 # Genuine Start()/Stop() round trip: RunL() is dispatched by the real scheduler

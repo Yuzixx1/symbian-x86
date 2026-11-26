@@ -38,3 +38,7 @@ Monitor pass per docs/WINSRV_DELETION_GATE.md. No QEMU, no commit/push, no
 3. **Keyboard-injection KERN-8 #PF** (cr2=0xf0000010, EWSRV pid=9) still open per CRITICAL_PATH_STATUS (P2 keyboard arm).
 4. **cp4_stress / slot 269** regression unresolved (selfcheck FAIL in newest final_verify run).
 5. Kernel-side deletion set (variant/qemu_windowsrv.*, qemu_gui_exec.cpp, exec table 274→271, Makefile rows) untouched — correctly, gate is human-gated, no apply path.
+
+---
+
+**SUPERSEDED 2026-11-26.** The 11-row / 10-11-pass strict gate asserted above is historical and no longer current. Current authority is **15 rows / `FINAL27_RC=0`** — 15 pass, 0 skip, 0 fail — recorded in `/tmp/opencode/final27_gate.log`. The body above is preserved byte-identical for audit history.

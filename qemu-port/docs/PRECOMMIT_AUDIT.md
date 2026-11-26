@@ -3,6 +3,16 @@
 **Date:** 2026-11-24. **Scope:** read-only audit + this checklist. No QEMU, no rebuild,
 no commit, no push, no shim retirement. `kernelhwsrv/` is READ-ONLY and untouched.
 
+> **CORRECTION 2026-11-26.** Step 2 (`r1_final_verify.py`) runs all **14**
+> `DEFAULT_TESTS` — `g12_residue`, `g12_negative`, `missing_statics` plus the other 11
+> (`selfcheck`, `qemu_smoke`, `genuine_retire`, `genuine_efsrv`, `genuine_ewsrv`,
+> `genuine_eshell`, `genuine_fat_io`, `doom_main`, `doom_audio`, `doom_playtest`,
+> `doom_multikey`) — not "11". `final15_gate.log` and `final16_gate.log` both report
+> `OVERALL: PASS (14 pass, 0 skip, 0 fail/not-run)`. The commit bar is therefore
+> **14/14 PASS, 0 SKIP**. This correction is prep only and is **not authorization**.
+
+> **CORRECTION 2026-11-26 (supersedes the 14-row entry above).** The authoritative gate is now **15** `DEFAULT_TESTS` rows — `hal_probe` (`tools/r1_genuine_hal_test.py`) is row 15, confirmed by `r1_final_verify.py --list` — and `/tmp/opencode/final27_gate.log` reports `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)` with `FINAL27_RC=0 (15/15 PASS)`; HEAD `ee8490e`, no commits.
+
 > **STATUS: NO-GO.** EFSRV/F32 retire gate = **FAIL** — the EFILE entry-trampoline
 > (A2) fix is PENDING (source only, unbuilt/unproven); duplicate EFILE owners still
 > kill the `DServer` (`SessionPath r=-15`). This document is **prep, not authorization**.
@@ -74,3 +84,13 @@ and pushed:
   (archive tarball — still NOT gitignored, never `git add -A`).
 - `kernelhwsrv/` remains READ-ONLY and untouched. The checklist, ordered
   commands, and do-not-commit list above remain valid.
+
+## Supersession (2026-11-26) — "authoritative 11-test gate" is now 15 rows
+
+Step 2 at `:24` (`python3 tools/r1_final_verify.py --strict-skip` — "authoritative
+11-test gate") names a row count that is retired. Current authority: `DEFAULT_TESTS` in
+`tools/r1_final_verify.py:134-150` = **15** rows, and the last full run
+`/tmp/opencode/final27_gate.log` reports `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)`,
+`FINAL27_RC=0`. The ordered command list, the staging rules, the do-not-commit list and
+the `kernelhwsrv/` read-only constraint are all unaffected; only the expected row count
+changed. This note is prep, not authorization — no gate was re-run and no commit made.

@@ -190,3 +190,5 @@ Caps and gaps (`docs/r1_mmu_4k_upgrade.md:51-59`):
 - 16 process PDs and 128 MiB of 4K-mapped RAM are hard static limits;
   growing past 128 MiB requires enlarging the 32-PT pool (the 4M fallback
   still identity-maps the high range, supervisor-only).
+
+> **2026-11-26 — correction:** the `r1_qemu_smoke.py 11/11 PASS` line above records one harness, not the gate; the authoritative gate is `tools/r1_final_verify.py`, now **15 rows** (`--list` prints 15 and exits 0), and the authoritative run is **FINAL27_RC=0 (15/15 PASS)** (`OVERALL: PASS  15 pass, 0 skip, 0 fail/not-run`).

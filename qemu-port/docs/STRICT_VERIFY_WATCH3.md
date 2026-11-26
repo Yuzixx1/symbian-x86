@@ -33,3 +33,9 @@ FV_EXIT=1). No QEMU was launched by this monitor; kernelhwsrv/ untouched.
 - Contrast with the recorded 11/11 PASS state in AGENTS.md: this run's only
   regression vs that is the selfcheck/cp4_ca stage; all genuine-userspace and
   DOOM gates passed.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

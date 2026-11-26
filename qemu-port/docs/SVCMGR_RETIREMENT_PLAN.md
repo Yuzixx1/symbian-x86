@@ -154,3 +154,14 @@ success.
 - Never re-add the EFILE trampoline (EFILE single-owner decision); the exec-81
   flag-clear is the sanctioned shim and stays.
 - `kernelhwsrv/` read-only; no commit/push/`make clean` performed by this plan.
+
+## Supersession (2026-11-26) — the gate is 15 rows, not 11
+
+The `11/11` strict-gate token used throughout this plan (§5 gate row, §6 risk 3 at
+`:144`, "the authoritative 11/11 strict gate") is historical. The authoritative gate
+`python3 tools/r1_final_verify.py --strict-skip` now carries **15** rows in
+`DEFAULT_TESTS` (`tools/r1_final_verify.py:134-150`) and its last full run is
+`/tmp/opencode/final27_gate.log`: `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)`,
+`FINAL27_RC=0`. The accepted-regression analysis for execs 268/269 still holds — those
+harnesses are outside the gate at either row count — but "11/11" in this document now
+means the retired baseline, not current authority. Nothing above is rewritten.

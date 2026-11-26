@@ -62,3 +62,13 @@ no QEMU run, no commit/push, no `make clean`).
 2. Naming: `PortTrapExecInstall()` / `PortCtlExec` are fine; keep the
    "never re-add the EFILE trampoline" caveat — the exec-81 flag-clear is the
    sanctioned shim and the plan preserves it.
+
+## Supersession (2026-11-26) — the strict gate is 15 rows, not 11
+
+Every `11/11` reference above (issue #3 at `:39`, §4 "Gate coverage" at `:48`) cites a
+gate that no longer exists in that shape. Current authority: `DEFAULT_TESTS` in
+`tools/r1_final_verify.py:134-150` has **15** rows, and the last full run
+`/tmp/opencode/final27_gate.log` reports `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)`,
+`FINAL27_RC=0`. The reviewed conclusions are unaffected — issues #1, #2, #4, #5 are
+untouched by the row count, and issue #3's point (the 268/269 harnesses are outside the
+gate) holds under the 15-row set too. Review text retained as history.

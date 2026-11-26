@@ -5,3 +5,9 @@
 - OVERALL / FV_EXIT: not yet emitted (run in progress; doom_* logs on disk are stale from an earlier 20:3x run).
 - Fault scan: no Exc/Panic/FAULT/#PF/KERN/crash markers in final_verify_1913.log or any current-run per-test log (eshell inner log: 0 hits).
 - Log 1.3 KB (< 50 MB, full tail read); kernelhwsrv/ clean (0 dirty entries); no QEMU launched by this watch.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

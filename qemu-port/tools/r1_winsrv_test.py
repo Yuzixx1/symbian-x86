@@ -7,11 +7,16 @@ serial shell, exercises the compositor/event dispatcher through synthetic
 PortCon input, asserts the WSV: markers, checks for guest exceptions/panics and
 grabs a PNG screendump to /tmp/opencode/winsrv.png.
 
-Skips gracefully (exit 0) when WINSRV.E32 has not been built.
+WINSRV is RETIRED: the window system moved to the genuine EWSRV, and
+src/user/winsrv.c, guishost.h and the ad-hoc GUI execs were deleted, so nothing
+in the tree can rebuild build/user/WINSRV.E32.  This test therefore self-skips
+(`RESULT: SKIP`, exit 0) instead of driving the deleted binary -- a stale
+WINSRV.E32 left in build/user is not driven either, because nothing owns it.
 
 Usage: python3 tools/r1_winsrv_test.py [--no-rebuild-iso] [--log LOG]
 """
 import argparse
+import glob
 import os
 import shlex
 import shutil
@@ -45,6 +50,21 @@ EXPECTED = [
 def sh(*args, **kw):
     print("+", " ".join(shlex.quote(a) for a in args))
     return subprocess.run(args, **kw)
+
+
+def retired():
+    """Reason string when winsrv no longer exists in the source tree, else None."""
+    for pat in ("src/*/winsrv.*", "src/winsrv.*", "user/winsrv.*",
+                "genuine/*/winsrv.*"):
+        if glob.glob(os.path.join(REPO, pat)):
+            return None
+    return "winsrv retired (source deleted; the window system is genuine EWSRV)"
+
+
+def skip(msg):
+    print("SKIP: " + msg)
+    print("RESULT: SKIP")
+    return 0
 
 
 def check_tools():
@@ -230,10 +250,12 @@ def main():
     ap.add_argument("--no-rebuild-iso", action="store_true")
     ap.add_argument("--log", default=LOG_DEFAULT)
     args = ap.parse_args()
+    reason = retired()
+    if reason:
+        return skip(reason)
     check_tools()
     if not os.path.exists(E32):
-        print(f"SKIP: {E32} not built (run: make build/user/WINSRV.E32)")
-        return 0
+        return skip(f"{E32} not built (run: make build/user/WINSRV.E32)")
     if not (args.no_rebuild_iso and os.path.exists(ISO)):
         build_iso()
     shot_ok = run_qemu(args.log)

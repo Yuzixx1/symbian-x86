@@ -139,3 +139,13 @@ python3 tools/r1_shim_retire_apply.py --shim portfilesrv --apply --confirm RETIR
 # r1_fs: RETIRE-R1FS ; svcmgr: RETIRE-SVCMGR ; winsrv: file removal + human review (no apply)
 # rollback if needed: python3 tools/r1_shim_retire_apply.py --rollback <backup-dir> --confirm ROLLBACK-<SHIM>-<ts>
 ```
+
+## Supersession (2026-11-26) — authoritative gate is 15 rows; older RC/row pins retired
+
+The §1/§2 readiness argument at `:8` and `:21` rests on the "11 authoritative gates"
+(`final_verify_strict_20261124.log`). That row count and that log are superseded:
+current authority is `DEFAULT_TESTS` in `tools/r1_final_verify.py:134-150` = **15** rows,
+last full run `/tmp/opencode/final27_gate.log` = `OVERALL: PASS (15 pass, 0 skip,
+0 fail/not-run)`, `FINAL27_RC=0`. The per-shim verdicts in §3 do not change — the four
+genuine-retire rows are green in both sets — and this note records no apply. Original
+text kept verbatim.

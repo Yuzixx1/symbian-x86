@@ -40,3 +40,7 @@ and `final_verify_doom_multikey.log` when populated.
 - `docs/CLEANUP_AUTHORITY_CHECK.md` does not exist; authority evidence lives in
   `R1FS_GLUE_FEASIBILITY.md` / `POST_REMOVAL_VERIFY.md` instead.
 - Stale `portfilesrv started` line in `r1_qemu_smoke.log` — cosmetic, contradicted by PASS result; worth one confirmation by the owner.
+
+---
+
+**SUPERSEDED 2026-11-26.** The 11-row / 10-11-pass strict gate asserted above is historical and no longer current. Current authority is **15 rows / `FINAL27_RC=0`** — 15 pass, 0 skip, 0 fail — recorded in `/tmp/opencode/final27_gate.log`. The body above is preserved byte-identical for audit history.

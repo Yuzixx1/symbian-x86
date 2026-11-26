@@ -5,3 +5,9 @@
 - Per-test log so far: `final_verify_selfcheck.log` — build/isogrub/qemu_smoke/cp4_ca PASS, cp4_stress RUNNING (QEMU up).
 - Fault scan (main + selfcheck logs): 0 matches for fault/panic/KERN-/#PF/assert.
 - kernelhwsrv/ untouched; no edits outside this report; no QEMU run by this watcher.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

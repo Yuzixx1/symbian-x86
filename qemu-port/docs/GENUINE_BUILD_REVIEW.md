@@ -121,3 +121,40 @@ after export patching: correct (independently verified); proof: PASSES end-to-en
 in QEMU. Do **not** build the big servers on it yet until issue #1 (silent
 .def ordinal misalignment) and #2 (`--name` traversal) are fixed, and #3 is
 guarded — those are exactly the paths servers will use.
+
+---
+
+## 2026-11-26 — SUPERSESSION of the "CONDITIONAL — NOT yet safe to build the big servers" verdict
+
+The verdict in **this document's header (dated 2026-11-23) is stale**. It is kept
+above unchanged for history; this footer is the authoritative verdict.
+
+- **All three required fixes landed in-tree.** `parse_def` now takes the name as
+  everything before the final ` @ <digits>` (issue #1), so MSVC-decorated
+  `.def` names parse instead of being silently dropped, and any unparseable
+  EXPORTS line raises loudly. `--name` is confined to a single safe component
+  and rejected before anything is created, with a resolved-path check that
+  keeps every write under `genuine/build/` (issue #2). `--def` with
+  `--type exe|server` is refused outright, because the loader rejects
+  export-carrying non-DLL images (issue #3).
+- **Proof of #1:** `python3 tools/genuine_build.py --selftest` → **PASS**,
+  `3 def files, 5105 entries parsed/mapped to (ordinal,name), 2432
+  MSVC-decorated, 0 failure(s)`.
+- **Also fixed:** #5 (`elf_symbols` catches `ValueError, OSError, struct.error,
+  IndexError, KeyError` and exits cleanly), #7 (`pack_multi.py` builds the import
+  record as `struct.pack('<III', isize, 12, n) + EUSER_PE2_DLL`, so the DLL name
+  is no longer clobbered), #9 (the stray 0-byte
+  `qemu-port/-D__cdecl=__attribute__((cdecl))` is gone).
+- **Still live, both LOW:** **#4** export targets remain bounded by
+  `--iat-off` even with `--euser-import 0` (conservative, documented at
+  `genuine_build.py:476-480`), and **#6** the 8192 stack size is still hardcoded
+  in `elf2e32.py:109` and not configurable. Neither blocks server builds.
+- **The servers were built and pass.** The authoritative 15-row gate
+  (`/tmp/opencode/final27_gate.log`) ends `OVERALL: PASS (15 pass, 0 skip,
+  0 fail/not-run)` with `FINAL27_RC=0`, and its rows include **`genuine_ewsrv`
+  PASS** and **`genuine_efsrv` PASS** — genuine EWSRV and EFSRV images are
+  produced by this toolchain and validated end-to-end.
+
+**Verdict: SUPERSEDED — safe to build the big servers on this toolchain.** The
+only open items are #4 and #6, both LOW and non-blocking. `kernelhwsrv/` remains
+read-only and untouched.

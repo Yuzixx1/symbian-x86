@@ -49,3 +49,7 @@ retire 4/4, fullchain 14/14), so the apply has a clean rollback point.
 
 None observed. Apply agent had not begun edits at snapshot time; gates currently
 passing on the un-applied tree.
+
+**2026-11-26 correction:** the step table rows above (lines 13-17) reading svcmgr as pending/current are superseded — the svcmgr retirement has landed (`97f224b`; `user/svcmgr.cpp` deleted, `SvcMgrExecInstall` absent tree-wide), and the load-bearing KERN-4 guard is `PortTrapExecInstall()` at `variant/e32load.cpp:1447`, which wires `PortFsRegisterThread` into slot 81 via `tab[4 + 2 * 81]` (`variant/e32load.cpp:1457`) — not svcmgr; the 13-row gate is now 13/13 PASS (`/tmp/opencode/final13_gate.log`, `OVERALL: PASS (13 pass, 0 skip, 0 fail/not-run)`, `FINAL13_RC=0`).
+
+**2026-11-26 (later — 15-row gate) — supersedes the 13-row figure above:** the gate is now **15/15 PASS** (`/tmp/opencode/final27_gate.log`, `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`), the two added rows being `g12_negative` (`tools/r1_g12_negative_test.py`) and `hal_probe` (`tools/r1_genuine_hal_test.py`). The svcmgr-retired verdict and the `PortTrapExecInstall()` / `variant/e32load.cpp:1447` + `tab[4 + 2 * 81]` (line 1457) note are unchanged; step table above unchanged, `kernelhwsrv/` untouched.

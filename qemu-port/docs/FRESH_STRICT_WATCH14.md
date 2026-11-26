@@ -7,3 +7,9 @@
 - Fault-scan: every test log asserts `no Exc/Panic/FAULT/#PF`; no fault/panic/KERN lines found in any final_verify_*.log or the gate log.
 - doom_multikey: 12/12 scenario loops PASS, STALE swallowed: 0, RESULT: PASS (67.7s).
 - kernelhwsrv/: `git status --porcelain kernelhwsrv/` empty — untouched. No QEMU launched by this watch.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

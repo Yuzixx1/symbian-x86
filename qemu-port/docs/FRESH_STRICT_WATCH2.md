@@ -5,3 +5,9 @@
 - Test 2/11 qemu_smoke in progress (final_verify_qemu_smoke.log); tests 3–11 not yet run; no OVERALL/FV_EXIT for the strict run yet.
 - Fault scan on post-21:28 final_verify_*.log: 0 matches for #PF=/KERN-EXEC/PANIC/page fault. No log >50 MB.
 - kernelhwsrv/ untouched (git status clean there). Monitor only; no QEMU launched by this watch.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

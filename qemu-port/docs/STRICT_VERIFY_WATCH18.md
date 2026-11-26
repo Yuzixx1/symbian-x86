@@ -6,3 +6,9 @@
 - Per-test logs for tests 2–11 are stale from earlier runs (mtimes ≤ 20:41); OVERALL and FV_EXIT not yet emitted — run 1913 still in progress, no final verdict.
 - Fault-scan of run-1913 logs: clean — no panic/KERN-exec/#PF/Traceback/FAIL lines (only false-positive "KERN" in "kernfull").
 - kernelhwsrv/ untouched; no edits made except this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

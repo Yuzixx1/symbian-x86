@@ -20,3 +20,9 @@
 | 11 | doom_multikey | PASS | 73.3s |
 
 Per-test logs: `/tmp/opencode/final_verify_<name>.log`. `kernelhwsrv/` untouched; no QEMU run by this monitor.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

@@ -36,8 +36,7 @@ SHOT = ROOT / "genuine_ewsrv.png"
 E32 = PORT / "genuine/build/EWSRV.E32"
 CLIENT = PORT / "genuine/build/EWCLIENT.E32"
 KERNEL = PORT / "build/kernfull.elf"
-PORTFILESrv = "/home/yuzi/.cache/sybian-r1/r1-portfilesrv-flat-v1/output/portfilesrv"
-EUSER_DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
+EUSER_DLL = PORT / "EUSER.DLL"
 
 MB, LBA, SECTORS = 32, 2048, 16384
 FS_SIZE, OFFSET = SECTORS * 512, LBA * 512
@@ -91,8 +90,7 @@ def build_disk():
         f.truncate(FS_SIZE)
     sh("mkfs.fat", "-F", "32", FS, check=True)
     for src, name in ((E32, "EWSRV.E32"), (CLIENT, "EWCLIENT.E32"),
-                      (EUSER_DLL, "EUSER.DLL"),
-                      (PORTFILESrv, "portfilesrv")):
+                      (EUSER_DLL, "EUSER.DLL")):
         if not os.path.exists(src):
             sys.exit(f"missing staged file: {src}")
         sh("mcopy", "-i", FS, src, f"::{name}", check=True)
@@ -112,10 +110,10 @@ def build_disk():
     out = sh("mdir", "-i", f"{DISK}@@{OFFSET}", "::", check=True,
              capture_output=True, text=True).stdout
     norm = "".join(out.lower().replace(".", "").split())
-    for want in ("ewsrve32", "ewcliente32", "euserdll", "portfilesrv"):
+    for want in ("ewsrve32", "ewcliente32", "euserdll"):
         if want not in norm:
             sys.exit(f"FAT staging missing {want}: {out}")
-    print("FAT OK: EWSRV.E32 + EWCLIENT.E32 + EUSER.DLL + portfilesrv staged")
+    print("FAT OK: EWSRV.E32 + EWCLIENT.E32 + EUSER.DLL staged")
 
 
 def wait_for(path, needle, pos=0, timeout=60):

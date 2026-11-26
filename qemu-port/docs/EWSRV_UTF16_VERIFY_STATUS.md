@@ -14,3 +14,10 @@
 - Caveat: no `final_verify` OVERALL after 20:55 (newest 20:41, PASS 11/11,
   pre-rebuild); `gui_init rc=0` not yet seen (old `dbg_guihello.log` rc=-1).
 - kernelhwsrv/ untouched; no QEMU run by this monitor.
+
+---
+
+**Superseded 2026-11-26.** Any 11/11 strict-gate result recorded above is
+**historical**. Superseded by the 15-row gate: **15 rows / `FINAL27_RC=0`**
+(15 pass, 0 skip, 0 fail; `/tmp/opencode/final27_gate.log`). The body above is
+left byte-identical and was not re-verified against the 15-row gate.

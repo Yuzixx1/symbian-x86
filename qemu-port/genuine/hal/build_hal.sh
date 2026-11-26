@@ -3,6 +3,7 @@
 # Run from qemu-port/. kernelhwsrv/ is read-only; outputs land in genuine/build/
 # with the hal_ prefix. See genuine/HAL_DM_NOTES.md.
 set -e
+unset LD_LIBRARY_PATH
 cd "$(dirname "$0")/../.."
 KH=../kernelhwsrv
 
@@ -35,7 +36,7 @@ python3 tools/genuine_build.py \
   genuine/hal/gen/hal_values.cpp \
   genuine/hal/gen/hal_config.cpp \
   genuine/hal/hal_glue.cpp \
-  --name hal_smoke --type exe -DHAL_AS_EXE_SMOKE \
+  --name hal_smoke --type exe -DHAL_AS_EXE_SMOKE -DHAL_PROBE_SCREENINFO \
   -I$KH/halservices/hal/inc -Igenuine/hal/shim \
   --iat-sym hal_printf_slot --euser-import 915
 

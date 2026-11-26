@@ -166,3 +166,5 @@ Retire svcmgr and remove r1_fs kernel glue (follow-up to d26fade)
 - Run real staging only when no other git process holds `.git/index.lock`.
 - No commit/push without explicit user authorization; no `make clean`;
   `kernelhwsrv/` read-only; no QEMU runs by the planner.
+
+2026-11-26 supersession note: the 11-row / 10-11-pass gate described above is historical. Current authority is 15 rows / FINAL27_RC=0 (15 pass, 0 skip, 0 fail, /tmp/opencode/final27_gate.log).

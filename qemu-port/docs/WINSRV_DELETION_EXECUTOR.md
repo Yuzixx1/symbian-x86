@@ -157,6 +157,19 @@ auto-rollback (§5). Executor's own pre-apply gate mirrors `apply_shim`: real
 (non-dry-run) `r1_genuine_retire_test.py --only ewsrv` must be PASS before any
 write, else exit 3, no file touched.
 
+**2026-11-26 — supersession (append-only; all text above unchanged):** the
+`# 11/11 authoritative` comment on `r1_final_verify.py --strict-skip` in the
+§3/§4 command block above, and the matching `11/11` figure in the P3 phase-gate
+sentence, are **superseded**. The authoritative gate is now **15 rows** with
+`FINAL27_RC=0` — `OVERALL: PASS (15 pass, 0 skip, 0 fail/not-run)` in
+`/tmp/opencode/final27_gate.log` (mtime 2026-11-26 03:26 EET, HEAD `ee8490e`,
+`kernelhwsrv/` untouched). Rows: g12_residue, g12_negative, missing_statics,
+selfcheck, qemu_smoke, genuine_retire, genuine_efsrv, genuine_ewsrv,
+genuine_eshell, genuine_fat_io, doom_main, doom_audio, doom_playtest,
+doom_multikey, hal_probe — all PASS. Use **15/15** as the pass criterion when
+running this executor; `11/11` stays accurate only for the earlier 11-row
+roster.
+
 ---
 
 ## 5. Snapshot + rollback recipe

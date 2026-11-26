@@ -87,3 +87,31 @@ python3 tools/r1_final_verify.py --strict-skip
 - No shim retirement before every gate reports PASS **and** all four
   CONDITIONAL-GO conditions above are cleared (all four retire gates already
   PASS, including EWSRV/EUSER markers on the rebuilt tree).
+
+## 5. Update 2026-11-24 — winsrv/GUI desktop retirement DONE — overall status **GREEN**
+
+The winsrv/GUI desktop deletion is complete and verified:
+
+- **Apply:** `APPLY_RC=0` — winsrv/GUI deletion apply exited clean.
+- **P1–P3 gates:** PASS.
+- **Post-deletion verification:** `r1_final_verify.py --strict-skip` **11/11
+  PASS** on the tree after the deletion.
+- **Commit:** `94ce9c9` pushed to `origin/main` (push range
+  `0f03f7e..94ce9c9`).
+- **Rollback:** snapshot `/tmp/opencode/winsrv_retire_backup_20261124_215436`
+  (token `ROLLBACK-WINSRV-20261124_215436`) created pre-deletion, **unused** —
+  no rollback was needed.
+
+With winsrv/GUI deleted, the GUI/winsrv desktop is removed per the
+2026-11-24 user decision (console shell + DOOM/Freedoom are the UI; genuine
+EWSRV remains the target window server when the GUI returns).
+
+**Overall status: GREEN.**
+
+## 6. Update 2026-11-26 — final state **GO** on the working tree (not reproducible from HEAD)
+
+**GO** for the working tree only: `r1_final_verify.py --strict-skip` **15/15 PASS** (15 pass, 0 skip, 0 fail, `FINAL27_RC=0`; log `/tmp/opencode/final27_gate.log`), shim residue **0** (43 allowed comments), **W5** missing-statics guard PASS — but **not reproducible from HEAD `ee8490e`**, because every gate script in `tools/` is untracked and the retirement deletions are uncommitted (16 `D`, 21 `M`, 213 `??`); per **D4 (no overnight commits)** nothing was committed, so the commit remains an explicit user authorization.
+
+**Correction 2026-11-26:** the authoritative strict gate is **14 rows, 14/14 PASS** (OVERALL PASS, 14 pass, 0 skip, 0 fail; `FINAL14_RC=0` and `FINAL15_RC=0` in `/tmp/opencode/final14_gate.log` and `/tmp/opencode/final15_gate.log`). The 14th row is `g12_negative` (W7 falsifiability), absent from the 13-row run above. GO verdict unchanged, HEAD `ee8490e`, no commits.
+
+**Correction 2026-11-26:** superseding the 14-row entry above, the authoritative gate is now **15 rows** — `hal_probe` (`tools/r1_genuine_hal_test.py`, timeout 240s) added as `DEFAULT_TESTS` row 15, confirmed by `r1_final_verify.py --list` — with **OVERALL PASS (15 pass, 0 skip, 0 fail/not-run)** and **`FINAL27_RC=0`** in `/tmp/opencode/final27_gate.log`. GO verdict unchanged, HEAD `ee8490e`, no commits.

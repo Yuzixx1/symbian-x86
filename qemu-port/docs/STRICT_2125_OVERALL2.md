@@ -6,3 +6,9 @@
 - Fault scan: clean — no KERN-*, no #PF!=0, no Exc/Panic/FAULT hits outside `[PASS] no ...` lines.
 - Live PID 1194626 (started 21:25:43, holds `final_verify.lock`, alive): re-run in progress, selfcheck now PASS (238.5s, `gate_final_verify.log`), currently in qemu_smoke; no final OVERALL yet.
 - kernelhwsrv/ untouched (read-only monitor); no QEMU run by this session.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

@@ -272,3 +272,5 @@ constructor time.
   build plus the QEMU suites; `python3 tools/r1_os_selfcheck.py` is the
   one-command boot/self-test; design history and investigations live in
   `docs/` (see [`docs/DOCS_INDEX.md`](DOCS_INDEX.md)).
+
+> **2026-11-26 correction (supersedes this file's live/pending winsrv-or-GUI premise):** the winsrv/GUI desktop was **RETIRED** in commit `94ce9c9`, which deleted 7 files — `winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`, `qemu_gui_exec.cpp`; execs **249/250/251** and the `WINSRV` launch path are gone, so the GUI rows in §1 and the `variant/qemu_gui_exec.cpp` reference in §6 above are historical only. The console shell plus **DOOM/Freedoom** are the UI today, and genuine **EWSRV** is the target when GUI returns, per `AGENTS.md`. The authoritative gate is the **15-row** roster (**15/15 PASS**) at HEAD `ee8490e` with no commits (`/tmp/opencode/final27_gate.log`: `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`), whose four rows added beyond the earlier 11-row roster are `g12_residue`, `g12_negative`, `missing_statics` and `hal_probe`; body left unedited.

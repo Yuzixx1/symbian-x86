@@ -19,8 +19,13 @@
  *                                 KUidHalPropertyKeyBase+i) so HAL::Get/Set on
  *                                 settable attributes work without the
  *                                 kernel property service
- *   UserSvr::HalFunction x2       returns KErrNotSupported: the port kernel
- *                                 has no variant/display HAL behind it yet
+ *   UserSvr::HalFunction x2       NOT stubs: both bodies forward to
+ *                                 Exec::HalFunction (exec 4, int 0x21), so a
+ *                                 call lands in the port kernel's registered
+ *                                 HAL entry -- EHalGroupDisplay is answered by
+ *                                 variant/qemu_display.cpp:496 for
+ *                                 EDisplayHalScreenInfo, every other group
+ *                                 returns KErrNotSupported
  *   __cxa_pure_virtual            freestanding C++ runtime glue
  *   operator new/delete           forwarded to User::Alloc
  *
@@ -33,6 +38,11 @@
 #include <e32svr.h>
 #include <e32property.h>
 #include <kernel/hal_int.h>
+/* exec_user.h -- reachable only through u32exec.h:207 -- declares
+   Exec::HalFunction (exec_user.h:111), the executive wrapper the two bodies
+   below call. No other header in the include chain pulls it in, so include it
+   here rather than re-declaring class Exec. */
+#include <u32exec.h>
 
 /* PE2 IAT slot at 0x400000+iat_off, defined by ld --defsym in genuine_build.py.
    Before load it holds ordinal 915; after EUSER.DLL binding it holds the
@@ -130,12 +140,37 @@ TInt RProperty::Get(TUid /*aCategory*/, TUint aKey, TInt& aValue)
     return KErrNone;
 }
 
-/* The port kernel has no HAL executive behind UserSvr::HalFunction yet. */
-TInt UserSvr::HalFunction(TInt /*aGroup*/, TInt /*aFunction*/, TAny* /*a1*/, TAny* /*a2*/)
-{ return KErrNotSupported; }
-TInt UserSvr::HalFunction(TInt /*aGroup*/, TInt /*aFunction*/, TAny* /*a1*/, TAny* /*a2*/,
-                          TInt /*aDeviceNumber*/)
-{ return KErrNotSupported; }
+/* Exec::HalFunction, whose genuine body is exec_user.h:776
+   SLOW_EXEC4(EExecHalFunction). That definition only compiles under
+   __GEN_USER_EXEC_CODE__ (exec_user.h:270), and enabling it makes the header's
+   MSVC-dialect __asm unassemblable by GNU as (measured: 1033 assembler
+   errors), so the body here is the port's AT&T transliteration of the same
+   four-argument slow dispatch (eax=EExecHalFunction, ecx/edx/ebx/esi =
+   aGroup/aFunction/a1/a2, int 0x21) used by hal_exit's exec 115 above.
+   ebx/esi are callee-saved, so they are pinned as operands and saved. */
+TInt Exec::HalFunction(TInt aGroup, TInt aFunction, TAny* a1, TAny* a2)
+{
+    TInt r;
+    __asm__ volatile(
+        "push %%ebx\n\t"
+        "push %%esi\n\t"
+        "mov %1, %%eax\n\t"
+        "int $0x21\n\t"
+        "pop %%esi\n\t"
+        "pop %%ebx\n\t"
+        : "=a"(r)
+        : "i"(EExecHalFunction), "c"(aGroup), "d"(aFunction), "b"(a1), "S"(a2)
+        : "memory");
+    return r;
+}
+
+/* Genuine EUSER bodies (kernelhwsrv/kernel/eka/euser/us_exec.cpp:5980-5990):
+   the device-number overload folds the device into the group high word. */
+TInt UserSvr::HalFunction(TInt aGroup, TInt aFunction, TAny* a1, TAny* a2)
+{ return Exec::HalFunction(aGroup, aFunction, a1, a2); }
+TInt UserSvr::HalFunction(TInt aGroup, TInt aFunction, TAny* a1, TAny* a2,
+                          TInt aDeviceNumber)
+{ return Exec::HalFunction(aGroup | (aDeviceNumber<<16), aFunction, a1, a2); }
 
 /* Descriptor constructors: genuine implementations live in EUSER
    (eka/common/des8.cpp, euser/us_func.cpp); the bodies below are the same
@@ -192,6 +227,27 @@ static int hal_smoke_main(void)
     HAL::SEntry* entries = NULL;
     r = HAL::GetAll(n, entries);                       /* genuine GetAll, User::Alloc stub */
     marker("HALU: HAL::GetAll -> r=%d entries=%d ptr=%08x\r\n", (int)r, (int)n, (unsigned)entries);
+
+#ifdef HAL_PROBE_SCREENINFO
+    /* HAL probe (exe twin only, -DHAL_PROBE_SCREENINFO in build_hal.sh): drive
+       the same UserSvr::HalFunction -> Exec::HalFunction dispatch into the port
+       kernel's EHalGroupDisplay entry (variant/qemu_display.cpp:496), which
+       copies a 24-byte TScreenInfoV01 back through Kern::InfoCopy after
+       enabling the Bochs VBE LFB. Confirms the veneer reaches the kernel and
+       reports the real framebuffer: r=0, addr=fd000000, 1024x768. Zeroed
+       first because the HAL call may leave the package untouched. */
+    {
+        TScreenInfoV01 info;
+        for (TUint i = 0; i < sizeof(info); ++i)
+            ((TUint8*)&info)[i] = 0;
+        TPckg<TScreenInfoV01> pckg(info);
+        TInt pr = UserSvr::HalFunction(EHalGroupDisplay, EDisplayHalScreenInfo,
+                                       &pckg, NULL);
+        marker("HALPROBE: r=%d addr=%08x w=%d h=%d\r\n", (int)pr,
+               (unsigned)info.iScreenAddress,
+               (int)info.iScreenSize.iWidth, (int)info.iScreenSize.iHeight);
+    }
+#endif
 
     marker("HALU SMOKE: done, exiting cleanly\r\n");
     return 0;

@@ -5,3 +5,9 @@
 - Newest actual selftest logs (/tmp/opencode/r1_selftest.log + r1_os_selfcheck_selftest.log, 21:18): `ST: RESULT PASS` / `RESULT: PASS`, 0 guest exceptions — but run on a non-quiet slot; earlier slot269 runs (20:01/20:11) had selfcheck FAIL.
 - Harness fix (docs/HARNESS_FIX_STATUS.md): NOT landed — fixed log names, no flock/per-PID logs in tools/.
 - Now: r1_os_selfcheck.py (PID 1194653, started 21:25) in flight with an active qemu (r1_ca_test) — slot busy again. kernelhwsrv/ untouched.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

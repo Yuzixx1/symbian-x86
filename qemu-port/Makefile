@@ -334,21 +334,11 @@ build/r1_g_launch.o: $(R1_G_ASSET_DIR)/r1_g_assets.inc
 endif
 KERNFULL_OBJS += $(R1_G_OBJS)
 
-# R1 private FS channel — explicit opt-in, off by default. Plain `make`
-# builds all ISOs unchanged without the channel. The channel is compile- and
-# host-verified only (card 27); the guest service needs card-29 host launch
-# policy and the not-yet-implemented R1Fat backend, so it is deliberately not
-# linked into a default kernfull.elf.
-R1_FS_CHANNEL ?= 0
-R1_FS_CHANNEL_OBJ :=
-ifeq ($(strip $(R1_FS_CHANNEL)),1)
-R1_FS_CHANNEL_OBJ := build/r1_fs_channel.o
-build/r1_fs_channel.o: variant/r1_fs_channel.cpp variant/r1_fs_channel.h \
- fs/r1_fs_channel.h fs/r1_fs_channel_state.h fs/r1_fs_wire_logic.h \
- variant/r1_fat_offset.h | build
-	$(CXX) $(KERN_FLAGS) $(KERN_DEFS) $(KERN_INCLUDES) -c variant/r1_fs_channel.cpp -o $@
-endif
-KERNFULL_OBJS += $(R1_FS_CHANNEL_OBJ)
+# R1_G_ASSET_DIR is the sole opt-in for genuine G assets. Left empty (the
+# default), R1_G_OBJS is just build/r1_g_launch.o and no -DR1_G_ASSETS is
+# passed, so the default kernfull.elf link is unchanged. Point it at a tree
+# staged by tools/stage_r1_g.py to add -DR1_G_ASSETS, -I<R1_G_ASSET_DIR> and
+# the r1_g_objects/r1_g_bootstrap/e32g_* objects into KERNFULL_OBJS.
 
 .PHONY: r1-g-config-force
 # Recompile when opt-in changes, so stale asset-enabled objects cannot leak into

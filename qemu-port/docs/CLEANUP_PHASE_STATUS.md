@@ -45,3 +45,5 @@ logs, `docs/CLEANUP_*.md`, `docs/SVCMGR_*.md`, `docs/WINSRV_EDISP_SCOPE.md`.
 4. Standing caveats: never accept `SessionPath r=-15` as IPC success; never
    re-add the EFILE trampoline; `!`-servers need `ECapabilityProtServ`;
    netstack is never retired; `kernelhwsrv/` read-only.
+
+2026-11-26 supersession note: the 11-row / 10-11-pass gate described above is historical. Current authority is 15 rows / FINAL27_RC=0 (15 pass, 0 skip, 0 fail, /tmp/opencode/final27_gate.log).

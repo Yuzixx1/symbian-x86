@@ -103,3 +103,12 @@ These are not sketches — each is a bundled E32 with a passing host test:
 - **No compositor or input toolkit.** GUI programs repaint a shared
   framebuffer sequentially; see `docs/GUI_PROGRAMMING.md` for the stable
   display-list protocol and the in-progress `user/guilib.h` toolkit.
+
+- **Correction (2026-11-26) — supersedes this file's live/pending winsrv-or-GUI
+  premise.** The winsrv/GUI desktop was **RETIRED** in `94ce9c9` (7 files
+  deleted: `winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`,
+  `qemu_gui_exec.cpp`): execs 249/250/251 and the `WINSRV` launch path are gone,
+  so the exec-251 painting and `guishost.h`/`GUISHELL` steps described above no
+  longer exist. The UI is now the console shell + DOOM/Freedoom; genuine **EWSRV**
+  is the target when the GUI returns, per `AGENTS.md`. The 15-row gate is
+  15/15 PASS (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits.

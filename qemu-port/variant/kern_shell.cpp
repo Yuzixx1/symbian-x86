@@ -34,7 +34,7 @@ static void VgaInit();
 // exec-268 hand-off state.  While a full-screen GUI program owns the LFB the
 // mirror is muted; a NON-graphics child launched by that GUI program (DESKTOP
 // -> CALC/FILEMGR/...) must get the display back.  More than one graphics app
-// may own the screen at once (WINSRV compositor + WSDL windowed client), so
+// may own the screen at once (WSDL windowed client and any GUI child), so
 // track EVERY live GUI owner's pid plus the shell's own pid.  The mirror is
 // resumed only once ALL graphics owners die -- never merely because a second
 // graphics app was launched.
@@ -1378,7 +1378,7 @@ static TBool IsGraphicsImage(const char* aName)
     {
     static const char* const kGraphics[] = {
         "DESKTOP", "GUISHELL", "GUIMENU", "GUIHELLO", "BREAKOUT", "SAVER",
-        "DTCALC", "DTEDIT", "WINSRV", "WSDL",
+        "DTCALC", "DTEDIT", "WSDL",
         // DOOM.E32 renders full-screen via the LFB and floods the console
         // with engine printf/DebugPrint during startup. Without this the
         // LFB mirror scrolls text over the game and flickers. DOOM is a

@@ -5,3 +5,9 @@
 - Newest completed strict log `final_verify_1913.log`: 10 PASS / selfcheck FAIL, `OVERALL: FAIL`, `FV_EXIT=1` (pre-fix; current run's selfcheck PASS indicates race fix holds).
 - Fault scan: zero KERN-EXEC/#PF>0/Panic/FAULT hits in current logs (only benign "no ... FAULT" PASS lines).
 - kernelhwsrv/ untouched; no QEMU launched by this watcher; no edits outside this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

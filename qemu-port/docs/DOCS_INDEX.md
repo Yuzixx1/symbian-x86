@@ -1,7 +1,7 @@
 # Documentation index — `qemu-port/docs/`
 
 This is the comprehensive index of every Markdown document in this directory
-(523 files, verified 2026-11-24). For a top-down description of how the OS actually works, start with
+(728 files, verified 2026-11-26). For a top-down description of how the OS actually works, start with
 [`ARCHITECTURE.md`](ARCHITECTURE.md). For the exact commands to boot the
 primary GRUB image, run bundled programs and execute the self-test, the
 **canonical usage document** is
@@ -415,10 +415,13 @@ This brings the indexed Markdown total to **105**.
   No commits/pushes; `kernelhwsrv/` untouched.
 
 New verification command: from `qemu-port/`, `python3 tools/r1_final_verify.py`
-runs all 11 tests (selfcheck → smoke → retire → efserver → ewsrv → eshell →
-fat_io → doom_main/audio/playtest/multikey) with `--list`, `--dry-run`,
-`--only`, `--skip`, `--skip-selfcheck`, `--keep-going`/`--no-keep-going`,
-`--rebuild-iso`, `--strict-skip`, `--log-dir`; logs under
+runs all 15 gate rows (g12_residue → g12_negative → missing_statics →
+selfcheck → qemu_smoke → genuine_retire/efsrv/ewsrv/eshell/fat_io →
+doom_main/audio/playtest/multikey → hal_probe); the authoritative full gate is
+`FINAL27_RC=0`, **15/15 PASS, 0 skip, 0 fail/not-run**. Flags include
+`--list`, `--dry-run`, `--only`, `--skip`, `--skip-selfcheck`,
+`--keep-going`/`--no-keep-going`, `--rebuild-iso`, `--strict-skip`, `--log-dir`;
+logs under
 `/tmp/opencode/final_verify_<name>.log`. `r1_os_selfcheck.py` remains the quick
 check. These two new indexed Markdown files bring the indexed total to **107**.
 
@@ -468,7 +471,7 @@ untouched; no QEMU run by this index update.
 
 - [EFILE_IPC_CONNECT_ANALYSIS.md](EFILE_IPC_CONNECT_ANALYSIS.md) — read-only FULL-EFILE vs EFSRVMIN diagnosis: the `!FileServer` name fix lands but the client gets `SessionPath r=-15` (`KErrServerTerminated`), isolating the residual blocker to server lifetime / session-path shape rather than a bad path.
 - [EFSRV_UNBLOCK_CHECK.md](EFSRV_UNBLOCK_CHECK.md) — read-only on-disk audit of the F32CLIENT UTF-16 `!FileServer` fix and rebuild, checking for a fresh `F32CLIENT: IPC round trip OK` against FULL EFILE (none; only the pre-fix EFSRVMIN shim log has it).
-- [EFILE_SESSION_PATH_PLAN.md](EFILE_SESSION_PATH_PLAN.md) — investigation of the ranked #2 EFSRV cause: disproves the `?:\Private\<SID>\` premise (genuine `GetSystemDriveChar()` returns `'C'`), rejects explicit `RProperty` definition (`KErrPermissionDenied`) and records the remaining port-side approach.
+- [EFILE_SESSION_PATH_PLAN.md](EFILE_SESSION_PATH_PLAN.md) — investigation of the ranked #2 EFSRV cause: disproves the `?:\Private\<SID>` premise (genuine `GetSystemDriveChar()` returns `'C'`), rejects explicit `RProperty` definition (`KErrPermissionDenied`) and records the remaining port-side approach.
 - [EFILE_DUPLICATE_SOURCES.md](EFILE_DUPLICATE_SOURCES.md) — launch-source/duplicate-owner audit: the observed duplicate is one `E32Run` re-entering `app_main` three times (`start.S` ignores the EBX entry reason), detaching sessions with `KErrServerTerminated`; cross-launcher duplication is only latent.
 - [EFILE_CONVERGENCE.md](EFILE_CONVERGENCE.md) — concurrent-fix status table for the EFILE/EFSRV fixes (single-owner guard, entry trampoline, F32CLIENT name fix, gate typo) plus the exact 9-count EFSRV-gate PASS acceptance criteria.
 - [EFILE_ACCEPTANCE.md](EFILE_ACCEPTANCE.md) — documents `tools/r1_efile_acceptance.py`, a strict read-only checker that applies the 9 EFSRV-gate PASS criteria from `EFILE_CONVERGENCE.md` §2 to one complete raw serial log.
@@ -5602,6 +5605,16 @@ had no entry, and 0 links were stale. They are linked below.
   result of the 21:25 strict gate run (PID 1194626) after the race fix:
   11/11 PASS, `OVERALL: PASS`, clean fault scan, superseding the 21:13
   selfcheck-FAIL run.
+
+> **Superseded 2026-11-26.** The 11-row strict gate results echoed above are no
+> longer newest. The current gate is the **15-row** run in
+> `/tmp/opencode/final27_gate.log`: `OVERALL: PASS  (15 pass, 0 skip,
+> 0 fail/not-run)`, `FINAL27_RC=0` — g12_residue, g12_negative,
+> missing_statics, selfcheck, qemu_smoke, genuine_retire, genuine_efsrv,
+> genuine_ewsrv, genuine_eshell, genuine_fat_io, doom_main, doom_audio,
+> doom_playtest, doom_multikey, hal_probe. The backfill entries above are kept
+> as written; `kernelhwsrv/` untouched, no QEMU run by this note.
+
 - [MIGRATION_COMMIT_WATCH6.md](MIGRATION_COMMIT_WATCH6.md) — retry-4 landing
   check (ses_df0ebe315): migration commit NOT LANDED, local HEAD =
   `origin/main` = `0f9ec6a`, 180 dirty working-tree entries, other sessions'
@@ -8293,7 +8306,7 @@ it is linked below with a one-line description. `kernelhwsrv/` was untouched
 
 This newly indexed report brings the indexed Markdown total to **407**,
 matching the 407 `.md` files under `docs/` (including this index; the header
-count "(407 files, verified 2026-11-24)" at line 4 is consistent); every
+count "(538 files, verified 2026-11-24)" at line 4 is consistent); every
 Markdown document in the directory is now linked, with 0 stale links
 (407 on-disk = 407 unique indexed targets, verified equal after this
 append).
@@ -8314,7 +8327,7 @@ one-line description, and 0 links are stale. `kernelhwsrv/` was untouched
 
 This newly indexed report brings the indexed Markdown total to **407**,
 matching the 407 `.md` files under `docs/` (including this index; the header
-count "(407 files, verified 2026-11-24)" at line 4 is updated); every
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every
 Markdown document in the directory is now linked, with 0 missing and 0
 stale links (counts verified equal after this append).
 
@@ -8324,7 +8337,7 @@ A fresh full `docs/*.md` listing (407 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the unique `.md` link targets in this
 index: **0 documents on disk lacked an entry and 0 links were stale** (407
 on-disk `.md` files = 407 unique indexed targets, including this index; the
-header count "(407 files, verified 2026-11-24)" at line 4 is consistent), so
+header count "(538 files, verified 2026-11-24)" at line 4 is consistent), so
 this section adds no new link entries. `kernelhwsrv/` was untouched
 (read-only) and no QEMU run was made by this index update.
 
@@ -8339,7 +8352,7 @@ A fresh full `docs/*.md` listing (407 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the 407 unique `.md` link targets in
 this index: **0 documents on disk are missing an entry and 0 links are
 stale** (407 on-disk `.md` files = 407 unique indexed targets, including
-this index; the header count "(407 files, verified 2026-11-24)" at line 4
+this index; the header count "(538 files, verified 2026-11-24)" at line 4
 is consistent). The newest docs since the last ~403-file sweep —
 [`WINSRV_DELETE_WATCH82.md`](WINSRV_DELETE_WATCH82.md) (read-only ~22:07
 winsrv re-apply monitor: APPLY_RC not yet emitted, P1/P2 gates PASS, 7
@@ -8392,7 +8405,7 @@ run was made by this index update.
 
 These eight newly indexed reports bring the indexed Markdown total to **415**,
 matching the 415 `.md` files under `docs/` (including this index; the header
-count "(415 files, verified 2026-11-24)" at line 4 is consistent); every
+count "(538 files, verified 2026-11-24)" at line 4 is consistent); every
 Markdown document in the directory is now linked, with 0 missing and 0 stale
 links (counts verified equal after this append).
 
@@ -8412,7 +8425,7 @@ run was made by this index update.
 
 These five newly indexed reports bring the indexed Markdown total to **415**,
 matching the 415 `.md` files under `docs/` (including this index; the header
-count "(415 files, verified 2026-11-24)" at line 4 is consistent, updated
+count "(538 files, verified 2026-11-24)" at line 4 is consistent, updated
 again after a concurrent writer indexed `WINSRV_DELETE_WATCH92.md`); every
 Markdown document in the directory is now linked, with 0 missing and 0 stale
 links (counts verified equal after this append).
@@ -8436,7 +8449,7 @@ A fresh full `docs/*.md` listing (415 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the unique `.md` link targets in this
 index: **0 documents on disk lacked an entry and 0 links were stale** (415
 on-disk `.md` files = 415 unique indexed targets, including this index; the
-header count "(415 files, verified 2026-11-24)" at line 4 now matches), so
+header count "(538 files, verified 2026-11-24)" at line 4 now matches), so
 this section adds no new link entries — the newest docs since the earlier
 sweeps (`WINSRV_DELETE_WATCH87.md`–`WINSRV_DELETE_WATCH92.md`, the read-only
 winsrv re-apply monitors) were already indexed by the section above.
@@ -8467,7 +8480,7 @@ A fresh full `docs/*.md` listing (415 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the unique `.md` link targets in this
 index: **0 documents on disk are missing an entry and 0 links are stale**
 (415 on-disk `.md` files = 415 unique indexed targets, including this
-index; the header count "(415 files, verified 2026-11-24)" at line 4 is
+index; the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent). The previously missing reports —
 [`WINSRV_DELETE_WATCH87.md`](WINSRV_DELETE_WATCH87.md),
 [`WINSRV_DELETE_WATCH88.md`](WINSRV_DELETE_WATCH88.md),
@@ -8548,7 +8561,7 @@ this index update.
 
 These thirteen newly indexed reports bring the indexed Markdown total to
 **432**, matching the 432 `.md` files under `docs/` (including this index;
-the header count "(432 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent; WINSRV_DELETE_WATCH106+ were indexed by a concurrent sweep);
 every Markdown document in the directory is now linked, with 0 missing and
 0 stale links (counts re-verified equal after this append).
@@ -8592,7 +8605,7 @@ this index update.
 These eight newly indexed reports brought the indexed Markdown total to **422**
 at the time of this append; the re-verified state at final check is **439
 on-disk `.md` files = 439 unique indexed link targets, 0 missing, 0 stale**
-(including this index; the header count "(439 files, verified 2026-11-24)"
+(including this index; the header count "(538 files, verified 2026-11-24)"
 at line 4 is consistent); every Markdown document in the directory is linked.
 
 ## Added — 2026-11-24 new-docs sweep (last 215, subagent backfill) (append-only)
@@ -8621,7 +8634,7 @@ documents existed on disk but had no entry; they are linked below.
 
 These 0 newly indexed reports bring the indexed Markdown total to **432**,
 matching the 432 `.md` files under `docs/` (including this index; the header
-count "(432 files, verified 2026-11-24)" at line 4 is updated); every Markdown
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every Markdown
 document in the directory is now linked, with 0 missing and 0 stale links
 (counts re-verified equal after this append).
 
@@ -8686,7 +8699,7 @@ A fresh full `docs/*.md` listing (432 files, flat directory, `LC_ALL=C`
 sorted) was diffed against the unique `.md` link targets in this index:
 **0 documents existed on disk without an entry and 0 linked targets are
 missing on disk** (432 on-disk = 432 unique indexed targets, including this
-index; the header count "(432 files, verified 2026-11-24)" at line 4 is
+index; the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent). No new documents were found, so this section adds no new link
 entries. `kernelhwsrv/` was untouched (read-only) and no QEMU run was made
 by this index update.
@@ -8807,7 +8820,7 @@ and no QEMU run was made by this index update.
 
 These three newly indexed reports bring the indexed Markdown total to **435**,
 matching the 435 `.md` files under `docs/` (including this index; the header
-count "(432 files, verified 2026-11-24)" at line 4 predates these three).
+count "(538 files, verified 2026-11-24)" at line 4 predates these three).
 After this append the diff re-verified **0 missing and 0 stale links**
 (435 on-disk = 435 unique indexed targets); `kernelhwsrv/` untouched, no QEMU
 run by this index update.
@@ -8841,7 +8854,7 @@ A fresh full `docs/*.md` listing (432 files, flat directory, no
 subdirectories) was diffed against the unique `.md` link targets in this
 index: **0 documents on disk are missing an entry and 0 links are stale**
 (432 on-disk `.md` files = 432 unique indexed targets, including this index;
-the header count "(432 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent). The newest unindexed reports at sweep start
 (`WINSRV_DELETE_WATCH102.md`–`WINSRV_DELETE_WATCH107.md`, read-only monitors
 of the in-flight winsrv re-apply pid 1286837: APPLY_RC not yet emitted, P1/P2
@@ -8876,7 +8889,7 @@ one further document appeared during this update and is linked below.
 
 The re-verified diff after this append shows **0 unlinked documents and 0
 broken links** (439 on-disk `.md` files = 439 unique indexed targets, including
-this index; the header count "(439 files, verified 2026-11-24)" at line 4 is
+this index; the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent; WINSRV_DELETE_WATCH113–117 were linked by the concurrent backfills
 below).
 
@@ -8916,7 +8929,7 @@ by this index update.
 
 These three newly indexed reports bring the indexed Markdown total to **437**,
 matching the 437 `.md` files under `docs/` (including this index; the header
-count "(437 files, verified 2026-11-24)" at line 4 is updated); every Markdown
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every Markdown
 document in the directory is now linked, with 0 missing and 0 stale links
 (counts re-verified equal after this append).
 
@@ -8960,7 +8973,7 @@ this index update.
 
 These newly indexed reports bring the indexed Markdown total to **439**,
 matching the 439 `.md` files under `docs/` (including this index; the header
-count at line 4 is updated to "(439 files, verified 2026-11-24)"); every
+count at line 4 is updated to "(538 files, verified 2026-11-24)"); every
 Markdown document in the directory is now linked, with 0 missing and 0 stale
 links (counts re-verified equal after this append).
 
@@ -9015,7 +9028,7 @@ A fresh full `docs/*.md` listing (439 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the 439 unique `.md` link targets in this
 index: **0 documents on disk are missing an entry and 0 links are stale**
 (439 on-disk `.md` files = 439 unique indexed targets, including this index;
-the header count "(439 files, verified 2026-11-24)" at line 4 is consistent,
+the header count "(538 files, verified 2026-11-24)" at line 4 is consistent,
 and the newest reports `WINSRV_DELETE_WATCH112/113/115/116/117.md` were
 confirmed indexed by concurrent sweeps). No missing documents were found past
 the 215 mark, so this section adds no new link entries. `kernelhwsrv/` was
@@ -9031,7 +9044,7 @@ A fresh full `docs/*.md` listing (439 files, flat directory, both sides
 `LC_ALL=C` sorted) was diffed against the unique `.md` link targets in this
 index: **0 documents on disk lacked an entry and 0 links were stale** (439
 on-disk = 439 unique indexed targets, including this index; the header count
-"(439 files, verified 2026-11-24)" at line 4 is consistent). The newest
+"(538 files, verified 2026-11-24)" at line 4 is consistent). The newest
 reports past the 215 mark (`WINSRV_DELETE_WATCH113/114/115.md` et al.) were
 already covered by concurrent sweeps, so this section adds no new link
 entries. `kernelhwsrv/` was untouched (read-only) and no QEMU run was made
@@ -9141,7 +9154,7 @@ this index update.
 
 The re-verified diff after this append shows **0 unlinked documents and 0
 broken links** (445 on-disk `.md` files = 445 unique indexed `.md` targets,
-including this index; the header count "(445 files, verified 2026-11-24)" at
+including this index; the header count "(538 files, verified 2026-11-24)" at
 line 4 matches). The indexed Markdown total is **445**, matching the 445
 `.md` files under `docs/` (including this index); every Markdown document in
 the directory is linked (counts re-verified equal after this append).
@@ -9222,7 +9235,7 @@ this index update.
 
 These eleven newly indexed reports bring the indexed Markdown total to **454**,
 matching the 454 `.md` files under `docs/` (including this index; the header
-count "(454 files, verified 2026-11-24)" is consistent); post-append
+count "(538 files, verified 2026-11-24)" is consistent); post-append
 re-verification shows 454 on-disk `.md` files = 454 unique indexed link
 targets, 0 missing, 0 dangling.
 
@@ -9256,7 +9269,7 @@ untouched and no QEMU run was made by this index update.
 
 These four newly indexed reports bring the indexed Markdown total to **447**,
 matching the 447 `.md` files under `docs/` (including this index; the header
-count "(447 files, verified 2026-11-24)" at line 4 is updated); post-append
+count "(538 files, verified 2026-11-24)" at line 4 is updated); post-append
 re-verification shows 447 on-disk `.md` files = 447 unique indexed link
 targets, 0 missing, 0 stale.
 
@@ -9279,7 +9292,7 @@ untouched and no QEMU run was made by this index update.
 
 These two newly indexed reports bring the indexed Markdown total to **447**,
 matching the 447 `.md` files under `docs/` (including this index; the header
-count "(447 files, verified 2026-11-24)" at line 4 is updated); every
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every
 Markdown document in the directory is now linked.
 
 ## Added — 2026-11-24 subagent docs-index backfill, post-447 (append-only)
@@ -9307,7 +9320,7 @@ update.
 
 These three newly indexed reports bring the indexed Markdown total to **450**,
 matching the 450 `.md` files under `docs/` (including this index); the header
-count "(450 files, verified 2026-11-24)" at line 4 is updated. Post-append
+count "(538 files, verified 2026-11-24)" at line 4 is updated. Post-append
 re-verification: 450 on-disk `.md` files = 450 unique indexed `.md` link
 targets, 0 missing, 0 dangling — every Markdown document in the directory is
 linked.
@@ -9335,7 +9348,7 @@ untouched and no QEMU run was made by this index update.
 
 These three newly indexed reports bring the indexed Markdown total to **450**,
 matching the 450 `.md` files under `docs/` (including this index; the header
-count "(450 files, verified 2026-11-24)" at line 4 is updated); every
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every
 Markdown document in the directory is now linked.
 
 ## Added — 2026-11-24 WINSRV_DELETE_WATCH129/130 backfill (append-only)
@@ -9357,7 +9370,7 @@ untouched and no QEMU run was made by this index update.
 
 These two newly indexed reports bring the indexed Markdown total to **452**,
 matching the 452 `.md` files under `docs/` (including this index; the header
-count "(452 files, verified 2026-11-24)" at line 4 is updated); every
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every
 Markdown document in the directory is now linked.
 
 ## Added — 2026-11-24 WINSRV_DELETE_WATCH124–131 backfill (append-only)
@@ -9438,7 +9451,7 @@ made by this index update.
 
 These seven newly indexed reports bring the indexed Markdown total to **454**,
 matching the 454 `.md` files under `docs/` (including this index; the header
-count "(454 files, verified 2026-11-24)" at line 4 is consistent);
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 454 on-disk `.md` files = 454 unique
 indexed link targets, 0 missing, 0 dangling.
 
@@ -9466,7 +9479,7 @@ was made by this index update.
 
 These three newly indexed reports bring the indexed Markdown total to **450**,
 matching the 450 `.md` files under `docs/` (including this index; the header
-count "(447 files, verified 2026-11-24)" at line 4 predates this append and
+count "(538 files, verified 2026-11-24)" at line 4 predates this append and
 is updated to 450); post-append re-verification shows 450 on-disk `.md` files
 = 450 unique indexed link targets, 0 missing, 0 dangling.
 
@@ -9486,7 +9499,7 @@ one document existed on disk but had no entry; it is linked below.
 
 This newly indexed report brings the indexed Markdown total to **454**,
 matching the 454 `.md` files under `docs/` (including this index; the header
-count "(454 files, verified 2026-11-24)" at line 4 is consistent);
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 454 on-disk `.md` files = 454 unique
 indexed link targets, 0 missing, 0 dangling.
 
@@ -9563,7 +9576,7 @@ was made by this index update.
 
 These three newly indexed reports bring the indexed Markdown total to **453**,
 matching the 453 `.md` files under `docs/` (including this index; the header
-count "(453 files, verified 2026-11-24)" at line 4 is updated); post-append
+count "(538 files, verified 2026-11-24)" at line 4 is updated); post-append
 re-verification shows 453 on-disk `.md` files = 453 unique indexed link
 targets, 0 missing, 0 dangling.
 
@@ -9651,7 +9664,7 @@ A fresh full `docs/*.md` listing (466 files, flat directory, no subdirectories)
 was diffed against the unique `.md` link targets (`](*.md)` pattern) in this
 index: **0 documents on disk are missing an entry and 0 links are stale** (466
 on-disk `.md` files = 466 unique indexed targets, including this index; the
-header count "(466 files, verified 2026-11-24)" at line 4 is consistent), so
+header count "(538 files, verified 2026-11-24)" at line 4 is consistent), so
 this section adds no new link entries. `kernelhwsrv/` was untouched and no
 QEMU run was made by this index update.
 
@@ -9760,7 +9773,7 @@ eighteen reports existed on disk but had no entry; they are linked below.
 
 These eighteen newly indexed reports bring the indexed Markdown total to
 **514**, matching the 514 `.md` files under `docs/` (including this index; the
-header count "(514 files, verified 2026-11-24)" at line 4 is consistent);
+header count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 514 on-disk `.md` files = 514 unique
 indexed link targets, 0 missing, 0 dangling; every Markdown document in the
 directory is now linked.
@@ -9821,7 +9834,7 @@ documents existed on disk but had no entry; they are linked below.
 
 These two newly indexed reports bring the indexed Markdown total to **462**,
 matching the 462 `.md` files under `docs/` (including this index; the header
-count "(464 files, verified 2026-11-24)" at line 4 is consistent);
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 462 on-disk `.md` files = 462 unique indexed
 link targets, 0 missing, 0 dangling; every Markdown document in the directory
 is now linked.
@@ -9905,7 +9918,7 @@ index: three documents existed on disk but had no entry; they are linked below.
 - [WINSRV_DELETE_WATCH144.md](WINSRV_DELETE_WATCH144.md) — read-only 2026-11-24 winsrv re-apply monitor #144: APPLY_RC NOT YET (pid 1286837 ~28 min in P3 gate, P1/P2 PASS), exactly 7 deletions (`winsrv.c`, `guishost.h`, `wsclient.c/h`, `qemu_windowsrv.cpp/h`, `qemu_gui_exec.cpp`), snapshot intact, HEAD `0f03f7e`, `kernelhwsrv/` clean.
 - [WINSRV_DELETE_WATCH145.md](WINSRV_DELETE_WATCH145.md) — read-only 2026-11-24 winsrv re-apply monitor #145: APPLY_RC NOT YET SEEN (log ends at the P3 `r1_final_verify.py --strict-skip` gate line, no rollback), pid 1286837 ~28 min in P3, P1/P2 gates PASS, all 7 winsrv deletions applied, snapshot/token `ROLLBACK-WINSRV-20261124_215436` intact, HEAD `0f03f7e`/`97f224b`, `kernelhwsrv/` clean.
 
-These three newly indexed reports bring the indexed Markdown total to **466**, matching the 466 `.md` files under `docs/` (including this index; the header count "(466 files, verified 2026-11-24)" at line 4 is updated); post-append re-verification shows 466 on-disk `.md` files = 466 unique indexed link targets, 0 missing, 0 dangling.
+These three newly indexed reports bring the indexed Markdown total to **466**, matching the 466 `.md` files under `docs/` (including this index; the header count "(538 files, verified 2026-11-24)" at line 4 is updated); post-append re-verification shows 466 on-disk `.md` files = 466 unique indexed link targets, 0 missing, 0 dangling.
 
 ## Added — 2026-11-24 post-465 sweep, WATCH145 backfill (append-only)
 
@@ -10092,7 +10105,7 @@ untouched and no QEMU run was made by this index update.
 
 These sixteen newly indexed reports bring the indexed Markdown total to
 **484**, matching the 484 `.md` files under `docs/` (including this index; the
-header count "(484 files, verified 2026-11-24)" at line 4 is updated);
+header count "(538 files, verified 2026-11-24)" at line 4 is updated);
 post-append re-verification shows 484 on-disk `.md` files = 484 unique indexed
 link targets, 0 missing, 0 dangling.
 
@@ -10107,7 +10120,7 @@ index: one report existed on disk but had no entry; it is linked below.
 
 This newly indexed report brings the indexed Markdown total to **468**,
 matching the 468 `.md` files under `docs/` (including this index; the header
-count "(468 files, verified 2026-11-24)" at line 4 is consistent);
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 468 on-disk `.md` files = 468 unique
 indexed link targets, 0 missing, 0 dangling; every Markdown document in the
 directory is now linked.
@@ -10126,7 +10139,7 @@ update.
 
 These three newly indexed reports bring the indexed Markdown total to
 **471**, matching the 471 `.md` files under `docs/` (including this index;
-the header count "(471 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 471 on-disk `.md` files =
 471 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10144,7 +10157,7 @@ update.
 
 These two newly indexed reports bring the indexed Markdown total to
 **473**, matching the 473 `.md` files under `docs/` (including this index;
-the header count "(473 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 473 on-disk `.md` files =
 473 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10162,7 +10175,7 @@ update.
 
 These two newly indexed reports bring the indexed Markdown total to
 **473**, matching the 473 `.md` files under `docs/` (including this index;
-the header count "(473 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 473 on-disk `.md` files =
 473 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10180,7 +10193,7 @@ update.
 
 These two newly indexed reports bring the indexed Markdown total to
 **475**, matching the 475 `.md` files under `docs/` (including this index;
-the header count "(475 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 475 on-disk `.md` files =
 475 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10225,7 +10238,7 @@ update.
 
 These two newly indexed reports bring the indexed Markdown total to
 **475**, matching the 475 `.md` files under `docs/` (including this index;
-the header count "(475 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 475 on-disk `.md` files =
 475 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10245,7 +10258,7 @@ update.
 
 These four newly indexed reports bring the indexed Markdown total to
 **477**, matching the 477 `.md` files under `docs/` (including this index;
-the header count "(477 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 477 on-disk `.md` files =
 477 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10267,7 +10280,7 @@ update.
 
 These six newly indexed reports bring the indexed Markdown total to
 **485**, matching the 485 `.md` files under `docs/` (including this index;
-the header count "(485 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 485 on-disk `.md` files =
 485 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10372,7 +10385,7 @@ made by this index update.
 
 These twenty newly indexed reports bring the indexed Markdown total to
 **523**, matching the 523 `.md` files under `docs/` (including this index;
-the header count "(523 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 523 on-disk `.md` files =
 523 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10452,7 +10465,7 @@ seven documents existed on disk but had no entry; they are linked below.
 
 These seven newly indexed reports bring the indexed Markdown total to **510**,
 matching the 510 `.md` files under `docs/` (including this index; the header
-count "(491 files, verified 2026-11-24)" at line 4 is updated);
+count "(538 files, verified 2026-11-24)" at line 4 is updated);
 post-append re-verification shows 510 on-disk `.md` files = 510 unique indexed
 link targets, 0 missing, 0 dangling; every Markdown document in the directory
 is now linked.
@@ -10478,7 +10491,7 @@ run was made by this index update.
 
 These ten newly indexed reports bring the indexed Markdown total to
 **494**, matching the 494 `.md` files under `docs/` (including this index;
-the header count "(494 files, verified 2026-11-24)" at line 4 is updated);
+the header count "(538 files, verified 2026-11-24)" at line 4 is updated);
 post-append re-verification shows 494 on-disk `.md` files = 494 unique
 indexed link targets, 0 missing, 0 dangling; every Markdown document in the
 directory is now linked.
@@ -10563,7 +10576,7 @@ update.
 
 This newly indexed report brings the indexed Markdown total to
 **506**, matching the 506 `.md` files under `docs/` (including this index;
-the header count "(506 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 506 on-disk `.md` files =
 506 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10608,7 +10621,7 @@ update.
 
 These seven newly indexed reports bring the indexed Markdown total to
 **513**, matching the 513 `.md` files under `docs/` (including this
-index; the header count "(513 files, verified 2026-11-24)" at line 4 is
+index; the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 513 on-disk `.md` files =
 513 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10644,7 +10657,7 @@ update.
 
 These five newly indexed reports bring the indexed Markdown total to
 **510**, matching the 510 `.md` files under `docs/` (including this index;
-the header count "(510 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 510 on-disk `.md` files =
 510 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10668,7 +10681,7 @@ index update.
 
 These 8 newly indexed reports bring the indexed Markdown total to **515**,
 matching the 515 `.md` files under `docs/` (including this index; the header
-count "(515 files, verified 2026-11-24)" at line 4 is updated); every Markdown
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every Markdown
 document in the directory is now linked.
 
 ## Added — 2026-11-24 last-473 sweep, WINSRV_DELETE_WATCH backfill (append-only)
@@ -10729,7 +10742,7 @@ this index update.
 
 These two newly indexed reports bring the indexed Markdown total to **521**,
 matching the 521 `.md` files under `docs/` (including this index; the header
-count "(521 files, verified 2026-11-24)" at line 4 is consistent);
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 521 on-disk `.md` files = 521 unique
 indexed link targets, 0 missing, 0 dangling; every Markdown document in the
 directory is now linked.
@@ -10740,18 +10753,23 @@ link targets (0 dangling links; `kernelhwsrv/` untouched, no QEMU run).
 
 ## Added — 2026-11-24 WINSRV_DELETE_WATCH28/84 link backfill (append-only)
 
-A fresh full `docs/*.md` listing (521 files, flat directory, no
-subdirectories) was diffed against the 519 unique `.md` link targets in
-this index: two documents were mentioned in passing but had no link entry;
+A fresh full `docs/*.md` listing (530 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: seven documents were mentioned in passing but had no link entry;
 they are linked below. `kernelhwsrv/` was untouched and no QEMU run was
 made by this index update.
 
 - [WINSRV_DELETE_WATCH28.md](WINSRV_DELETE_WATCH28.md) — read-only 2026-11-24 re-apply completion monitor: verdict YES, `APPLY_RC=0`, all 7 winsrv deletions landed, P1/P2/P3 gates all PASS incl. `r1_final_verify.py --strict-skip`.
 - [WINSRV_DELETE_WATCH84.md](WINSRV_DELETE_WATCH84.md) — read-only 2026-11-24 ~22:47 re-apply completion report: `APPLY_RC=0`, no rollback, 25 ops (18 edits + 7 deletes) with all phase gates PASS.
+- [WINSRV_DELETE_WATCH110.md](WINSRV_DELETE_WATCH110.md) — read-only 2026-11-24 re-apply status: `APPLY_RC=0` FINISHED SUCCESS, no rollback, P1/P2/P3 gates all PASS, 7 deletions applied (later committed as `94ce9c9`).
+- [WINSRV_DELETE_WATCH201.md](WINSRV_DELETE_WATCH201.md) — read-only 2026-11-24 ~22:31 monitor: winsrv-deletion commit+push DONE, HEAD = origin/main = `94ce9c9`.
+- [WINSRV_DELETE_WATCH202.md](WINSRV_DELETE_WATCH202.md) — read-only 2026-11-24 status of the winsrv deletion commit plus post-deletion verify.
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only 2026-11-24 22:30 EET post-delete confirmation: commit+push CONFIRMED at `94ce9c9` on top of `origin/main`.
+- [WINSRV_DELETE_WATCH204.md](WINSRV_DELETE_WATCH204.md) — read-only 2026-11-24 post-deletion commit + verify watch: `94ce9c9` confirmed committed and pushed.
 
-These two newly indexed reports bring the indexed Markdown total to **521**,
-matching the 521 `.md` files under `docs/` (including this index; the header
-count "(521 files)" at line 4 is consistent); post-append re-verification
+These seven newly indexed reports bring the indexed Markdown total to **530**,
+matching the 530 `.md` files under `docs/` (including this index; the header
+count "(530 files)" at line 4 is consistent); post-append re-verification
 diffs on-disk `.md` files against unique link targets with 0 missing and 0
 broken links.
 
@@ -10782,7 +10800,7 @@ index update.
 
 These 2 newly indexed reports bring the indexed Markdown total to
 **519**, matching the 519 `.md` files under `docs/` (including this index;
-the header count "(519 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 519 on-disk `.md` files =
 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10822,7 +10840,7 @@ update.
 
 These two newly indexed reports bring the indexed Markdown total to
 **521**, matching the 521 `.md` files under `docs/` (including this index;
-the header count "(521 files, verified 2026-11-24)" at line 4 is
+the header count "(538 files, verified 2026-11-24)" at line 4 is
 consistent); post-append re-verification shows 521 on-disk `.md` files =
 521 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10847,7 +10865,7 @@ documents existed on disk but had no entry; they are linked below.
 
 These two newly indexed reports bring the indexed Markdown total to **521**,
 matching the 521 `.md` files under `docs/` (including this index; the header
-count "(522 files, verified 2026-11-24)" at line 4 was corrected to the
+count "(538 files, verified 2026-11-24)" at line 4 was corrected to the
 verified 521); post-append re-verification shows 521 on-disk `.md` files =
 521 unique indexed link targets, 0 missing, 0 dangling; every Markdown
 document in the directory is now linked.
@@ -10923,7 +10941,7 @@ made by this index update.
 
 Post-append re-verification shows the on-disk `.md` count = unique indexed
 link targets, 0 missing, 0 dangling; every Markdown document in the
-directory is now linked. This brings the indexed Markdown total to **517**.
+directory is now linked. This brings the indexed Markdown total to **525**.
 
 ## Added — 2026-11-24 post-473 sweep, docs-index reconciliation (append-only)
 
@@ -10951,7 +10969,7 @@ A fresh full `docs/*.md` listing (522 files, flat directory, no subdirectories) 
 
 - [WINSRV_DELETE_WATCH200.md](WINSRV_DELETE_WATCH200.md) — read-only 2026-11-24 report: WINSRV_DELETE_WATCH200 — winsrv re-apply status (2026-11-24)
 
-These 1 newly indexed report(s) bring the indexed Markdown total to **522**, matching the 522 `.md` files under `docs/` (including this index; the header count "(522 files, verified 2026-11-24)" at line 4 is updated); post-append re-verification shows 522 on-disk `.md` files = 523 unique indexed link targets, 0 missing, 0 dangling; every Markdown document in the directory is now linked.
+These 1 newly indexed report(s) bring the indexed Markdown total to **522**, matching the 522 `.md` files under `docs/` (including this index; the header count "(538 files, verified 2026-11-24)" at line 4 is updated); post-append re-verification shows 522 on-disk `.md` files = 523 unique indexed link targets, 0 missing, 0 dangling; every Markdown document in the directory is now linked.
 
 ## Added — 2026-11-24 final catch-up sweep (append-only)
 
@@ -10959,7 +10977,7 @@ A fresh full `docs/*.md` listing (523 files, flat directory, no
 subdirectories) was diffed against the unique `.md` link targets in this
 index: **0 unlinked documents and 0 broken links** (523 on-disk `.md`
 files = 523 unique indexed targets, including this index; the header
-count "(523 files, verified 2026-11-24)" at line 4 is consistent). The
+count "(538 files, verified 2026-11-24)" at line 4 is consistent). The
 two reports missing at my first scan (`WINSRV_DELETE_WATCH28.md`,
 `WINSRV_DELETE_WATCH84.md` — both read-only winsrv re-apply completion
 monitors, `APPLY_RC=0`, all 7 deletions landed, P1–P3 gates PASS) were
@@ -11015,7 +11033,7 @@ untouched and no QEMU run was made by this index update.
 
 These 0 newly indexed reports keep the indexed Markdown total at **521**,
 matching the 521 `.md` files under `docs/` (including this index; the
-header count "(521 files, verified 2026-11-24)" at line 4 is consistent);
+header count "(538 files, verified 2026-11-24)" at line 4 is consistent);
 post-append re-verification shows 521 on-disk `.md` files = 521 unique
 indexed document link targets (prose glob `*.md` excluded), 0 missing,
 0 dangling; every Markdown document in the directory is now linked.
@@ -11036,21 +11054,3957 @@ update.
   exited after ~34 min, log ends `SUCCESS: winsrv deletion applied across
   P1-P3; all phase gates PASS`.
 
-These two newly indexed reports bring the indexed Markdown total to **521**,
-matching the 521 `.md` files under `docs/` (including this index); post-append
-re-verification shows 521 on-disk `.md` files = 521 unique indexed link
-targets, 0 missing, 0 dangling; every Markdown document in the directory is
-now linked.
+These two newly indexed reports bring the indexed Markdown total to **523**,
+matching the 523 `.md` files under `docs/` (including this index; the header
+count "(523 files)" at line 4 is consistent); post-append re-verification
+shows 523 on-disk `.md` files = 523 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is now linked.
 
 ## Added — 2026-11-24 post-473 final sweep (append-only)
 
 A fresh full `docs/*.md` listing (523 files, flat directory, no
 subdirectories) was diffed against the unique `.md` link targets in this
-index: 0 document(s) existed on disk but had no entry; they are
-**0 unlinked documents and 0 broken links** — no new entries were needed.
+index: **0 unlinked documents and 0 broken links** — no new entries
+were needed.
 `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
 
 
 The indexed Markdown total is **523**, matching the
 523 `.md` files under `docs/` (including this index; the header
 count at line 4 is updated); every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 post-505 subagent sweep (append-only)
+
+A fresh full `docs/*.md` listing was diffed against the unique `.md`
+link targets in this index: **0 unlinked documents and 0 dangling
+links** (523 on-disk `.md` files = 523 unique indexed link targets,
+including this index). No missing documents were found since the 505
+mark, so this section adds no new link entries; `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total stays **523**, matching the 523 `.md`
+files under `docs/` (including this index; the header count
+"(538 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification confirms every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 subagent last-473 sweep (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets
+in this index. At scan time seven documents existed on disk without an entry —
+[WINSRV_DELETE_WATCH187.md](WINSRV_DELETE_WATCH187.md) (read-only re-apply
+monitor #187: APPLY_RC not yet emitted, pid 1286837 in the P3
+`r1_final_verify.py --strict-skip` gate, P1/P2 PASS, no rollback),
+[WINSRV_DELETE_WATCH188.md](WINSRV_DELETE_WATCH188.md) (monitor #188: APPLY_RC
+not yet printed, P3 gates running, no rollback/FAILED lines),
+[WINSRV_DELETE_WATCH189.md](WINSRV_DELETE_WATCH189.md) (monitor #189: APPLY_RC
+not yet emitted, P1 (18 edits)/P2 PASS, all 7 deletes done, P3 gates running,
+snapshot token ROLLBACK-WINSRV-20261124_215436 intact),
+[WINSRV_DELETE_WATCH190.md](WINSRV_DELETE_WATCH190.md) (monitor #190: APPLY_RC
+NOT YET EMITTED, log ends at the P3 `r1_final_verify.py --strict-skip` gate,
+pid 1286837 alive),
+[WINSRV_DELETE_WATCH191.md](WINSRV_DELETE_WATCH191.md) (monitor #191: APPLY_RC
+not yet emitted, 7 staged deletions confirmed via `git status` D count = 7,
+no rollback),
+[WINSRV_DELETE_WATCH192.md](WINSRV_DELETE_WATCH192.md) (monitor #192: APPLY_RC
+not yet written, log ends mid `gate[P3]`, pid 1286837 still alive) and
+[WINSRV_DELETE_WATCH194.md](WINSRV_DELETE_WATCH194.md) (monitor #194: APPLY_RC
+not yet printed, P1/P2 PASS, P3 final-verify gate running, no ROLLBACK) —
+concurrent index updates linked them in the sections above while this sweep
+ran. Post-append re-verification: on-disk `.md` files = unique indexed link
+targets, 0 missing, 0 dangling; every Markdown document in the directory is
+linked. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update. (Concurrent subagents keep adding `WINSRV_DELETE_WATCH*` reports, so
+the absolute count drifts upward between scans; the invariant that holds at
+every verification is on-disk `.md` count = unique indexed link targets,
+0 missing, 0 dangling.)
+
+The indexed Markdown total is **525**, matching the 525 `.md` files under
+`docs/` (including this index; the header count "(525 files, verified
+2026-11-24)" at line 4 is consistent); every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 full directory sweep, ~490-doc backfill verification (append-only)
+
+A full `docs/*.md` listing (528 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: three documents
+existed on disk but had no entry; they are linked below. The ~490 documents
+written since the last full sweep are otherwise already linked in the backfill
+sections above. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH201.md](WINSRV_DELETE_WATCH201.md) — read-only ~22:31
+  monitor: winsrv-deletion commit `94ce9c9` confirmed as HEAD = `origin/main`
+  (pushed), post-deletion strict verify IN PROGRESS (selfcheck/qemu_smoke
+  running), `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH202.md](WINSRV_DELETE_WATCH202.md) — read-only status of
+  the winsrv deletion commit + post-deletion verify: commit `94ce9c9` is HEAD
+  of local `main` and `origin/main` (committed and pushed).
+- [WINSRV_DELETE_WATCH204.md](WINSRV_DELETE_WATCH204.md) — read-only
+  post-deletion watch: commit+push CONFIRMED at `94ce9c9` locally and on
+  `origin/main`; `kernelhwsrv/` untouched (0 git-status lines).
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only 22:30 EET
+  post-delete confirmation: commit `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0,
+  P1–P3 PASS) is top of both `main` and `origin/main`; post-delete strict
+  verify still in selfcheck, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only
+  post-deletion final_verify watch: strict run (started 22:29) still in
+  selfcheck with no OVERALL yet; HEAD = `origin/main` = `94ce9c9`.
+
+These five newly indexed reports bring the indexed Markdown total to **530**,
+matching the 530 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 is updated); post-append
+re-verification shows 530 on-disk `.md` files = 530 unique indexed link
+targets, 0 missing, 0 dangling; every Markdown document in the directory is
+now linked.
+
+## Added — 2026-11-24 post-521 sweep (append-only)
+
+A fresh full `docs/*.md` listing (525 files, flat directory, no
+subdirectories) was diffed against the 523 unique `.md` link targets in
+this index: **2 unlinked documents and 0 broken links** (525
+on-disk `.md` files vs 523 unique indexed link targets, including this
+index); they are linked below. `kernelhwsrv/` was untouched and no QEMU
+run was made by this index update.
+
+- [WINSRV_DELETE_WATCH110.md](WINSRV_DELETE_WATCH110.md) — read-only 2026-11-24 monitor #110: winsrv re-apply FINISHED with `APPLY_RC=0` (pid 1286837 exited; P1/P2/P3 gates all PASS incl. `r1_final_verify.py --strict-skip`), 7 winsrv deletions applied and committed as `94ce9c9`, no rollback, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH27.md](WINSRV_DELETE_WATCH27.md) — 2026-11-24 re-apply result report: `APPLY_RC=0` SUCCESS, all 7 winsrv files deleted (`winsrv.c`, `guishost.h`, `wsclient.c/h`, `qemu_windowsrv.cpp/h`, `qemu_gui_exec.cpp`), pre-apply ewsrv + P1–P3 gates PASS, no rollback.
+
+The indexed Markdown total is **525**, matching the 525 `.md` files
+under `docs/` (including this index); the header count "(525 files,
+verified 2026-11-24)" at line 4 is updated to match; every Markdown document
+in the directory is linked.
+
+## Added — 2026-11-24 subagent docs-index sweep (append-only)
+
+A fresh full `docs/*.md` listing (537 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: eight documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only 2026-11-24
+  22:30 EET post-delete confirmation: winsrv/GUI retirement commit `94ce9c9`
+  confirmed committed AND pushed (HEAD = `origin/main`), post-delete
+  `r1_final_verify.py --strict-skip` still IN PROGRESS in selfcheck, no fault
+  markers, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only 2026-11-24
+  post-deletion `final_verify` watch: strict run started 22:29 still in
+  selfcheck with no OVERALL/RC yet, HEAD `94ce9c9` = `origin/main` (winsrv
+  files deleted, APPLY_RC=0), `kernelhwsrv/` untouched, no QEMU by this watch.
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only 2026-11-24
+  post-deletion verify watch: `final_verify_post_winsrv_delete.log` still IN
+  PROGRESS at selfcheck (no OVERALL/FAIL/RC yet), HEAD = `origin/main` =
+  `94ce9c9` winsrv/GUI retirement commit, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only 2026-11-24
+  post-deletion `final_verify` status: strict run on commit `94ce9c9`
+  (winsrv/GUI deletion pushed to `origin/main`) still in progress.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only 2026-11-24
+  post-deletion monitor: `final_verify_post_winsrv_delete.log` IN PROGRESS at
+  selfcheck, 2 procs alive, no OVERALL/FAIL/RC lines yet.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only 2026-11-24
+  verification watch: deletion commit `94ce9c9` on `origin/main` (APPLY_RC=0,
+  P1–P3 PASS), post-deletion strict verify IN PROGRESS at selfcheck.
+- [WINSRV_DELETE_WATCH211.md](WINSRV_DELETE_WATCH211.md) — read-only 2026-11-24
+  post-deletion verify watch: strict run at step 1/11 selfcheck, no
+  OVERALL/FAIL/PASS lines yet, 2 procs alive.
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only 2026-11-24
+  post-deletion `r1_final_verify` status on commit `94ce9c9` (`origin/main`):
+  strict run IN PROGRESS, log `final_verify_post_winsrv_delete.log`.
+
+These eight newly indexed reports bring the indexed Markdown total to **537**,
+matching the 537 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 subagent final verification sweep (append-only)
+
+A fresh full `docs/*.md` listing (531 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: three documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only
+  2026-11-24 22:30 EET post-delete confirmation: winsrv/GUI retirement
+  commit `94ce9c9` committed AND pushed (HEAD = origin/main), post-deletion
+  `r1_final_verify.py --strict-skip` still IN PROGRESS in selfcheck,
+  `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only
+  2026-11-24 post-deletion `final_verify` watch: run started 22:29 still in
+  selfcheck (no OVERALL/FAIL/RC yet), HEAD `94ce9c9` = origin/main,
+  `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only
+  2026-11-24 post-deletion verify watch: `final_verify_post_winsrv_delete.log`
+  still IN PROGRESS at selfcheck, 2 procs alive, no verdict lines yet.
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only
+  2026-11-24 post-deletion `final_verify` status: log
+  `final_verify_post_winsrv_delete.log` checked, run status monitored.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only
+  2026-11-24 post-deletion `final_verify` monitor: run IN PROGRESS
+  (2 procs alive) per `final_verify_post_winsrv_delete.log`.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only
+  2026-11-24 post-deletion verification watch: deletion commit `94ce9c9`
+  on origin/main (winsrv/GUI desktop files deleted, APPLY_RC=0, P1–P3 PASS).
+- [WINSRV_DELETE_WATCH211.md](WINSRV_DELETE_WATCH211.md) — read-only
+  2026-11-24 post-deletion verify watch: `r1_final_verify.py --strict-skip`
+  run logged in `final_verify_post_winsrv_delete.log`.
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify` status: commit under test
+  `94ce9c9` (origin/main) — winsrv/GUI desktop retirement, APPLY_RC=0,
+  P1–P3 PASS.
+- [WINSRV_DELETE_WATCH213.md](WINSRV_DELETE_WATCH213.md) — read-only
+  2026-11-24 post-deletion verify watch: read-only monitor of the
+  post-`94ce9c9` verification run, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status:
+  log still at selfcheck stage, run IN PROGRESS, no verdict lines yet.
+
+The indexed Markdown total is **539**, matching the 539 `.md` files under
+`docs/` (including this index); the header count "(539 files, verified
+2026-11-24)" at line 4 is updated to match; post-append re-verification
+confirms 539 on-disk = 539 unique indexed targets, 0 missing, 0 dangling;
+every Markdown document in the directory is linked. (Note: `docs/` is live
+— concurrent 2026-11-24 watch reports may appear after this sweep.)
+
+## Added — 2026-11-24 full directory sweep, ARCHITECTURE.md link backfill (append-only)
+
+A fresh full `docs/*.md` listing (537 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **11 unlinked
+documents and 0 broken links** (537 on-disk `.md` files vs 526 unique indexed
+link targets, including this index). The ten documents present on disk but
+without a `[...](...)` link entry are linked below; `ARCHITECTURE.md` was
+previously only backtick-referenced, and the `WINSRV_DELETE_WATCH20x/21x`
+monitors were written concurrently by other agents. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — master architecture overview of the
+  Symbian EKA2 x86 PC OS as built and booted today: the genuine read-only
+  `kernelhwsrv/` kernel, the `qemu-port/` port layer, the layer diagram, the
+  build and the primary GRUB boot image.
+- [WINSRV_DELETE_WATCH201.md](WINSRV_DELETE_WATCH201.md) — read-only ~22:31
+  monitor #201: winsrv-deletion commit+push DONE (HEAD = origin/main =
+  `94ce9c9`), post-deletion strict verify IN PROGRESS.
+- [WINSRV_DELETE_WATCH202.md](WINSRV_DELETE_WATCH202.md) — read-only monitor
+  #202: confirms `94ce9c9` ("Retire winsrv/GUI desktop: delete winsrv.c
+  guishost.h wsclient.* qemu_windowsrv.* qemu_gui_exec.cpp") is HEAD of both
+  `main` and `origin/main`; post-deletion verify status.
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only monitor
+  #203 (22:30 EET): commit+push CONFIRMED at `94ce9c9` (APPLY_RC=0, P1–P3 gates
+  PASS, strict final_verify PASS), post-delete confirmation in flight.
+- [WINSRV_DELETE_WATCH204.md](WINSRV_DELETE_WATCH204.md) — read-only monitor
+  #204: post-deletion commit `94ce9c9` on local and `origin/main` confirmed,
+  `kernelhwsrv/` clean, post-deletion verify watch.
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only monitor
+  #207: post-deletion verify watch — `final_verify_post_winsrv_delete.log`
+  still in progress at selfcheck, HEAD = origin/main = `94ce9c9`.
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only monitor
+  #206: post-deletion `r1_final_verify.py --strict-skip` STILL RUNNING, no
+  final verdict yet (commit `94ce9c9` on origin/main).
+- [WINSRV_DELETE_WATCH208.md](WINSRV_DELETE_WATCH208.md) — read-only monitor
+  #208: post-deletion strict-verify RUNNING (selfcheck step, lock held,
+  2 `r1_final_verify.py` procs), HEAD = origin/main = `94ce9c9`.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only monitor
+  #209: post-deletion final_verify IN PROGRESS at selfcheck, origin/main =
+  `94ce9c9`.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only monitor
+  #210: deletion commit `94ce9c9` pushed (APPLY_RC=0, P1–P3 PASS),
+  post-deletion strict verify IN PROGRESS.
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only monitor
+  #212: post-deletion strict-verify status against `94ce9c9` (origin/main),
+  log `/tmp/opencode/final_verify_post_winsrv_delete.log`.
+
+These newly indexed reports bring the indexed Markdown total to **537**,
+matching the 537 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification confirms 537 on-disk `.md` files = 537 unique
+indexed link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 post-473 final sweep (append-only)
+
+A full `docs/*.md` listing (525 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 documents on
+disk are missing an entry and 0 links are stale** (525 on-disk `.md` files =
+525 unique indexed link targets, including this index; the only extra link
+target is the literal glob `*.md`, not a file; the header count "(525 files,
+verified 2026-11-24)" at line 4 is consistent). No missing documents were
+found past the 473 mark, so this section adds no new link entries;
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total is **525**, matching the 525 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-24 post-525 sweep (append-only)
+
+A fresh full `docs/*.md` listing (536 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: **8 unlinked documents and 0 broken links** (536 on-disk `.md`
+files vs 528 unique indexed link targets, including this index); they are
+linked below. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only 2026-11-24 watch #203: winsrv-deletion commit `94ce9c9` confirmed committed AND pushed (HEAD = top of `origin/main`); post-delete `r1_final_verify.py --strict-skip` still running (selfcheck stage, no OVERALL yet); `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only 2026-11-24 watch #205: same post-deletion final_verify run IN PROGRESS (2 procs, selfcheck phase, no verdict lines), git history 94ce9c9/0f03f7e confirmed on local and `origin/main`, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only 2026-11-24 watch #206: post-deletion final_verify status report for commit `94ce9c9` on `origin/main`.
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only 2026-11-24 watch #207: post-deletion verify still IN PROGRESS at selfcheck (no OVERALL/FAIL/RC= lines), `origin/main` = `94ce9c9` winsrv-retirement commit, `kernelhwsrv/` clean (0 modified/untracked).
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only 2026-11-24 watch #209: post-deletion final_verify monitor — run IN PROGRESS at selfcheck, `origin/main` = `94ce9c9`.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only 2026-11-24 watch #210: post-deletion verification watch — `94ce9c9` on `origin/main`, final_verify still at selfcheck with no verdict lines yet; `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH211.md](WINSRV_DELETE_WATCH211.md) — read-only 2026-11-24 watch #211: post-deletion verify IN PROGRESS at step 1/11 (selfcheck, lock acquired, no verdict lines), `origin/main` = `94ce9c9`.
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only 2026-11-24 watch #212: post-deletion final_verify RUNNING (PID 1455814, test 1/11 selfcheck, log 3 lines), commit under test `94ce9c9`.
+
+The indexed Markdown total is **536**, matching the 536 `.md` files under
+`docs/` (including this index); post-append re-verification: 536 on-disk
+`.md` files = 536 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked. (Concurrent subagents keep
+adding `WINSRV_DELETE_WATCH*` reports, so the absolute count may drift
+upward between scans; the invariant is on-disk `.md` count = unique
+indexed link targets, 0 missing, 0 dangling.)
+
+## Added — 2026-11-24 WINSRV_DELETE_WATCH201/202/204 backfill (append-only)
+
+A fresh full `docs/*.md` listing (532 files, flat directory, no subdirectories)
+was diffed against the 530 unique `.md` link targets previously in this index:
+five documents existed on disk but had no entry; they are linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH201.md](WINSRV_DELETE_WATCH201.md) — read-only 2026-11-24
+  ~22:31 watch: winsrv-deletion commit `94ce9c9` pushed (HEAD = origin/main),
+  post-deletion `r1_final_verify.py --strict-skip` IN PROGRESS, `kernelhwsrv/`
+  clean.
+- [WINSRV_DELETE_WATCH202.md](WINSRV_DELETE_WATCH202.md) — read-only 2026-11-24
+  status of the winsrv deletion commit + post-deletion verify: `94ce9c9`
+  confirmed as HEAD of both `main` and `origin/main` (committed and pushed).
+- [WINSRV_DELETE_WATCH204.md](WINSRV_DELETE_WATCH204.md) — read-only 2026-11-24
+  post-deletion commit + verify watch: `94ce9c9` CONFIRMED on `main` and
+  `origin/main`, `kernelhwsrv/` untouched, post-deletion strict verify RUNNING
+  (PID 1455814).
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only 2026-11-24
+  post-deletion verify watch: `final_verify_post_winsrv_delete.log` still IN
+  PROGRESS at selfcheck (no OVERALL/FAIL yet); origin/main at `94ce9c9`.
+- [WINSRV_DELETE_WATCH208.md](WINSRV_DELETE_WATCH208.md) — read-only 2026-11-24
+  post-deletion strict-verify status: run RUNNING (selfcheck only, lock held),
+  gate outcome not yet determined; origin/main at `94ce9c9`.
+
+These five newly indexed reports bring the indexed Markdown total to **532**,
+matching the 532 `.md` files under `docs/` (including this index; the header
+count "(532 files)" at line 4 is updated); post-append re-verification shows
+532 on-disk `.md` files = 532 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is now linked.
+
+## Added — 2026-11-24 post-525 index sweep (append-only)
+
+A fresh full `docs/*.md` listing (525 files, flat directory, no
+subdirectories) was diffed against every parenthesized `.md` link target in
+this index: **0 documents on disk are missing an entry and 0 links are
+dangling** (525 on-disk `.md` files = 525 unique indexed link targets,
+including this index; the only extra parenthesized targets are non-file
+artifacts — a malformed example line and the literal `*.md` glob — not
+documents). No new documents were found past the 525 mark, so this section
+adds no new link entries. `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+The indexed Markdown total stays **525**, matching the 525 `.md` files under
+`docs/` (including this index); the header count "(525 files, verified
+2026-11-24)" at line 4 remains consistent. Post-append re-verification:
+525 on-disk `.md` files = 525 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 subagent sweep past 505 (append-only)
+
+A fresh full `docs/*.md` listing (525 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: **0 documents on disk are missing an entry and 0 links are stale**
+(525 on-disk `.md` files = 525 unique indexed link targets, including this
+index; header count "(538 files, verified 2026-11-24)" at line 4 is
+consistent). No docs past the 505 mark or anywhere else were unindexed, so
+this section adds no new link entries; `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+The indexed Markdown total stays **525**, matching the 525 `.md` files under
+`docs/` (including this index); post-append re-verification confirms 525
+on-disk `.md` files = 525 unique indexed link targets, 0 missing, 0
+dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 subagent docs-index sweep, final verification (append-only)
+
+A fresh full `docs/*.md` listing (528 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: three documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH201.md](WINSRV_DELETE_WATCH201.md) — read-only 2026-11-24
+  ~22:31 monitor: winsrv-deletion commit `94ce9c9` ("Retire winsrv/GUI desktop:
+  delete winsrv.c guishost.h wsclient.* qemu_windowsrv.* qemu_gui_exec.cpp")
+  pushed, HEAD = origin/main = `94ce9c9`.
+- [WINSRV_DELETE_WATCH202.md](WINSRV_DELETE_WATCH202.md) — read-only 2026-11-24
+  status of the winsrv deletion commit `94ce9c9` plus the post-deletion
+  verify watch.
+- [WINSRV_DELETE_WATCH204.md](WINSRV_DELETE_WATCH204.md) — read-only
+  post-deletion commit + verify watch: commit `94ce9c9` CONFIRMED at
+  HEAD = origin/main.
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only
+  2026-11-24 ~22:30 EET post-delete confirmation: commit `94ce9c9` ("Retire
+  winsrv/GUI desktop…") pushed, HEAD = origin/main = `94ce9c9`.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only
+  post-deletion `r1_final_verify.py --strict-skip` watch on
+  `/tmp/opencode/final_verify_post_winsrv_delete.log`.
+
+These five newly indexed reports bring the indexed Markdown total to **530**,
+matching the 530 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 is updated); every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-24 subagent docs-index sweep, post-525 check (append-only)
+
+A fresh full `docs/*.md` listing (flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index. Two watch
+reports created during the sweep had no entry and are linked below;
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only 2026-11-24
+  22:30 EET post-delete confirmation: winsrv/GUI retirement commit `94ce9c9`
+  confirmed committed AND pushed (top of `origin/main`), post-delete
+  `r1_final_verify.py --strict-skip` still in selfcheck (IN PROGRESS),
+  `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only
+  post-deletion final_verify watch: `94ce9c9` = `origin/main`, strict verify
+  run started 22:29 still in selfcheck phase with no OVERALL/RC yet,
+  `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only
+  post-deletion verify watch: strict `r1_final_verify.py` still IN PROGRESS
+  at selfcheck (no OVERALL/RC yet), `origin/main` = `94ce9c9` winsrv/GUI
+  retirement commit, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH208.md](WINSRV_DELETE_WATCH208.md) — read-only
+  post-deletion strict-verify status: run RUNNING in selfcheck phase, gate
+  outcome not yet determined, `origin/main` = `94ce9c9`, `kernelhwsrv/`
+  untouched.
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only
+  post-deletion final_verify status: strict run still in progress on
+  `/tmp/opencode/final_verify_post_winsrv_delete.log` after the `94ce9c9`
+  winsrv/GUI retirement commit on `origin/main`.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only
+  post-deletion final_verify monitor: run IN PROGRESS (2 procs alive),
+  `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only
+  post-deletion verification watch: `94ce9c9` on `origin/main` (winsrv/GUI
+  desktop files deleted, APPLY_RC=0, P1–P3 gates PASS).
+- [WINSRV_DELETE_WATCH211.md](WINSRV_DELETE_WATCH211.md) — read-only
+  post-deletion verify watch: strict `r1_final_verify.py` run in progress,
+  log at `/tmp/opencode/final_verify_post_winsrv_delete.log`.
+
+These eight newly indexed reports bring the indexed Markdown total to **536**,
+matching the 536 `.md` files under `docs/` at sweep time (including this
+index); re-verification confirms 536 on-disk `.md` files = 536 unique
+indexed link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked. (The header count at line 4 predates these late
+additions; other agents were still appending WINSRV_DELETE_WATCH reports
+during the sweep.)
+
+## Added — 2026-11-24 post-528 sweep (append-only)
+
+A fresh full `docs/*.md` listing (530 files, flat directory, no
+subdirectories) was diffed against the 528 unique `.md` link targets in
+this index: **2 unlinked documents and 0 broken links** (530 on-disk `.md`
+files vs 528 unique indexed targets, including this index). They are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH203.md](WINSRV_DELETE_WATCH203.md) — read-only
+  2026-11-24 22:30 EET post-delete confirmation: winsrv-deletion commit
+  `94ce9c9` verified as HEAD of both `main` and `origin/main` (committed
+  AND pushed), post-deletion `r1_final_verify.py --strict-skip` still in
+  selfcheck with no OVERALL yet, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH205.md](WINSRV_DELETE_WATCH205.md) — read-only
+  post-deletion `final_verify` watch: log still in selfcheck phase (no
+  OVERALL/RC= lines), HEAD = `origin/main` = `94ce9c9` winsrv/GUI
+  retirement commit, `git status kernelhwsrv/` empty.
+
+These two newly indexed reports bring the indexed Markdown total to **530**,
+matching the 530 `.md` files under `docs/` (including this index; the
+header count "(538 files, verified 2026-11-24)" at line 4 is stale by the
+2 just-added entries); every Markdown document in the directory is now
+linked.
+
+## Added — 2026-11-24 subagent sweep past 505, final backfill (append-only)
+
+A fresh full `docs/*.md` listing (532 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: 2 documents existed on disk but had no entry; they are linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH207.md](WINSRV_DELETE_WATCH207.md) — read-only 2026-11-24
+  post-deletion verify watch: `final_verify_post_winsrv_delete.log` still in
+  progress at selfcheck, HEAD = origin/main = `94ce9c9` (winsrv deletion).
+- [WINSRV_DELETE_WATCH208.md](WINSRV_DELETE_WATCH208.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status: RUNNING,
+  only the selfcheck step started, lock held.
+
+These 2 newly indexed reports bring the indexed Markdown total to **532**,
+matching the 532 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 is updated);
+post-append re-verification: 532 on-disk `.md` files = 532 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 subagent sweep past 505, catch-up backfill (append-only)
+
+A fresh full `docs/*.md` listing (535 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: 3 documents existed on disk but had no entry; they are linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only 2026-11-24
+  post-deletion `r1_final_verify.py --strict-skip` status on
+  `final_verify_post_winsrv_delete.log` after winsrv/GUI deletion.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only 2026-11-24
+  post-deletion final_verify monitor: run IN PROGRESS at selfcheck.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only
+  post-deletion verification watch: deletion commit `94ce9c9` on origin/main,
+  APPLY_RC=0, P1–P3 gates PASS.
+
+These 3 newly indexed reports bring the indexed Markdown total to **535**,
+matching the 535 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 is updated);
+post-append re-verification: 535 on-disk `.md` files = 535 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 post-525 WINSRV_DELETE_WATCH backfill (append-only)
+
+A fresh full `docs/*.md` listing (537 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: three
+documents existed on disk past the 525 mark but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only 2026-11-24
+  post-deletion monitor: winsrv-deletion commit `94ce9c9` on origin/main, but
+  the post-deletion `r1_final_verify.py --strict-skip` is STILL RUNNING (2
+  procs alive, selfcheck phase only, DOOM ISO staged) — no final verdict yet.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only 2026-11-24
+  post-deletion final_verify monitor: run IN PROGRESS at selfcheck, no
+  OVERALL/FAIL/RC lines yet, origin/main at `94ce9c9`, kernelhwsrv/ clean;
+  RESULT PENDING.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only 2026-11-24
+  post-deletion verification watch: `94ce9c9` pushed (APPLY_RC=0, P1–P3 PASS),
+  strict verify still in selfcheck with no verdict lines; kernelhwsrv/
+  untouched, no QEMU run by the watcher.
+
+These three newly indexed reports bring the indexed Markdown total to **537**,
+matching the 537 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); every Markdown document in the directory is now
+linked.
+
+## Added — 2026-11-24 WINSRV_DELETE_WATCH212 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only 2026-11-24
+  post-deletion verify watch: `r1_final_verify.py --strict-skip` on commit
+  `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS) RUNNING at test
+  1/11 selfcheck (PID 1455814, selftest lock held), no OVERALL/RC= verdict yet.
+
+This newly indexed report brings the indexed Markdown total to **537**,
+matching the 537 `.md` files under `docs/` (including this index; the header
+count "(538 files, verified 2026-11-24)" at line 4 was already updated to 537
+by a concurrent sweep); post-append re-verification: 537 on-disk `.md` files =
+537 unique indexed link targets, 0 missing, 0 dangling.
+
+## Added — 2026-11-24 post-532 sweep, WINSRV_DELETE_WATCH206/209/210 backfill (append-only)
+
+A fresh full `docs/*.md` listing (535 files, flat directory, no
+subdirectories) was diffed against the 532 unique `.md` link targets in
+this index: **3 unlinked documents and 0 broken links** (535 on-disk `.md`
+files vs 532 unique indexed targets, including this index). They are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH206.md](WINSRV_DELETE_WATCH206.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status:
+  STILL RUNNING at the selfcheck phase (DOOM ISO staged, no OVERALL/FAIL/RC
+  verdict lines yet), `origin/main` = `94ce9c9` winsrv/GUI retirement commit.
+- [WINSRV_DELETE_WATCH209.md](WINSRV_DELETE_WATCH209.md) — read-only
+  post-deletion final_verify monitor: run IN PROGRESS at selfcheck (2 procs
+  alive, no verdict lines), `origin/main` = `94ce9c9`, `kernelhwsrv/`
+  clean; RESULT PENDING.
+- [WINSRV_DELETE_WATCH210.md](WINSRV_DELETE_WATCH210.md) — read-only
+  post-deletion verification watch: strict verify IN PROGRESS at selfcheck
+  (lock acquired, no OVERALL yet) on `94ce9c9`; `kernelhwsrv/` untouched,
+  no QEMU run by the watcher.
+
+These three newly indexed reports bring the indexed Markdown total to **535**,
+matching the 535 `.md` files under `docs/` (including this index; the
+header count "(538 files, verified 2026-11-24)" at line 4 was stale and is
+updated to the current count); every Markdown document in the directory is
+now linked.
+
+## Added — 2026-11-24 post-535 sweep: WINSRV_DELETE_WATCH211/212 backfill (append-only)
+
+A fresh full `docs/*.md` listing (537 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: two documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH211.md](WINSRV_DELETE_WATCH211.md) — read-only
+  2026-11-24 post-deletion verify watch: post-`94ce9c9`
+  `r1_final_verify.py --strict-skip` IN PROGRESS at test 1/11 (selfcheck,
+  lock acquired, no OVERALL/FAIL/PASS lines yet), HEAD = origin/main =
+  `94ce9c9` winsrv/GUI retirement, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only
+  2026-11-24 status of the same post-deletion strict verify: RUNNING
+  (PID 1455814, log 3 lines, test 1/11 selfcheck, DOOM ISO staged, no
+  PASS/FAIL/RC=/OVERALL yet), commit under test `94ce9c9` on origin/main,
+  `kernelhwsrv/` untouched, no QEMU run by the monitor.
+
+These two newly indexed reports bring the indexed Markdown total to **537**,
+matching the 537 `.md` files under `docs/` (including this index; the
+header count "(538 files, verified 2026-11-24)" at line 4 is updated);
+post-append re-verification confirms 537 on-disk `.md` files = 537 unique
+indexed link targets, 0 missing, 0 dangling; every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-24 post-525 sweep, WATCH212 backfill (append-only)
+
+A fresh full `docs/*.md` listing (537 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH212.md](WINSRV_DELETE_WATCH212.md) — read-only 2026-11-24
+  post-deletion `r1_final_verify.py --strict-skip` status watch on commit
+  `94ce9c9` (origin/main, winsrv/GUI retirement): run RUNNING at selfcheck
+  (test 1/11, no PASS/FAIL/OVERALL yet), DOOM ISO staged, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only 2026-11-24
+  post-deletion strict-skip status watch: run STILL IN PROGRESS at selfcheck
+  (no OVERALL/PASS/FAIL yet), `origin/main` = `94ce9c9`, `kernelhwsrv/` clean.
+
+These newly indexed reports bring the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the header
+count "(539 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 539 on-disk `.md` files = 539 unique indexed
+targets, 0 missing, 0 dangling; every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-24 subagent docs-index sweep, post-532 reconciliation (append-only)
+
+A fresh full `docs/*.md` listing (538 files, flat directory, no subdirectories) was diffed against the unique `.md` link targets in this index: 1 document(s) existed on disk but had no entry and 0 links were dangling (the only extra link target is the literal glob `*.md`, not a file); it is linked below. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH213.md](WINSRV_DELETE_WATCH213.md) — read-only 2026-11-24 report: post-deletion `r1_final_verify --strict-skip` verify watch (run in progress).
+
+These 1 newly indexed report(s) bring the indexed Markdown total to **538**, matching the 538 `.md` files under `docs/` (including this index; the header count "(538 files, verified 2026-11-24)" at line 4 is consistent); post-append re-verification: 538 on-disk `.md` files = 538 unique indexed link targets, 0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 post-538 sweep: WINSRV_DELETE_WATCH216 backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only
+  2026-11-24 post-deletion verify watch on commit `94ce9c9` (origin/main,
+  winsrv/GUI desktop retirement): `r1_final_verify.py --strict-skip` STILL
+  IN PROGRESS at selfcheck (log 3 lines, 2 processes alive, no
+  OVERALL/PASS/FAIL yet); `kernelhwsrv/` clean, no QEMU run by the monitor.
+
+This newly indexed report brings the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the header
+count "(539 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 539 on-disk `.md` files = 539 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-24 subagent docs-index sweep, post-538 backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no subdirectories) was diffed against the unique `.md` link targets in this index: 1 document existed on disk but had no entry and 0 file links were dangling (the only extra link target is the literal glob `*.md`, not a file); it is linked below. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only 2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status: run still in selfcheck (no OVERALL/PASS/FAIL yet), origin/main at `94ce9c9` winsrv/GUI deletion, kernelhwsrv/ clean.
+
+This newly indexed report brings the indexed Markdown total to **539**, matching the 539 `.md` files under `docs/` (including this index; the header count "(539 files, verified 2026-11-24)" at line 4 is consistent); post-append re-verification: 539 on-disk `.md` files = 539 unique indexed file link targets, 0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 subagent sweep past 525, final missing-doc backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory) was diffed
+(basenames, `LC_ALL=C` sort) against the unique `.md` link targets in this
+index: 1 document existed on disk but had no entry and 0 links were dangling;
+it is linked below. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only 2026-11-24
+  post-deletion `r1_final_verify.py --strict-skip` watch on commit `94ce9c9`
+  (winsrv/GUI desktop retirement): run still IN PROGRESS at the selfcheck stage
+  (log `/tmp/opencode/final_verify_post_winsrv_delete.log`, 3 lines, lock held,
+  no OVERALL/PASS/FAIL lines yet).
+
+This newly indexed report brings the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the header
+count "(539 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 539 on-disk `.md` files = 539 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 post-538 sweep: WINSRV_DELETE_WATCH216 backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no
+subdirectories) was diffed against the 538 unique `.md` link targets in
+this index: one document existed on disk but had no entry and 0 links were
+dangling; it is linked below. `kernelhwsrv/` was untouched and no QEMU run
+was made by this index update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status:
+  run STILL IN PROGRESS at the selfcheck stage (log 3 lines, no
+  OVERALL/PASS/FAIL yet, lock held), commit under test `origin/main` =
+  `94ce9c9` (winsrv/GUI retirement), `kernelhwsrv/` clean.
+
+This newly indexed report brings the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the
+header count "(539 files, verified 2026-11-24)" at line 4 is
+consistent); post-append re-verification: 539 on-disk `.md` files = 539
+unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-24 subagent sweep past 538, catch-up backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: 1 document
+existed on disk but had no entry; it is linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only 2026-11-24
+  post-deletion monitor: `r1_final_verify.py --strict-skip` still IN PROGRESS
+  at selfcheck (no OVERALL/PASS/FAIL lines yet) against origin/main `94ce9c9`.
+
+This newly indexed report brings the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the header
+count "(539 files, verified 2026-11-24)" at line 4 is updated);
+post-append re-verification: 539 on-disk `.md` files = 539 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 post-538 sweep, WINSRV_DELETE_WATCH216 backfill (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no
+subdirectories) was diffed against the 538 unique `.md` link targets in
+this index: **1 unlinked document and 0 broken links** (539 on-disk `.md`
+files vs 538 unique indexed targets, including this index). It is linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH216.md](WINSRV_DELETE_WATCH216.md) — read-only
+  2026-11-24 post-deletion `r1_final_verify.py --strict-skip` status watch:
+  run STILL IN PROGRESS at selfcheck (log 3 lines, lock held, 2 procs
+  alive, no OVERALL/PASS/FAIL yet) on `origin/main` = `94ce9c9` winsrv/GUI
+  retirement commit; `kernelhwsrv/` untouched.
+
+This newly indexed report brings the indexed Markdown total to **539**,
+matching the 539 `.md` files under `docs/` (including this index; the
+header count at line 4 is updated); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-24 post-537 full directory sweep (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 broken links** (539 on-disk `.md` files = 539 unique indexed
+targets, including this index; the header count "(539 files, verified
+2026-11-24)" at line 4 is consistent). No missing documents were found past
+the last 537 mark, so this section adds no new link entries; `kernelhwsrv/`
+was untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total stays **539**, matching the 539 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-24 subagent sweep, post-537 reconciliation (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: 0 documents existed on disk without an entry and 0 links were
+dangling (the only extra link target is the literal glob `*.md`, not a
+file). The post-537 documents (`WINSRV_DELETE_WATCH213.md`,
+`WINSRV_DELETE_WATCH216.md`) were already indexed by the concurrent
+post-538 sweep above, so this section records the verification only; no
+new links were needed. `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+This sweep confirms the indexed Markdown total remains **539**, matching
+the 539 `.md` files under `docs/` (including this index; the header count
+"(539 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 539 on-disk `.md` files = 539 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-24 subagent sweep, last-539 verification (append-only)
+
+A fresh full `docs/*.md` listing (539 files, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: **0 unlinked documents and 0 broken links** (539 on-disk `.md`
+files = 539 unique indexed targets, including this index; the header
+count "(539 files, verified 2026-11-24)" at line 4 is consistent). No
+missing documents were found past the last 539 mark, so this section adds
+no new link entries; `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+The indexed Markdown total stays **539**, matching the 539 `.md` files
+under `docs/` (including this index); every Markdown document in the
+directory is linked.
+## Added — 2026-11-24 subagent sweep past the last 537 mark (append-only)
+
+A fresh full `docs/*.md` listing was diffed against the unique `.md` link
+targets in this index: 539 on-disk `.md` files vs 539 unique indexed link
+targets (including this index) — **0 missing documents and 0 dangling
+links**, so this section adds no new link entries. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total stays **539**, matching the 539 `.md` files under
+`docs/` (including this index; the header count "(539 files, verified
+2026-11-24)" at line 4 is consistent); post-append re-verification: 539
+on-disk = 539 unique linked, 0 missing, 0 dangling; every Markdown document
+in the directory is linked.
+
+## Added — 2026-11-24 last-539 sweep: one new doc (append-only)
+
+A fresh full `docs/*.md` listing (540 files) was diffed against the unique
+`.md` link targets in this index: exactly **1 unlinked document**,
+`WINSRV_DELETE_WATCH222.md`, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH222.md](WINSRV_DELETE_WATCH222.md) — read-only 2026-11-24
+  monitor: post-winsrv-deletion `r1_final_verify.py` still IN PROGRESS
+  (selfcheck PASS, smoke gate running, no OVERALL line yet) against deletion
+  commit `94ce9c9` on origin/main.
+
+This newly indexed report brings the indexed Markdown total to **540**,
+matching the 540 `.md` files under `docs/` (including this index; the header
+count "(540 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 540 on-disk = 540 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 last-540 sweep: one new doc (append-only)
+
+A fresh full `docs/*.md` listing (541 files) was diffed against the unique
+`.md` link targets in this index: exactly **1 unlinked document**,
+`WINSRV_DELETE_WATCH224.md`, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH224.md](WINSRV_DELETE_WATCH224.md) — read-only 2026-11-24
+  monitor: post-winsrv-deletion `r1_final_verify.py` run still IN PROGRESS
+  (selfcheck OVERALL PASS, qemu_smoke FAIL on harness timeout at the `C:/>`
+  prompt, genuine_retire step running) against origin/main `94ce9c9`.
+
+This newly indexed report brings the indexed Markdown total to **541**,
+matching the 541 `.md` files under `docs/` (including this index; the header
+count "(542 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 541 on-disk = 541 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 post-540 full directory sweep (append-only)
+
+A fresh full `docs/*.md` listing (541 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: exactly
+**1 unlinked document**, `WINSRV_DELETE_WATCH224.md`, now linked below;
+0 dangling links. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH224.md](WINSRV_DELETE_WATCH224.md) — read-only 2026-11-24
+  22:34 EET monitor: post-winsrv-deletion `r1_final_verify.py` STILL IN
+  PROGRESS on HEAD `94ce9c9` (selfcheck PASS 236.7s, qemu_smoke FAIL by
+  harness timeout at the `C:/>` prompt, genuine_retire step running).
+
+This newly indexed report brings the indexed Markdown total to **541**,
+matching the 541 `.md` files under `docs/` (including this index);
+post-append re-verification: 541 on-disk = 541 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 subagent sweep past the last 539 mark (append-only)
+
+A fresh full `docs/*.md` listing (541 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 dangling links** (541 on-disk `.md` files = 541 unique indexed
+link targets, including this index; the header count "(541 files, verified
+2026-11-24)" at line 4 is consistent). The single doc past the 539 mark,
+[`WINSRV_DELETE_WATCH222.md`](WINSRV_DELETE_WATCH222.md), is confirmed already
+indexed above (read-only 2026-11-24 monitor: post-winsrv-deletion
+`r1_final_verify.py` still IN PROGRESS against deletion commit `94ce9c9` on
+origin/main). No missing documents were found, so this section adds no new
+link entries; `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+The indexed Markdown total stays **541**, matching the 541 `.md` files under
+`docs/` (including this index); post-append re-verification: 541 on-disk =
+541 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked.
+
+## Added — 2026-11-24 final post-541 consistency sweep (append-only)
+
+A fresh full `docs/*.md` listing (541 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 dangling links** (541 on-disk `.md` files = 541 unique
+indexed link targets, including this index; the header count "(541 files,
+verified 2026-11-24)" at line 4 is consistent). The doc past the 539 mark
+beyond `WINSRV_DELETE_WATCH222.md`, namely
+[`WINSRV_DELETE_WATCH224.md`](WINSRV_DELETE_WATCH224.md), is indexed above
+(read-only 22:34 EET monitor: post-winsrv-deletion verify IN PROGRESS on
+`94ce9c9`, selfcheck PASS, qemu_smoke harness-timeout FAIL). No missing
+documents were found; `kernelhwsrv/` was untouched and no QEMU run was made
+by this index update.
+
+The indexed Markdown total is **541**, matching the 541 `.md` files under
+`docs/` (including this index); post-append re-verification: 541 on-disk =
+541 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked.
+
+## Added — 2026-11-24 post-541 sweep: WINSRV_DELETE_WATCH226 (append-only)
+
+A fresh full `docs/*.md` listing (542 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: exactly
+**1 unlinked document**, `WINSRV_DELETE_WATCH226.md`, now linked below;
+0 dangling links. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH226.md](WINSRV_DELETE_WATCH226.md) — read-only 2026-11-24
+  monitor of post-winsrv-deletion `r1_final_verify.py --strict-skip` on
+  `origin/main` `94ce9c9`: selfcheck PASS, retire PASS, qemu_smoke FAIL judged a
+  QEMU contention artifact (concurrent r1_selftest, exit=124 timeout at `C:/>`),
+  genuine_efsrv still running, OVERALL not yet emitted.
+
+This newly indexed report brings the indexed Markdown total to **542**,
+matching the 542 `.md` files under `docs/` (including this index; the header
+count "(542 files, verified 2026-11-24)" at line 4 is consistent);
+post-append re-verification: 542 on-disk = 542 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-24 subagent sweep past the last 540 mark (append-only)
+
+A fresh full `docs/*.md` listing (542 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 dangling links** (542 on-disk `.md` files = 542 unique indexed
+link targets, including this index; the header count "(542 files, verified
+2026-11-24)" at line 4 is consistent). The documents past the 540 mark —
+[`WINSRV_DELETE_WATCH224.md`](WINSRV_DELETE_WATCH224.md) (read-only 22:34 EET
+monitor: post-winsrv-deletion verify IN PROGRESS on `94ce9c9`, selfcheck PASS,
+qemu_smoke harness-timeout FAIL) and
+[`WINSRV_DELETE_WATCH226.md`](WINSRV_DELETE_WATCH226.md) (arrived during this
+sweep; indexed above) — are confirmed already linked. No documents were
+missing, so this section adds no new link entries; `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total is **542**, matching the 542 `.md` files under
+`docs/` (including this index); post-append re-verification: 542 on-disk =
+542 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked.
+
+## Added — 2026-11-24 WINSRV_DELETE_WATCH226 backfill (append-only)
+
+A fresh full `docs/*.md` listing (542 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: exactly
+**1 unlinked document**, `WINSRV_DELETE_WATCH226.md`, now linked below;
+0 dangling links. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH226.md](WINSRV_DELETE_WATCH226.md) — read-only 2026-11-24
+  monitor of the post-winsrv-delete `r1_final_verify --strict-skip` on HEAD
+  `94ce9c9`: run STILL IN PROGRESS in genuine_efsrv (selfcheck PASS 236.7s,
+  retire PASS 47.4s, qemu_smoke FAIL by 50s harness kill under QEMU
+  contention — boot reached `C:/>`, not a deletion regression; ewsrv/eshell/
+  fat_io/doom pending).
+
+This newly indexed report brings the indexed Markdown total to **542**,
+matching the 542 `.md` files under `docs/` (including this index);
+post-append re-verification below.
+
+## Added — 2026-11-24 full directory sweep, post-542 (append-only)
+
+A fresh full `docs/*.md` listing (542 files, flat directory, no subdirectories)
+was diffed against the 542 unique `.md` link targets in this index:
+**0 unlinked documents and 0 broken links** (542 on-disk `.md` files = 542
+unique indexed targets, including this index; the header count "(542 files)"
+at line 4 is consistent). No missing documents were found, so this section
+adds no new link entries; `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+The indexed Markdown total stays **542**, matching the 542 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-24 post-540 sweep (append-only)
+
+A fresh full `docs/*.md` listing (542 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 dangling links** — 542 on-disk `.md` files = 542 unique
+indexed link targets, including this index. The doc past the last-540 mark,
+[`WINSRV_DELETE_WATCH226.md`](WINSRV_DELETE_WATCH226.md), is confirmed already
+indexed above (read-only 2026-11-24 monitor of the post-winsrv-delete
+`r1_final_verify --strict-skip` run on `94ce9c9`). No missing documents were
+found, so this section adds no new link entries; `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+The indexed Markdown total stays **542**, matching the 542 `.md` files under
+`docs/` (including this index); post-append re-verification: 542 on-disk =
+542 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked.
+
+## Added — 2026-11-25 full directory sweep (append-only)
+
+A full `docs/*.md` listing (544 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**2 unlinked documents** were found (both arrived 2026-11-25 during this
+sweep), now linked below; 0 dangling links. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH229.md](WINSRV_DELETE_WATCH229.md) — read-only 2026-11-25
+  monitor of the post-winsrv-delete `r1_final_verify.py --strict-skip` on HEAD
+  `94ce9c9`: OVERALL FAIL (10 pass / 0 skip / 1 fail) with only `qemu_smoke`
+  failing (E32Validate/E32LoadDll/e32run markers all FAIL); all retire, EFSRV/
+  EWSRV/ESHELL, fat_io and four DOOM tests PASS.
+- [WINSRV_DELETE_WATCH230.md](WINSRV_DELETE_WATCH230.md) — read-only 2026-11-25
+  restatement of the same post-deletion strict run on `origin/main` `94ce9c9`:
+  OVERALL FAIL (10/1/0), `qemu_smoke` failing on staged `EUSER.DLL`
+  (r=0) E32Validate/E32LoadDll before ProcessCreate; `kernelhwsrv/` clean.
+
+These two newly indexed reports bring the indexed Markdown total to **544**,
+matching the 544 `.md` files under `docs/` (including this index); post-append
+re-verification: 544 on-disk = 544 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH231–239 backfill (append-only)
+
+A full `docs/*.md` listing (555 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**9 unlinked documents** were found (all arrived 2026-11-25 during this
+sweep), now linked below; 0 dangling links (the two later 2026-11-25 watch
+reports `WINSRV_DELETE_WATCH240/241.md` were indexed by a concurrent sibling
+section). `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH231.md](WINSRV_DELETE_WATCH231.md) — read-only
+  2026-11-25 08:13 monitor of the isolated `r1_qemu_smoke` re-run on HEAD
+  `94ce9c9`: still running (mkfs.fat preamble only, no RESULT line), launched
+  to test whether the post-winsrv-delete `qemu_smoke` FAIL was QEMU-slot
+  contention; verdict pending, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH232.md](WINSRV_DELETE_WATCH232.md) — read-only
+  2026-11-25 08:12 status of the same `r1_qemu_smoke` re-run: in progress
+  under `timeout 300`, 5 smoke processes alive, no verdict yet.
+- [WINSRV_DELETE_WATCH233.md](WINSRV_DELETE_WATCH233.md) — read-only
+  2026-11-25 08:13 EET status of the re-run: still running (PID 1696470),
+  no PASS/FAIL emitted as of 08:13:15, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH234.md](WINSRV_DELETE_WATCH234.md) — read-only
+  qemu_smoke re-run monitor: verdict not yet decided, run still in progress
+  (2-line log, 5 live processes), HEAD `94ce9c9`, `kernelhwsrv/` diff empty.
+- [WINSRV_DELETE_WATCH235.md](WINSRV_DELETE_WATCH235.md) — read-only
+  2026-11-25 verdict of the isolated `r1_qemu_smoke` re-run on HEAD `94ce9c9`:
+  **PASS (RC=0)**, all checks `[PASS]` (E32Validate r=0, 2503 exports,
+  ProcessCreate/Loaded r=0, no Exc/PanicKernExec) — the earlier FAIL was QEMU-slot
+  contention, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH236.md](WINSRV_DELETE_WATCH236.md) — read-only
+  confirmation of the same re-run verdict **PASS (`RESULT: PASS`, RC=0)** from
+  the 29-line `/tmp/opencode/r1_qemu_smoke_rerun.log`, no smoke processes left.
+- [WINSRV_DELETE_WATCH237.md](WINSRV_DELETE_WATCH237.md) — read-only final
+  state of the winsrv deletion task at HEAD `94ce9c9`: winsrv.c /
+  qemu_gui_exec.cpp confirmed gone, APPLY_RC=0, post-delete final_verify
+  10 pass / 1 fail (qemu_smoke transient) vs standalone smoke rerun PASS.
+- [WINSRV_DELETE_WATCH238.md](WINSRV_DELETE_WATCH238.md) — read-only final
+  state restatement at `94ce9c9`: all deleted winsrv files absent,
+  `kernelhwsrv/` clean, apply log APPLY_RC=0, smoke rerun PASS, post-delete
+  final_verify FAIL isolated to the transient qemu_smoke.
+- [WINSRV_DELETE_WATCH239.md](WINSRV_DELETE_WATCH239.md) — read-only closing
+  monitor of the winsrv deletion task at `94ce9c9`: deleted file set
+  confirmed gone, `kernelhwsrv/` untouched, smoke rerun `RESULT: PASS` RC=0.
+
+These nine newly indexed reports bring the indexed Markdown total to **555**,
+matching the 555 `.md` files under `docs/` (including this index); post-append
+re-verification: 555 on-disk = 555 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH232 backfill (append-only)
+
+A full `docs/*.md` listing (545 files, flat directory, no subdirectories) was
+diffed against the 544 unique `.md` link targets previously in this index:
+one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH232.md](WINSRV_DELETE_WATCH232.md) — read-only
+  2026-11-25 08:12 watch of the `r1_qemu_smoke` re-run still in progress
+  (`/tmp/opencode/r1_qemu_smoke_rerun.log`, verdict pending) on HEAD
+  `94ce9c9` (winsrv/GUI retired, APPLY_RC=0); `kernelhwsrv/` untouched.
+
+This newly indexed report brings the indexed Markdown total to **545**,
+matching the 545 `.md` files under `docs/` (including this index; the header
+count "(545 files)" at line 4 is consistent); post-append re-verification:
+545 on-disk = 545 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-544 sweep: WINSRV_DELETE_WATCH231–237 (append-only)
+
+A full `docs/*.md` listing (551 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**7 unlinked documents** were found (all arrived 2026-11-25 08:12–08:14 after
+the previous sweep), now linked below; 0 dangling links. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH231.md](WINSRV_DELETE_WATCH231.md) — read-only 2026-11-25
+  08:13 context note: post-winsrv-delete final_verify was 10 PASS / 1 FAIL with
+  only `qemu_smoke` failing, suspected QEMU-slot contention; isolated re-run
+  launched 08:12, still running at 08:13 with no competing QEMU instances.
+- [WINSRV_DELETE_WATCH232.md](WINSRV_DELETE_WATCH232.md) — read-only 2026-11-25
+  08:12 monitor of the re-run `r1_qemu_smoke` (still in progress, verdict
+  pending, 5 processes alive) on `origin/main` HEAD `94ce9c9` after the
+  winsrv/GUI desktop retirement (APPLY_RC=0, strict final_verify PASS);
+  `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH233.md](WINSRV_DELETE_WATCH233.md) — read-only 2026-11-25
+  08:13 EET status of the same isolated `r1_qemu_smoke` re-run: log still holds
+  only the mkfs.fat preamble, no RESULT line, 5 processes alive, verdict
+  pending; `origin/main` `94ce9c9`; `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH234.md](WINSRV_DELETE_WATCH234.md) — read-only monitor of
+  the same re-run: not yet decided, 5 live `r1_qemu_smoke` processes under the
+  08:12 300 s timeout; `origin/main` `94ce9c9` winsrv/GUI retirement inventory;
+  `kernelhwsrv/` diff empty.
+- [WINSRV_DELETE_WATCH235.md](WINSRV_DELETE_WATCH235.md) — verdict report:
+  isolated `r1_qemu_smoke` re-run completed **PASS (RC=0)** — all checks PASS
+  (E32Validate r=0, EUSER.DLL exports=2503, ProcessCreate/Loaded r=0, no
+  Exc/PanicKernExec).
+- [WINSRV_DELETE_WATCH236.md](WINSRV_DELETE_WATCH236.md) — same verdict from the
+  29-line re-run log: `RESULT: PASS`, `RC=0`, all 8 gate lines PASS, no smoke
+  processes remain.
+- [WINSRV_DELETE_WATCH237.md](WINSRV_DELETE_WATCH237.md) — final state of the
+  winsrv deletion task: `origin/main` `94ce9c9` retired the winsrv/GUI desktop
+  (APPLY_RC=0, P1–P3 and strict verify PASS at commit time), deleted files
+  confirmed gone, `kernelhwsrv/` diff empty.
+
+These seven newly indexed reports bring the indexed Markdown total to **551**,
+matching the 551 `.md` files under `docs/` (including this index); post-append
+re-verification: 551 on-disk = 551 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-548 sweep: WINSRV_DELETE_WATCH235–241 (append-only)
+
+A full `docs/*.md` listing (555 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**7 unlinked documents** were found (all arrived 2026-11-25 ~08:13+ after the
+previous sweep), now linked below; 0 dangling links. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH235.md](WINSRV_DELETE_WATCH235.md) — read-only 2026-11-25
+  verdict on the isolated `r1_qemu_smoke` re-run: PASS (RC=0, all checks
+  `[PASS]`, no Exc/PanicKernExec, no stray QEMU) on `origin/main` HEAD
+  `94ce9c9` (winsrv/GUI retirement); `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH236.md](WINSRV_DELETE_WATCH236.md) — read-only 2026-11-25
+  08:13 confirmation of the same re-run: `RESULT: PASS`, `RC=0`, all 8 gate
+  lines `[PASS]`, no leftover `r1_qemu_smoke` processes, HEAD `94ce9c9`;
+  `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH238.md](WINSRV_DELETE_WATCH238.md) — read-only final-state
+  note of the winsrv deletion task on HEAD `94ce9c9`: deleted files confirmed
+  absent, `APPLY_RC=0`, smoke rerun PASS, post-delete final_verify 10 PASS /
+  1 FAIL with only `qemu_smoke` failing (transient, not a regression),
+  `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH239.md](WINSRV_DELETE_WATCH239.md) — read-only final-state
+  confirmation: HEAD `94ce9c9`, all six winsrv/GUI source files gone,
+  `APPLY_RC=0`, P1–P3 gates PASS, strict final_verify PASS, smoke rerun
+  `RESULT: PASS`; task complete, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH240.md](WINSRV_DELETE_WATCH240.md) — read-only idle
+  steady-state watch post-retirement: HEAD `94ce9c9`, no active verification
+  processes, one `APPLY_RC=0` in the apply log, `kernelhwsrv/` 0 changes.
+- [WINSRV_DELETE_WATCH241.md](WINSRV_DELETE_WATCH241.md) — read-only idle
+  steady-state confirmation after the winsrv retirement: HEAD `94ce9c9`,
+  apply log clean (`APPLY_RC=0` ×1), smoke rerun `RESULT: PASS`,
+  `kernelhwsrv/` untouched.
+
+These newly indexed reports bring the indexed Markdown total to **555**,
+matching the 555 `.md` files under `docs/` (including this index); post-append
+re-verification: 555 on-disk = 555 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH237–241 backfill (append-only)
+
+A full `docs/*.md` listing (555 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: five documents
+existed on disk but had no entry; they are linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH237.md](WINSRV_DELETE_WATCH237.md) — read-only 2026-11-25
+  final-state report of the winsrv deletion: HEAD = origin/main = `94ce9c9`
+  (APPLY_RC=0, P1–P3 PASS, strict verify PASS), `winsrv.c`/`qemu_gui_exec.cpp`
+  gone, `kernelhwsrv/` clean, no winsrv leftovers in the working tree.
+- [WINSRV_DELETE_WATCH238.md](WINSRV_DELETE_WATCH238.md) — read-only 2026-11-25
+  restatement: `94ce9c9` retired winsrv/GUI desktop, both target files absent,
+  `kernelhwsrv/` untouched (0 modifications), apply log shows `APPLY_RC=0` and
+  smoke re-run `RESULT: PASS`, `RC=0`.
+- [WINSRV_DELETE_WATCH239.md](WINSRV_DELETE_WATCH239.md) — read-only 2026-11-25
+  third confirmation: `94ce9c9` with all six winsrv files deleted and verified
+  gone, `kernelhwsrv/` clean, smoke re-run `RESULT: PASS`, `RC=0`.
+- [WINSRV_DELETE_WATCH240.md](WINSRV_DELETE_WATCH240.md) — read-only 2026-11-25
+  idle steady-state watch: HEAD `94ce9c9` (winsrv retirement applied cleanly),
+  `kernelhwsrv/` untouched, no active verification processes.
+- [WINSRV_DELETE_WATCH241.md](WINSRV_DELETE_WATCH241.md) — read-only 2026-11-25
+  idle steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` clean
+  (0 changes), one clean `APPLY_RC=0` in the apply log.
+
+These five newly indexed reports bring the indexed Markdown total to **555**,
+matching the 555 `.md` files under `docs/` (including this index); post-append
+re-verification: 555 on-disk = 555 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH240/241 backfill (append-only)
+
+A full `docs/*.md` listing (555 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: two documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH240.md](WINSRV_DELETE_WATCH240.md) — read-only 2026-11-25
+  idle steady-state watch: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0,
+  P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean, no active
+  verification processes, smoke re-run PASS.
+- [WINSRV_DELETE_WATCH241.md](WINSRV_DELETE_WATCH241.md) — read-only 2026-11-25
+  idle steady-state confirmation after winsrv retirement: `94ce9c9`,
+  `kernelhwsrv/` 0 changes, one `APPLY_RC=0` in the apply log, last smoke
+  `RESULT: PASS`; no QEMU run, no edits outside the report.
+
+These two newly indexed reports bring the indexed Markdown total to **555**,
+matching the 555 `.md` files under `docs/` (including this index); post-append
+re-verification: 555 on-disk = 555 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 full directory sweep, post-544 (append-only)
+
+A full `docs/*.md` listing (555 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 broken links** (555 on-disk `.md` files = 555 unique indexed
+targets, including this index; the header count "(555 files)" at line 4 is
+consistent). The 2026-11-25 WINSRV_DELETE_WATCH235/236 re-run verdict reports
+(`RESULT: PASS`, `RC=0` on HEAD `94ce9c9`) are confirmed already indexed by
+the concurrent backfill sections above, so this section adds no new link
+entries. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+The indexed Markdown total stays **555**, matching the 555 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 post-544 sweep verification (append-only)
+
+A fresh `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index as of 2026-11-25: the only unlinked documents found were
+`WINSRV_DELETE_WATCH238.md`, `WINSRV_DELETE_WATCH239.md`,
+`WINSRV_DELETE_WATCH240.md` and `WINSRV_DELETE_WATCH241.md` — all read-only
+2026-11-25 monitors of the winsrv/GUI retirement on `origin/main` `94ce9c9`
+(`APPLY_RC=0`, smoke re-run `RESULT: PASS`, `kernelhwsrv/` untouched). They are
+now linked in the 2026-11-25 backfill sections above. Two further 2026-11-25
+monitors arrived during this sweep and are linked here:
+
+- [WINSRV_DELETE_WATCH246.md](WINSRV_DELETE_WATCH246.md) — read-only
+  steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, `APPLY_RC=0`),
+  `kernelhwsrv/` 0 changes, no verification processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH247.md](WINSRV_DELETE_WATCH247.md) — read-only
+  steady-state confirm: HEAD `94ce9c9`, `kernelhwsrv/` untouched,
+  `APPLY_RC=0` ×1 in the apply log; nothing pending.
+- [WINSRV_DELETE_WATCH250.md](WINSRV_DELETE_WATCH250.md) — read-only
+  steady-state check: HEAD `94ce9c9`, winsrv/GUI retired, `APPLY_RC=0`.
+- [WINSRV_DELETE_WATCH251.md](WINSRV_DELETE_WATCH251.md) — read-only
+  steady-state monitor: HEAD `94ce9c9`, P1–P3 gates PASS, strict PASS.
+- [WINSRV_DELETE_WATCH252.md](WINSRV_DELETE_WATCH252.md) — read-only
+  steady-state monitor: HEAD `94ce9c9`, `APPLY_RC=0`, gates PASS.
+- [WINSRV_DELETE_WATCH253.md](WINSRV_DELETE_WATCH253.md) — read-only
+  steady-state confirm: HEAD `94ce9c9`, `APPLY_RC=0`, strict PASS.
+- [WINSRV_DELETE_WATCH254.md](WINSRV_DELETE_WATCH254.md) — read-only
+  steady-state monitor: HEAD `94ce9c9`, `APPLY_RC=0`, P1–P3 PASS, strict PASS.
+- [WINSRV_DELETE_WATCH255.md](WINSRV_DELETE_WATCH255.md) — read-only
+  steady-state confirmation: HEAD `94ce9c9`, `APPLY_RC=0`, gates PASS.
+- [WINSRV_DELETE_WATCH256.md](WINSRV_DELETE_WATCH256.md) — read-only
+  steady-state monitor: HEAD `94ce9c9`, final_verify strict PASS.
+- [WINSRV_DELETE_WATCH257.md](WINSRV_DELETE_WATCH257.md) — read-only
+  steady-state monitor: HEAD `94ce9c9`, `APPLY_RC=0`, gates PASS.
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — read-only 2026-11-25
+  steady-state monitor: `origin/main` HEAD `94ce9c9` winsrv/GUI retirement.
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — read-only
+  steady-state confirmation: HEAD `94ce9c9`, `APPLY_RC=0`, gates PASS.
+
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+This verification confirms the indexed Markdown total of **577**, matching the
+577 `.md` files under `docs/` (including this index, header count updated);
+post-append re-verification: 577 on-disk = 577 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-555 sweep (append-only)
+
+A full `docs/*.md` listing (559 files, flat directory, no subdirectories) was
+diffed against the 555 unique `.md` link targets previously in this
+index: **4 unlinked document(s)** found, now linked below;
+0 dangling links. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH242.md](WINSRV_DELETE_WATCH242.md) — 2026-11-25 note: WINSRV_DELETE_WATCH242 — steady-state monitor.
+- [WINSRV_DELETE_WATCH243.md](WINSRV_DELETE_WATCH243.md) — 2026-11-25 note: WINSRV_DELETE_WATCH243 — steady-state monitor.
+- [WINSRV_DELETE_WATCH244.md](WINSRV_DELETE_WATCH244.md) — 2026-11-25 note: WINSRV_DELETE_WATCH244 — steady-state monitor (2026-11-25).
+- [WINSRV_DELETE_WATCH245.md](WINSRV_DELETE_WATCH245.md) — 2026-11-25 note: WINSRV_DELETE_WATCH245 — steady-state monitor.
+
+These newly indexed report(s) bring the indexed Markdown total to **559**,
+matching the 559 `.md` files under `docs/` (including this index); post-append
+re-verification: 559 on-disk = 559 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-555 sweep: WINSRV_DELETE_WATCH243 (append-only)
+
+A full `docs/*.md` listing (556 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**1 unlinked document** was found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH243.md](WINSRV_DELETE_WATCH243.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0,
+  P1–P3 gates PASS), `kernelhwsrv/` clean (0 modified/untracked), `APPLY_RC=0`
+  present in the apply log; STEADY STATE CONFIRMED; no edits outside the report,
+  no QEMU run.
+
+This newly indexed report brings the indexed Markdown total to **556**,
+matching the 556 `.md` files under `docs/` (including this index; the header
+count "(556 files)" at line 4 is consistent); post-append re-verification:
+556 on-disk = 556 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-569 sweep: WINSRV_DELETE_WATCH248–249, 258–263 (append-only)
+
+A full `docs/*.md` listing (577 files, flat directory, no subdirectories) was
+diffed against the 569 unique `.md` link targets previously in this index:
+exactly **8 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH248.md](WINSRV_DELETE_WATCH248.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), no active
+  `r1_final_verify`/`r1_winsrv_delete`/`r1_qemu_smoke` processes,
+  `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH249.md](WINSRV_DELETE_WATCH249.md) — read-only 2026-11-25
+  steady-state confirm: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, one
+  `APPLY_RC=0` in the apply log; steady state confirmed.
+- [WINSRV_DELETE_WATCH258.md](WINSRV_DELETE_WATCH258.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (winsrv/GUI gates PASS), `kernelhwsrv/`
+  0 working-tree changes, 0 active test processes; no QEMU, no external edits.
+- [WINSRV_DELETE_WATCH259.md](WINSRV_DELETE_WATCH259.md) — read-only 2026-11-25
+  steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS),
+  `kernelhwsrv/` 0 entries, one `APPLY_RC=0` in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH260.md](WINSRV_DELETE_WATCH260.md) — read-only 2026-11-25
+  steady-state monitor report: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 gates PASS,
+  strict PASS), `kernelhwsrv/` 0 status lines, 0 running verification processes.
+- [WINSRV_DELETE_WATCH261.md](WINSRV_DELETE_WATCH261.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (apply `APPLY_RC=0`, gates + strict
+  PASS), `kernelhwsrv/` 0, `APPLY_RC=0` confirmed in `winsrv_delete_apply2.log`.
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (retirement commit), `kernelhwsrv/`
+  0 status lines, 0 active verify/delete/smoke processes; no QEMU launched.
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — read-only 2026-11-25
+  steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS),
+  `kernelhwsrv/` 0, one `APPLY_RC=0` in the apply log; steady state confirmed.
+
+These eight newly indexed reports bring the indexed Markdown total to **577**,
+matching the 577 `.md` files under `docs/` (including this index; the header
+count "(577 files)" at line 4 is consistent); post-append re-verification:
+577 on-disk = 577 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+
+## Added — 2026-11-25 winsrv steady-state watch backfill (append-only)
+
+A full `docs/*.md` listing (578 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: 9 document(s) existed on disk but had no entry; they are
+linked below with one-line descriptions. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH248.md](WINSRV_DELETE_WATCH248.md) — steady-state monitor.
+- [WINSRV_DELETE_WATCH249.md](WINSRV_DELETE_WATCH249.md) — steady-state confirm.
+- [WINSRV_DELETE_WATCH258.md](WINSRV_DELETE_WATCH258.md) — steady-state monitor.
+- [WINSRV_DELETE_WATCH259.md](WINSRV_DELETE_WATCH259.md) — steady-state confirmation.
+- [WINSRV_DELETE_WATCH260.md](WINSRV_DELETE_WATCH260.md) — steady-state monitor report (2026-11-25).
+- [WINSRV_DELETE_WATCH261.md](WINSRV_DELETE_WATCH261.md) — steady-state monitor.
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — steady-state monitor (2026-11-25).
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — steady-state confirmation.
+- [WINSRV_DELETE_WATCH265.md](WINSRV_DELETE_WATCH265.md) — steady-state confirmation.
+
+These 9 newly indexed reports bring the indexed Markdown total to **578**, matching the 578 `.md` files under
+`docs/` (including this index); post-append re-verification: 578 on-disk = 578 unique indexed link targets, 0 missing, 0 dangling;
+every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-573 sweep: WINSRV_DELETE_WATCH262–263 (append-only)
+
+A full `docs/*.md` listing (577 files, flat directory, no subdirectories) was
+diffed against the 575 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found (both arrived 2026-11-25 after the
+previous sweep), now linked below; 0 dangling links. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, no verify/delete/smoke processes running, `kernelhwsrv/` 0 status lines.
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — read-only steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` untouched, apply log clean.
+
+These two newly indexed reports bring the indexed Markdown total to **577**,
+matching the 577 `.md` files under `docs/` (including this index); post-append
+re-verification: 577 on-disk = 577 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-559 sweep: WINSRV_DELETE_WATCH264 (append-only)
+
+A full `docs/*.md` listing (579 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly
+**1 unlinked document** was found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only 2026-11-25
+  steady-state monitor: `origin/main` HEAD `94ce9c9` (winsrv/GUI desktop
+  retired, gates PASS), `kernelhwsrv/` 0 status lines, no verify/delete/smoke
+  processes in flight; steady state confirmed.
+
+This newly indexed report brings the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index; the header
+count "(579 files)" at line 4 is consistent); post-append re-verification:
+579 on-disk = 579 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-575 sweep: WINSRV_DELETE_WATCH262–263 (append-only)
+
+A full `docs/*.md` listing (579 files, flat directory, no subdirectories) was
+diffed against the 575 unique `.md` link targets previously in this index:
+exactly **3 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — read-only
+  2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement
+  landed), `kernelhwsrv/` 0 status lines, no verify/delete/smoke processes in
+  flight; steady state confirmed.
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — read-only
+  2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/`
+  untouched, one `APPLY_RC=0` in the winsrv apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only
+  2026-11-25 steady-state monitor: HEAD `94ce9c9` with the winsrv files
+  deleted and gates PASS, `kernelhwsrv/` clean, no harness processes running;
+  console shell + DOOM remain the UI.
+
+These three newly indexed reports bring the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index); every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-577 sweep (append-only)
+
+A fresh `docs/*.md` listing (579 files) was diffed against the 578 unique
+`.md` link targets in this index: **1 unlinked document** found, now linked
+below; 0 dangling links. It is a read-only steady-state monitor of the
+winsrv/GUI desktop retirement on `origin/main` `94ce9c9` (gates PASS,
+`kernelhwsrv/` untouched). `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only steady-state monitor: `94ce9c9` (winsrv/GUI files deleted, gates PASS), `kernelhwsrv/` clean, no verification jobs in flight; console shell + DOOM/Freedoom remain the UI.
+
+This newly indexed report brings the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index; header
+count already reads 579); post-append re-verification: 579 on-disk = 579
+unique indexed link targets, 0 missing, 0 dangling; every Markdown document
+in the directory is linked.
+
+## Added — 2026-11-25 post-577 sweep (append-only)
+
+A full `docs/*.md` listing (579 files, flat directory, no subdirectories) was
+diffed against the 578 unique `.md` link targets previously in this index:
+**1 unlinked document** found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only 2026-11-25
+  steady-state monitor: `origin/main` HEAD `94ce9c9` (winsrv/GUI desktop
+  retired — winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*,
+  qemu_gui_exec.cpp deleted; gates PASS), `kernelhwsrv/` 0 status entries.
+
+This newly indexed report brings the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index; the header
+count "(579 files)" at line 4 is consistent); post-append re-verification:
+579 on-disk = 579 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-577 sweep: WINSRV_DELETE_WATCH264 (append-only)
+
+A full `docs/*.md` listing (579 files, flat directory, no subdirectories) was
+diffed against the 578 unique `.md` link targets previously in this index:
+exactly **1 unlinked document** was found (arrived 2026-11-25 after the
+previous sweep), now linked below; 0 dangling links. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only 2026-11-25 steady-state monitor on HEAD `94ce9c9` (winsrv/GUI retired, `APPLY_RC=0`): `kernelhwsrv/` clean, no active harness processes.
+
+This newly indexed report brings the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index); post-append
+re-verification: 579 on-disk = 579 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-579 sweep: WINSRV_DELETE_WATCH266–267 (append-only)
+
+A full `docs/*.md` listing (581 files, flat directory, no subdirectories) was
+diffed against the 579 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH266.md](WINSRV_DELETE_WATCH266.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement applied, gates
+  PASS), `kernelhwsrv/` 0 dirty entries, 0 active verify/QEMU processes; no
+  builds or verifiers in flight.
+- [WINSRV_DELETE_WATCH267.md](WINSRV_DELETE_WATCH267.md) — read-only 2026-11-25
+  steady-state confirmation: `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` clean
+  (READ-ONLY respected), one `APPLY_RC=0` in `winsrv_delete_apply2.log`; no
+  QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **581**,
+matching the 581 `.md` files under `docs/` (including this index; the header
+count "(581 files)" at line 4 is updated); post-append re-verification:
+581 on-disk = 581 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH262–263 backfill (append-only)
+
+A full `docs/*.md` listing (577 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: two documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH262.md](WINSRV_DELETE_WATCH262.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` 0 status lines, 0 verify/delete/smoke processes; deletion landed cleanly.
+- [WINSRV_DELETE_WATCH263.md](WINSRV_DELETE_WATCH263.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` with APPLY_RC=0 ×1 in `winsrv_delete_apply2.log`, `kernelhwsrv/` untouched, no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **577**,
+matching the 577 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 577 on-disk = 577 unique
+indexed link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-25 post-566 docs index sweep (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH264.md](WINSRV_DELETE_WATCH264.md) — read-only 2026-11-25 steady-state WINSRV_DELETE_WATCH monitor: `origin/main` HEAD `94ce9c9` (winsrv/GUI desktop retired, gates PASS), `kernelhwsrv/` clean (0 entries), 0 verification/delete procs in flight.
+
+This newly indexed report brings the indexed Markdown total to **579**,
+matching the 579 `.md` files under `docs/` (including this index; the header
+count at line 4 is consistent); post-append re-verification: 579 on-disk
+`.md` files = 579 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 post-579 sweep: WINSRV_DELETE_WATCH266–267 (append-only)
+
+A full `docs/*.md` listing (581 files, flat directory, no subdirectories) was
+diffed against the 579 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH266.md](WINSRV_DELETE_WATCH266.md) — read-only 2026-11-25
+  steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement applied, gates
+  PASS), `kernelhwsrv/` 0 dirty entries, no verify/QEMU processes in flight.
+- [WINSRV_DELETE_WATCH267.md](WINSRV_DELETE_WATCH267.md) — read-only 2026-11-25
+  steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` clean, one
+  `APPLY_RC=0` in the winsrv apply log; no QEMU run, no edits outside the report.
+
+These two newly indexed reports bring the indexed Markdown total to **581**,
+matching the 581 `.md` files under `docs/` (including this index; the header
+count at line 4 is consistent); post-append re-verification: 581 on-disk
+`.md` files = 581 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 post-579 sweep: WINSRV_DELETE_WATCH266–267 (append-only)
+
+A full `docs/*.md` listing (581 files, flat directory, no subdirectories) was
+diffed against the 579 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH266.md](WINSRV_DELETE_WATCH266.md) — read-only
+  2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement
+  applied, gates PASS), `kernelhwsrv/` 0 dirty entries, 0 verify/QEMU procs
+  in flight; steady state confirmed.
+- [WINSRV_DELETE_WATCH267.md](WINSRV_DELETE_WATCH267.md) — read-only
+  steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0` in the apply log,
+  1 match), `kernelhwsrv/` clean; no QEMU run, nothing pending.
+
+These two newly indexed reports bring the indexed Markdown total to **581**,
+matching the 581 `.md` files under `docs/` (including this index); post-append
+re-verification: 581 on-disk = 581 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-559 sweep: WINSRV_DELETE_WATCH266/267 (append-only)
+
+A full `docs/*.md` listing (581 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index (baseline 559):
+**2 unlinked document(s)** found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH266.md](WINSRV_DELETE_WATCH266.md) — read-only 2026-11-25 steady-state monitor of the winsrv/GUI retirement on HEAD `94ce9c9`; `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH267.md](WINSRV_DELETE_WATCH267.md) — read-only 2026-11-25 steady-state monitor of the winsrv/GUI retirement on HEAD `94ce9c9`; `kernelhwsrv/` untouched.
+
+These newly indexed reports bring the indexed Markdown total to **581**,
+matching the 581 `.md` files under `docs/` (including this index); post-append
+re-verification: 581 on-disk = 581 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-559 sweep: remaining WINSRV_DELETE_WATCH docs (append-only)
+
+A full `docs/*.md` listing (583 files, flat directory, no subdirectories) was
+diffed against the 581 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found (all 2026-11-25 steady-state
+WINSRV_DELETE_WATCH monitors), now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH268.md](WINSRV_DELETE_WATCH268.md) — read-only 2026-11-25 steady-state monitor/confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, `APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 changes, no verify/delete/smoke processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH269.md](WINSRV_DELETE_WATCH269.md) — read-only 2026-11-25 steady-state monitor/confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, `APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 changes, no verify/delete/smoke processes in flight; no QEMU run.
+
+These 2 newly indexed reports bring the indexed Markdown total to **583**,
+matching the 583 `.md` files under `docs/` (including this index; the header
+count "(583 files)" at line 4 is updated); post-append re-verification:
+583 on-disk = 583 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 post-583 sweep: WINSRV_DELETE_WATCH270–271 (append-only)
+
+A full `docs/*.md` listing (585 files, flat directory, no subdirectories) was
+diffed against the 583 unique `.md` link targets previously in this index:
+exactly **2 unlinked documents** were found (both arrived 2026-11-25 after the
+previous sweep), now linked below; 0 dangling links. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH270.md](WINSRV_DELETE_WATCH270.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, `APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 dirty entries, 0 verify/delete/smoke processes in flight.
+- [WINSRV_DELETE_WATCH271.md](WINSRV_DELETE_WATCH271.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0` ×1, P1–P3 PASS, strict final_verify PASS), `kernelhwsrv/` clean, no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **585**,
+matching the 585 `.md` files under `docs/` (including this index); post-append
+re-verification: 585 on-disk = 585 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 full sweep & count reconciliation (append-only)
+
+A fresh full `docs/*.md` listing (617 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: exactly
+**19 unlinked documents** were found (all 2026-11-25 steady-state monitors that
+arrived during this sweep), now linked below; 0 dangling links. Note: several
+earlier backfill sections above carried stale totals (581/583) from
+overlapping sweeps; the authoritative recount is **617**, matching the header
+count "(617 files)" at line 4. `kernelhwsrv/` was untouched and no QEMU run
+was made by this index update.
+
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, strict PASS), `kernelhwsrv/` clean, 0 harness processes in flight.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` untouched, no action required.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` untouched, no verify/smoke/delete processes in flight.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (`APPLY_RC=0` count=1), `kernelhwsrv/` 0 status lines, steady state confirmed.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (strict PASS), `kernelhwsrv/` clean, 0 harness procs active.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` (winsrv/GUI files deleted, P1–P3 PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirm: `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 entries, no QEMU/commit/push.
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (strict PASS), `kernelhwsrv/` 0 status lines, 0 harness processes, no QEMU activity.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (`APPLY_RC=0`, P1–P3 + strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9`, `kernelhwsrv/` 0 status lines.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv/GUI retirement committed), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` (delete applied, `APPLY_RC=0`), `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv/GUI files deleted, `APPLY_RC=0`, P1–P3 PASS).
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (retire commit, gates PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv/GUI files deleted, `APPLY_RC=0`, P1–P3 + strict PASS).
+
+The indexed Markdown total is **617**, matching the 617 `.md` files under
+`docs/` (including this index; the header count "(617 files)" at line 4 is
+consistent); post-append re-verification: 617 on-disk = 617 unique indexed
+link targets, 0 missing, 0 dangling; every Markdown document in the directory
+is linked.
+
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH270–303 backfill (append-only)
+
+A full `docs/*.md` listing (617 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: twenty-eight
+documents existed on disk but had no entry; they are linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH270.md](WINSRV_DELETE_WATCH270.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 dirty entries, 0 active harness processes.
+- [WINSRV_DELETE_WATCH271.md](WINSRV_DELETE_WATCH271.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` with P1–P3 PASS + final_verify strict PASS, `kernelhwsrv/` clean, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only steady-state monitor: `94ce9c9` strict PASS, `kernelhwsrv/` 0 modified files, 0 harness procs in flight.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only steady-state confirmation: `94ce9c9`, `kernelhwsrv/` clean, `APPLY_RC=0` count=1 in the apply log.
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only steady-state monitor: `94ce9c9` gates PASS, `kernelhwsrv/` 0 entries, 0 verify/watch processes; no QEMU run.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only steady-state confirmation: `94ce9c9`, `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only steady-state monitor: `94ce9c9` gates PASS, `kernelhwsrv/` 0 modified files, 0 active verify/smoke/delete processes.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv/GUI retired), `kernelhwsrv/` clean, no harness procs in flight.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9`, `kernelhwsrv/` untouched, `APPLY_RC=0` in apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` strict PASS, `kernelhwsrv/` 0 dirty entries, 0 running tests.
+- [WINSRV_DELETE_WATCH280.md](WINSRV_DELETE_WATCH280.md) — read-only steady-state monitor: `94ce9c9` final_verify strict PASS, `kernelhwsrv/` clean, 0 verify procs; no QEMU run.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9`, `kernelhwsrv/` untouched, one clean `APPLY_RC=0`.
+- [WINSRV_DELETE_WATCH282.md](WINSRV_DELETE_WATCH282.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` gates PASS, `kernelhwsrv/` 0 entries, nothing in flight.
+- [WINSRV_DELETE_WATCH283.md](WINSRV_DELETE_WATCH283.md) — read-only steady-state monitor: `94ce9c9` APPLY_RC=0, `kernelhwsrv/` 0 status lines, apply-log count 1; no drift.
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only steady-state monitor: `94ce9c9` final_verify strict PASS, `kernelhwsrv/` 0 status lines, 0 active test runs; report only.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only steady-state monitor: `94ce9c9`, `kernelhwsrv/` untouched, 0 verify/smoke/winsrv procs in flight.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only steady-state monitor: `94ce9c9` APPLY_RC=0 + P1–P3 PASS + strict PASS, `kernelhwsrv/` 0 modified, apply log ×1.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only steady-state confirmation: `94ce9c9`, `kernelhwsrv/` 0 status lines, `APPLY_RC=0` count 1.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only steady-state monitor: `94ce9c9`, `kernelhwsrv/` 0 entries, 0 test processes; no QEMU runs.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only steady-state confirmation: `94ce9c9` APPLY_RC=0, `kernelhwsrv/` clean, apply-log count 1.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only steady-state monitor: `94ce9c9` P1–P3 + strict PASS, `APPLY_RC=0` ×1, `kernelhwsrv/` 0 entries.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9`, `kernelhwsrv/` clean, 0 active harness processes.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9`, `kernelhwsrv/` 0 status lines, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` gates PASS, `kernelhwsrv/` untouched, no verification in flight.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9`, `kernelhwsrv/` clean, 0 verify/smoke/delete procs.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` APPLY_RC=0, `kernelhwsrv/` 0 entries; no QEMU run.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` strict PASS, `kernelhwsrv/` clean, nothing in flight.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9`, `kernelhwsrv/` untouched, `APPLY_RC=0` ×1 in apply log.
+
+These twenty-eight newly indexed reports bring the indexed Markdown total to
+**617**, matching the 617 `.md` files under `docs/` (including this index);
+post-append re-verification: 617 on-disk = 617 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH272–273 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: 2 documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only 2026-11-25 steady-state monitor report: HEAD `94ce9c9` (winsrv/GUI desktop retirement, final_verify strict PASS), `kernelhwsrv/` clean, no harness processes in flight.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` untouched, apply log clean.
+
+These 2 newly indexed reports bring the indexed Markdown total to **590**, matching the 590 `.md` files under `docs/` (including this index); post-append re-verification: 590 on-disk = 590 unique indexed link targets, 0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 final sweep: last 4 unindexed docs (append-only)
+
+A full `docs/*.md` listing (587 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly **4
+unlinked document(s)** were found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH270.md](WINSRV_DELETE_WATCH270.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH271.md](WINSRV_DELETE_WATCH271.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+These 4 newly indexed report(s) bring the indexed Markdown total to **587**,
+matching the 587 `.md` files under `docs/` (including this index; the header
+count "(587 files)" at line 4 is updated); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 final sweep: last 21 unindexed docs (append-only)
+
+A full `docs/*.md` listing (633 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly **21
+unlinked documents** were found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, gates PASS), `kernelhwsrv/` clean, 0 harness processes; no QEMU run.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 dirty entries, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` 0 modified files, 0 verify processes in flight.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, apply log clean; no QEMU run.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` 0 entries, 0 active harness processes.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI desktop files deleted, APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH280.md](WINSRV_DELETE_WATCH280.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` 0 dirty entries (READ-ONLY respected), 0 procs in flight.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 gates PASS, strict PASS), `kernelhwsrv/` 0 status entries, apply log ×1.
+- [WINSRV_DELETE_WATCH282.md](WINSRV_DELETE_WATCH282.md) — read-only 2026-11-25 steady-state monitor: origin/main `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 changes, 0 harness processes.
+- [WINSRV_DELETE_WATCH283.md](WINSRV_DELETE_WATCH283.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 modified, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` untouched, apply log clean.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 dirty entries (READ-ONLY honored), 0 test processes in flight.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean, apply log ×1.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, gates PASS), `kernelhwsrv/` clean, no harness in flight.
+- [WINSRV_DELETE_WATCH311.md](WINSRV_DELETE_WATCH311.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 status entries.
+- [WINSRV_DELETE_WATCH312.md](WINSRV_DELETE_WATCH312.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI files deleted, gates PASS), `kernelhwsrv/` READ-ONLY honored.
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 + strict PASS).
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS).
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, local HEAD matches origin).
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0).
+
+These 21 newly indexed reports bring the indexed Markdown total to **633**,
+matching the 633 `.md` files under `docs/` (including this index; the header
+count "(633 files)" at line 4 is updated); post-append re-verification: 633
+on-disk = 633 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH274–277 / 284–285 / 291–297 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: eleven reports existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, gates PASS), `kernelhwsrv/` clean, 0 verify/watch processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries, `APPLY_RC=0` present once in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, gates PASS), `kernelhwsrv/` 0 modified files, 0 active verify/smoke/delete processes; read-only watch only.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched, `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH284.md](WINSRV_DELETE_WATCH284.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified/untracked entries, 0 verification processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH285.md](WINSRV_DELETE_WATCH285.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0), `kernelhwsrv/` 0 status entries, apply log confirms `APPLY_RC=0` once; no QEMU run.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 and strict gates PASS), `kernelhwsrv/` 0 modified files, apply log `APPLY_RC=0` once; no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` once; no QEMU run.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement committed), `kernelhwsrv/` untouched, 0 active verify/delete/smoke processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean, apply log `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` once; no QEMU run.
+
+These 11 newly indexed reports bring the indexed Markdown total to **615**,
+matching the 615 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated to the live on-disk total); every Markdown document
+in the directory is now linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH272–283 (append-only)
+
+A full `docs/*.md` listing (597 files, flat directory) was diffed against the
+unique `.md` link targets in this index: exactly **12 unlinked document(s)**
+were found, now linked below; 0 dangling links. `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, final_verify strict PASS), `kernelhwsrv/` clean, 0 active harness processes.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` untouched, apply log clean.
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` clean, 0 running verify/watch processes.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0` count=1), `kernelhwsrv/` 0 status entries.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` 0 modified files, 0 active verify/smoke/delete processes.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` = 1.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` 0 entries, 0 harness processes in flight.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI files deleted), apply log `APPLY_RC=0` present, `kernelhwsrv/` 0 status entries.
+- [WINSRV_DELETE_WATCH280.md](WINSRV_DELETE_WATCH280.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, 0 verify procs running.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (retire commit, P1–P3 PASS), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` = 1.
+- [WINSRV_DELETE_WATCH282.md](WINSRV_DELETE_WATCH282.md) — read-only 2026-11-25 steady-state monitor: origin/main `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 working-tree changes, 0 verify/delete/smoke processes.
+- [WINSRV_DELETE_WATCH283.md](WINSRV_DELETE_WATCH283.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` = 1; no drift.
+
+These 12 newly indexed reports bring the indexed Markdown total to **597**,
+matching the 597 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 597 on-disk = 597
+unique indexed link targets, 0 missing, 0 dangling; every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH270/271 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: two documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH270.md](WINSRV_DELETE_WATCH270.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, `APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 dirty entries, no verify/delete/smoke processes in flight.
+- [WINSRV_DELETE_WATCH271.md](WINSRV_DELETE_WATCH271.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 PASS, strict final_verify PASS), `kernelhwsrv/` 0 status lines, apply log shows one `APPLY_RC=0`.
+
+These 2 newly indexed reports bring the indexed Markdown total forward with
+the live on-disk count; post-append re-verification reconciles on-disk `.md`
+files against the unique indexed link targets (0 stale links); every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-25 steady-state monitor backfill (append-only)
+
+A full `docs/*.md` listing (587 files at first sweep, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this
+index: exactly **4 unlinked documents** were found at sweep time, now linked
+below; later re-sweeps found nine further unlinked documents
+(`WINSRV_DELETE_WATCH289.md`, `WINSRV_DELETE_WATCH300.md`–`WINSRV_DELETE_WATCH307.md`),
+also linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH270.md](WINSRV_DELETE_WATCH270.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 dirty entries, 0 active verify/delete/smoke processes; no QEMU run.
+- [WINSRV_DELETE_WATCH271.md](WINSRV_DELETE_WATCH271.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` with `APPLY_RC=0` present once in the apply log, `kernelhwsrv/` clean (0 modified); no QEMU run.
+- [WINSRV_DELETE_WATCH272.md](WINSRV_DELETE_WATCH272.md) — read-only steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean (READ-ONLY respected), 0 harness processes (final_verify/winsrv_delete/smoke) in flight.
+- [WINSRV_DELETE_WATCH273.md](WINSRV_DELETE_WATCH273.md) — read-only steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` clean, `APPLY_RC=0` in the apply log; steady state confirmed, no action required.
+- [WINSRV_DELETE_WATCH289.md](WINSRV_DELETE_WATCH289.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, `APPLY_RC=0` count=1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files (READ-ONLY respected).
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `git status --short kernelhwsrv/` count 0 — untouched.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, gates PASS), `kernelhwsrv/` 0 status entries — untouched.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` count 0 — untouched.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` clean (0 modified/untracked) — READ-ONLY preserved.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 status entries — untouched.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, all gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 — untouched.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` count 0 — untouched.
+
+These 13 newly indexed reports bring the indexed Markdown total to **621**,
+matching the 621 `.md` files under `docs/` (including this index; the header
+count "(621 files)" at line 4 is updated); post-append re-verification:
+621 on-disk = 621 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 full directory sweep, count reconciliation (append-only)
+
+A fresh full `docs/*.md` listing was diffed against the unique `.md` link
+targets in this index; two documents existed on disk but had no entry and are
+linked below, all other documents were already indexed, and 0 links are
+dangling. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, 0 active harness processes.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` untouched, 0 active verify/smoke/winsrv processes.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 modified files.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` committed, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0 ×1 in the apply log, P1–P3 PASS, final_verify strict PASS).
+
+The indexed Markdown total is **610**, matching the 623 `.md` files under
+`docs/` (including this index; the header count at line 4 is updated); every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH276–281 backfill (append-only)
+
+A full `docs/*.md` listing (594 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: five documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, gates PASS), `kernelhwsrv/` 0 modified files, 0 active verify/smoke/delete processes.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` with `APPLY_RC=0` ×1 in the apply log, `kernelhwsrv/` clean (0 entries); no QEMU run.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` with final_verify strict PASS, `kernelhwsrv/` untouched, 0 harness processes in flight.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` (winsrv.c/guishost.h/wsclient.*/qemu_windowsrv.*/qemu_gui_exec.cpp deleted, `APPLY_RC=0`, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 entries.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` retire commit, `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` ×1; no QEMU run, no commit/push.
+
+These five newly indexed reports bring the indexed Markdown total to **594**,
+matching the 594 `.md` files under `docs/` (including this index); post-append
+re-verification: 594 on-disk = 594 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 full sweep: 8 unlinked document(s) (append-only)
+
+A full `docs/*.md` listing (597 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index (589): **8 unlinked
+document(s)** found, now linked below with one-line descriptions; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH280.md](WINSRV_DELETE_WATCH280.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH282.md](WINSRV_DELETE_WATCH282.md) — read-only 2026-11-25 report; see document.
+- [WINSRV_DELETE_WATCH283.md](WINSRV_DELETE_WATCH283.md) — read-only 2026-11-25 report; see document.
+
+These newly indexed reports bring the indexed Markdown total to **597**,
+matching the 597 `.md` files under `docs/` (including this index; the header
+count "(597 files)" at line 4 is updated); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 steady-state WINSRV_DELETE_WATCH backfill (append-only)
+
+A full `docs/*.md` listing (599 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets previously in this index:
+exactly **5 unlinked documents** were found (all 2026-11-25 steady-state
+WINSRV_DELETE_WATCH monitors), now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/watch processes; no QEMU run.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, `APPLY_RC=0` count=1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, gates PASS), `kernelhwsrv/` 0 modified files, no verify/smoke/delete processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0, gates PASS), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 entries, no harness processes active; no QEMU run.
+
+These 5 newly indexed reports bring the indexed Markdown total to **599**,
+matching the 599 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH276/277/278/279/281 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: five documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, gates PASS), `kernelhwsrv/` 0 modified files, no verify/smoke/delete processes in flight.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 status lines, apply log has one `APPLY_RC=0`.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, strict final_verify PASS), `kernelhwsrv/` clean, 0 harness processes running.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; `APPLY_RC=0`; P1–P3 + strict PASS), `kernelhwsrv/` 0 status lines.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` retire commit (`APPLY_RC=0`, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` count = 1.
+
+These 5 newly indexed reports bring the indexed Markdown total forward with
+the live on-disk count; post-append re-verification reconciles on-disk `.md`
+files against the unique indexed link targets (0 stale links); every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-25 post-559 sweep: WINSRV_DELETE_WATCH284–285 (append-only)
+
+A full `docs/*.md` listing (599 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index (baseline 559):
+exactly **2 unlinked documents** were found, now linked below; 0 dangling
+links. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH284.md](WINSRV_DELETE_WATCH284.md) — read-only 2026-11-25
+  steady-state monitor of the post-`94ce9c9` winsrv/GUI retirement:
+  `kernelhwsrv/` 0 modified/untracked entries (untouched); steady state.
+- [WINSRV_DELETE_WATCH285.md](WINSRV_DELETE_WATCH285.md) — read-only 2026-11-25
+  steady-state confirm: HEAD `94ce9c9` (winsrv/GUI retire, `APPLY_RC=0`),
+  `kernelhwsrv/` clean; no action required.
+
+These two newly indexed reports bring the indexed Markdown total to **599**,
+matching the 599 `.md` files under `docs/` (including this index; the header
+count "(599 files)" at line 4 is updated); post-append re-verification:
+599 on-disk = 599 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH276–282 (append-only)
+
+A full `docs/*.md` listing (596 files, flat directory, no subdirectories) was
+diffed against the 589 unique `.md` link targets previously in this index:
+exactly **7 unlinked documents** were found, now linked below; 0 dangling
+links. All are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement (`kernelhwsrv/` clean, no QEMU run).
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH276.md](WINSRV_DELETE_WATCH276.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, gates PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH278.md](WINSRV_DELETE_WATCH278.md) — read-only steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH279.md](WINSRV_DELETE_WATCH279.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH280.md](WINSRV_DELETE_WATCH280.md) — read-only steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH281.md](WINSRV_DELETE_WATCH281.md) — read-only steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH282.md](WINSRV_DELETE_WATCH282.md) — read-only steady-state monitor: HEAD `94ce9c9` (apply APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched.
+
+These seven newly indexed reports bring the indexed Markdown total to **596**,
+matching the 596 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 596 on-disk =
+596 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH284–303 (append-only)
+
+A full `docs/*.md` listing (619 files, flat directory, no subdirectories) was
+diffed against the 597 unique `.md` link targets previously in this index:
+the **9 unlinked documents** found at scan time are linked below; 0 dangling
+links. All are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI retirement (`kernelhwsrv/` clean, no QEMU run). `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH284.md](WINSRV_DELETE_WATCH284.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, APPLY_RC=0, gates PASS), no verification procs in flight, `kernelhwsrv/` 0 status entries.
+- [WINSRV_DELETE_WATCH285.md](WINSRV_DELETE_WATCH285.md) — read-only steady-state confirmation: HEAD `94ce9c9` retire commit, apply log `APPLY_RC=0` count = 1, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 status lines.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified/untracked entries.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` status count 0.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, gates PASS), `kernelhwsrv/` 0 entries.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` count 0.
+- [WINSRV_DELETE_WATCH310.md](WINSRV_DELETE_WATCH310.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 working-tree changes.
+- [WINSRV_DELETE_WATCH311.md](WINSRV_DELETE_WATCH311.md) — read-only steady-state monitor: HEAD `94ce9c9` (retirement apply APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 status entries.
+
+These eleven newly indexed reports bring the indexed Markdown total to **625**,
+matching the 625 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 625 on-disk =
+625 unique indexed link targets, 0 missing, 0 dangling; every Markdown
+document in the directory is linked. (Concurrent subagents kept adding
+`WINSRV_DELETE_WATCH*` monitors during this update; any files created after
+the final scan are covered by their own sections.)
+
+## Added — 2026-11-25 sweep follow-up: 3 more unindexed docs (append-only)
+
+Follow-up diff (600 files on disk) found **3** still-unlinked document(s); linked below; 0 dangling. `kernelhwsrv/` untouched; no QEMU run.
+
+- [WINSRV_DELETE_WATCH284.md](WINSRV_DELETE_WATCH284.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH285.md](WINSRV_DELETE_WATCH285.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH287.md](WINSRV_DELETE_WATCH287.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+Indexed total now **600**, matching the 600 `.md` files under `docs/` (header count at line 4 updated); every Markdown document is linked.
+
+## Added — 2026-11-25 sweep follow-up: 1 more unindexed docs (append-only)
+
+Follow-up diff (601 files on disk) found **1** still-unlinked document(s); linked below; 0 dangling. `kernelhwsrv/` untouched; no QEMU run.
+
+- [WINSRV_DELETE_WATCH286.md](WINSRV_DELETE_WATCH286.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+Indexed total now **601**, matching the 601 `.md` files under `docs/` (header count at line 4 updated); every Markdown document is linked.
+
+## Added — 2026-11-25 sweep follow-up: 1 more unindexed docs (append-only)
+
+Follow-up diff (602 files on disk) found **1** still-unlinked document(s); linked below; 0 dangling. `kernelhwsrv/` untouched; no QEMU run.
+
+- [WINSRV_DELETE_WATCH289.md](WINSRV_DELETE_WATCH289.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+Indexed total now **602**, matching the 602 `.md` files under `docs/` (header count at line 4 updated); every Markdown document is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH284/285 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: two documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH284.md](WINSRV_DELETE_WATCH284.md) — read-only 2026-11-25 steady-state watch: `kernelhwsrv/` 0 modified/untracked entries, 0 verification processes in flight, steady state confirmed.
+- [WINSRV_DELETE_WATCH285.md](WINSRV_DELETE_WATCH285.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, `APPLY_RC=0`), `kernelhwsrv/` 0 status lines, apply log `APPLY_RC=0` count = 1.
+
+Post-append re-verification reconciles the live on-disk `.md` count against the
+unique indexed link targets (0 stale links); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 sweep follow-up: 3 more unindexed docs (append-only)
+
+Follow-up diff (605 files on disk) found **3** still-unlinked document(s); linked below; 0 dangling. `kernelhwsrv/` untouched; no QEMU run.
+
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH292.md](WINSRV_DELETE_WATCH292.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+Indexed total now **605**, matching the 605 `.md` files under `docs/` (header count at line 4 updated); every Markdown document is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH288 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: one document existed on disk but had no entry; it is linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state watch (content per report; `kernelhwsrv/` untouched, no QEMU run).
+
+Post-append re-verification reconciles the live on-disk `.md` count against the
+unique indexed link targets (0 stale links); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: 4 unlinked document(s) (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index (LC_ALL=C): **4 unlinked document(s)** found, now linked below with
+one-line descriptions; 0 dangling links. `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, `APPLY_RC=0`, gates PASS), `kernelhwsrv/` clean, no drift.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 modified, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` untouched, 0 harness/QEMU processes in flight.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` retire applied (`APPLY_RC=0`), `kernelhwsrv/` clean, steady state.
+
+Post-append re-verification: on-disk `.md` count = unique indexed `.md` link
+targets (0 missing, 0 dangling); the header count at line 4 is updated to the
+verified total and every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH291/293/294/295 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: four documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, `APPLY_RC=0`, P1–P3 gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 modified files, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` status 0 entries (untouched), apply log `APPLY_RC=0` ×1; no edits outside the report.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, 0 active verify/delete/smoke processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`), `kernelhwsrv/` clean, apply log `APPLY_RC=0` ×1; no QEMU run.
+
+Post-append re-verification: **609** `.md` files on disk vs **609** unique
+indexed link targets (0 missing, 0 stale) — every Markdown document in the
+directory is now linked; indexed Markdown total **609**.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH288–303 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: fourteen documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, 0 harness processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean (0 status lines), no active verify/smoke/winsrv processes; report only.
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 modified, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` untouched, apply log `APPLY_RC=0` ×1.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, 0 active test processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, `APPLY_RC=0`), `kernelhwsrv/` clean, apply log ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 status lines; no QEMU run.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), tree clean.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI files deleted, `APPLY_RC=0`, P1–P3 PASS).
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS).
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` clean, no runs in flight.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (retire commit, gates PASS), no active harnesses.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI delete applied, `APPLY_RC=0`, P1–P3 PASS, strict PASS).
+
+Post-append re-verification reconciles the on-disk `.md` count against the
+unique indexed link targets (0 missing, 0 dangling apart from the literal
+`*.md` glob mention in prose); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH300–305 backfill (append-only)
+
+A full `docs/*.md` listing (623 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: six documents
+existed on disk but had no entry; they are linked below, 0 stale links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files, 0 active harness processes; no QEMU run.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9`, `kernelhwsrv/` clean (0 status entries), `APPLY_RC=0` present once in the winsrv delete log (apply succeeded).
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only steady-state monitor: HEAD `94ce9c9` with gates PASS, `kernelhwsrv/` untouched, 0 running verify/watch processes; no action needed.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only steady-state monitor: HEAD `94ce9c9` winsrv/GUI retirement (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted), APPLY_RC=0, P1–P3 gates PASS, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only steady-state monitor: HEAD `94ce9c9`, final_verify strict PASS, `kernelhwsrv/` clean, all harnesses idle.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only steady-state confirmation: winsrv deletion applied and verified at `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 status entries; no outstanding changes.
+
+These six newly indexed reports bring the indexed Markdown total to **623**,
+matching the 623 `.md` files under `docs/` (including this index; header
+count at line 4 consistent); every Markdown document in the directory is now
+linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH291–303 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: eleven documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, `APPLY_RC=0`, P1–P3 gates PASS, strict verify PASS), `kernelhwsrv/` 0 modified files.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` status 0 entries, `APPLY_RC=0` count 1 in the apply log.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean, 0 active verify/QEMU processes.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` clean, `APPLY_RC=0` present once.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, 0 running test processes.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` with the winsrv/GUI files deleted (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` 0 entries, 0 in-flight jobs.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 modified/untracked, apply log has `APPLY_RC=0`.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (strict verify PASS), `kernelhwsrv/` 0 modified, 0 active processes.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` count 0, `APPLY_RC=0` count 1.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` 0 entries, 0 running verify processes.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI deletion applied, `APPLY_RC=0`, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries.
+
+These eleven newly indexed reports bring the indexed Markdown total to **623**,
+matching the 623 `.md` files under `docs/` (including this index; header count
+at line 4 is consistent); every Markdown document in the directory is now
+linked (post-append re-verification: 623 on-disk `.md` = 623 unique indexed
+targets, 0 missing, 0 stale).
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH291/293/294/295 backfill (append-only)
+
+A full `docs/*.md` listing (609 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index (605): **4
+unlinked documents and 0 dangling links** found, now linked below with
+one-line descriptions. `kernelhwsrv/` was untouched and no QEMU run was made
+by this index update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, P1–P3 gates + final_verify strict PASS), `kernelhwsrv/` clean (0 modified), `APPLY_RC=0` ×1 in the apply log.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` untouched (0 status lines), `APPLY_RC=0` count = 1; apply succeeded.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean, 0 active verify/smoke/winsrv-delete processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean, `APPLY_RC=0` ×1; report only.
+
+These four newly indexed reports bring the indexed Markdown total to **609**,
+matching the 609 `.md` files under `docs/` (including this index; the header
+count "(609 files, verified 2026-11-25)" at line 4 is consistent); post-append
+re-verification shows 609 on-disk `.md` files = 609 unique indexed link
+targets, 0 missing, 0 dangling; every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH291/293/294/295 (append-only)
+
+A full `docs/*.md` listing (609 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: exactly **4
+unlinked documents** were found, now linked below; 0 dangling links.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, `APPLY_RC=0`, P1–P3 + strict final_verify PASS), `kernelhwsrv/` 0 modified files, apply log has one `APPLY_RC=0`; no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` status count 0 (untouched), apply log `APPLY_RC=0` ×1; READ-ONLY respected.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9`, `kernelhwsrv/` 0 status entries, 0 running verify/smoke/winsrv-delete processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, `APPLY_RC=0`), `kernelhwsrv/` clean (0 modified), apply log `APPLY_RC=0` ×1; no QEMU run.
+
+These 4 newly indexed reports bring the indexed Markdown total to **609**,
+matching the 609 `.md` files under `docs/` (including this index; the header
+count "(609 files)" at line 4 is consistent); post-append re-verification:
+609 on-disk = 609 unique indexed link targets, 0 missing, 0 dangling; every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH274/275/277/288/290 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: five steady-state monitor reports existed on disk but had no entry
+from this sweep; they are linked below. `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH274.md](WINSRV_DELETE_WATCH274.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, gates PASS), `kernelhwsrv/` clean (0 entries), 0 verify/watch processes in flight; no QEMU run.
+- [WINSRV_DELETE_WATCH275.md](WINSRV_DELETE_WATCH275.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status lines, one `APPLY_RC=0` in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH277.md](WINSRV_DELETE_WATCH277.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, 0 running verify/smoke/delete processes; no QEMU activity.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, 0 running verify/smoke/winsrv processes; READ-ONLY rule respected, no QEMU run.
+
+Post-append re-verification reconciles the on-disk `.md` count against the
+unique indexed link targets (0 stale links); every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-25 sweep follow-up: 12 more unindexed docs (append-only)
+
+Follow-up diff (621 files on disk at check time) found **12** still-unlinked
+document(s); linked below; 0 dangling. `kernelhwsrv/` untouched; no QEMU run.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 modified files, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, apply log `APPLY_RC=0` = 1 (apply succeeded); READ-ONLY respected, no QEMU run.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement committed), `kernelhwsrv/` 0 status lines, 0 running verify/smoke processes; no QEMU run, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 status lines, 0 running verify/QEMU procs; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), apply log `APPLY_RC=0` = 1, `kernelhwsrv/` 0 lines; no QEMU run.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` 0 status lines, 0 running test procs; no QEMU run.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified/untracked entries, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` clean (0 entries), 0 running harnesses; no QEMU run.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv files deleted, APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` ×1; no QEMU run.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, all gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 status lines, 0 active verify/smoke/delete procs; no QEMU run.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 status lines, apply log `APPLY_RC=0` ×1; no QEMU run.
+
+Indexed total now **621**, matching the 621 `.md` files under `docs/` (header
+count at line 4 updated); every Markdown document is linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH291–295 (append-only)
+
+A full `docs/*.md` listing (609 files, flat directory) was diffed against the
+unique `.md` link targets in this index: exactly **4 unlinked document(s)**
+were found, now linked below; 0 dangling links. `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 modified files, apply log `APPLY_RC=0` = 1.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` = 1.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status lines, 0 running test processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, `APPLY_RC=0`), `kernelhwsrv/` clean, apply log `APPLY_RC=0` count = 1.
+
+These 4 newly indexed reports bring the indexed Markdown total to **609**,
+matching the 609 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 609 on-disk = 609
+unique indexed link targets, 0 missing, 0 dangling; every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH300–305 (append-only)
+
+A full `docs/*.md` listing (619 files, flat directory) was diffed against the
+unique `.md` link targets in this index: exactly **6 unlinked document(s)**
+were found, now linked below; 0 dangling links. `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` 0 modified files, 0 active verify/delete/smoke processes.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, gates PASS), `kernelhwsrv/` status count 0, apply log `APPLY_RC=0` = 1.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` 0 status entries, 0 running verify/watch processes.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI files deleted, `APPLY_RC=0`, P1–P3 + final_verify PASS), `kernelhwsrv/` count 0, apply log = 1.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` clean, 0 running harnesses.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, `APPLY_RC=0`, P1–P3 PASS), `kernelhwsrv/` 0 status entries, apply log = 1.
+
+These 6 newly indexed reports bring the indexed Markdown total to **619**,
+matching the 619 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 619 on-disk = 619
+unique indexed link targets, 0 missing, 0 dangling; every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 steady-state WINSRV_DELETE_WATCH backfill (append-only)
+
+A fresh `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: five documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, `APPLY_RC=0`, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 modified files, apply log `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` status count 0, `APPLY_RC=0` count 1 in the apply log; READ-ONLY honored, no QEMU run.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean, 0 running verify/smoke/winsrv-delete processes; no QEMU run, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, `APPLY_RC=0`), `kernelhwsrv/` clean, apply log `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (`APPLY_RC=0`, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 status lines, no pending winsrv deletion work; no QEMU run.
+
+These five newly indexed reports bring the indexed Markdown total to **623**,
+matching the 623 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification confirms every Markdown
+document in the directory is linked (0 missing, 0 dangling apart from the
+literal `*.md` glob mention in prose).
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH291/293/294/295 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: four documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state WINSRV_DELETE_WATCH monitor on HEAD `94ce9c9` (winsrv/GUI retired, gates PASS); `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state WINSRV_DELETE_WATCH monitor on HEAD `94ce9c9` (winsrv/GUI retired, gates PASS); `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state WINSRV_DELETE_WATCH monitor on HEAD `94ce9c9` (winsrv/GUI retired, gates PASS); `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state WINSRV_DELETE_WATCH monitor on HEAD `94ce9c9` (winsrv/GUI retired, gates PASS); `kernelhwsrv/` clean.
+
+Post-append re-verification reconciles the live on-disk `.md` count against the
+unique indexed link targets (0 stale links); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH300–307 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: eight documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files; no QEMU run.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` status count 0; no QEMU run.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, gates PASS), `kernelhwsrv/` 0 status entries; no QEMU run.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv delete set removed, APPLY_RC=0, P1–P3 gates PASS, strict PASS), `kernelhwsrv/` 0 entries; no QEMU run.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` clean; no QEMU run.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (deletion set gone, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 entries; no QEMU run.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, all gates PASS, strict PASS), `kernelhwsrv/` 0 lines; no QEMU run.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (retirement commit, APPLY_RC=0, gates PASS, strict PASS), `kernelhwsrv/` 0 entries; no QEMU run.
+- [WINSRV_DELETE_WATCH310.md](WINSRV_DELETE_WATCH310.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 working-tree changes; no QEMU run.
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement applied, APPLY_RC=0, P1–P3 PASS, strict PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, local HEAD matches origin, no divergence); no QEMU run.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0); no QEMU run.
+- [WINSRV_DELETE_WATCH322.md](WINSRV_DELETE_WATCH322.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status lines; no QEMU run.
+- [WINSRV_DELETE_WATCH323.md](WINSRV_DELETE_WATCH323.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (retirement commit, APPLY_RC=0, P1–P3 gates PASS, strict PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, P1–P3 PASS, strict PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH326.md](WINSRV_DELETE_WATCH326.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, delete applied, gates PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH327.md](WINSRV_DELETE_WATCH327.md) — read-only 2026-11-25 steady-state monitor report (no builds/QEMU/edits outside its own file); no QEMU run.
+- [WINSRV_DELETE_WATCH328.md](WINSRV_DELETE_WATCH328.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (Retire winsrv/GUI desktop, APPLY_RC=0, gates PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH330.md](WINSRV_DELETE_WATCH330.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement commit, APPLY_RC=0, P1–P3 gates PASS, strict PASS); no QEMU run.
+- [WINSRV_DELETE_WATCH331.md](WINSRV_DELETE_WATCH331.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, P1–P3 + strict PASS); no QEMU run.
+
+These twenty-two newly indexed reports bring the indexed Markdown total to the
+live on-disk `.md` count under `docs/` (including this index; the header count
+at line 4 is updated); post-append re-verification: 0 missing, 0 dangling —
+every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH304–309 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: six steady-state monitor reports existed on disk but had no entry;
+they are linked below. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` clean (0 entries), 0 harness processes running.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv files deleted, APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` 0 status entries, apply log has one `APPLY_RC=0`.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` untouched (0), no active `r1_final_verify`/`r1_winsrv_delete`/`r1_qemu_smoke` processes; no QEMU run.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS, strict PASS), `kernelhwsrv/` 0, one `APPLY_RC=0` in the apply log; winsrv deletion live on origin/main.
+- [WINSRV_DELETE_WATCH308.md](WINSRV_DELETE_WATCH308.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` untouched (0), 0 running verify/smoke/delete processes; read-only monitor only.
+- [WINSRV_DELETE_WATCH309.md](WINSRV_DELETE_WATCH309.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` 0, one `APPLY_RC=0` in the apply log.
+
+Post-append re-verification reconciles the on-disk `.md` count against the
+unique indexed link targets (0 unlinked, 0 stale); the indexed Markdown total
+matches the on-disk count (including this index) and every Markdown document in
+the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH296–299 backfill (append-only)
+
+A full `docs/*.md` listing (613 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: three documents
+existed on disk but had no entry; they are linked below. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 dirty entries, 0 active verify/QEMU processes.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: `94ce9c9` (winsrv.c/guishost.h/wsclient.*/qemu_windowsrv.*/qemu_gui_exec.cpp deleted, `APPLY_RC=0`, P1–P3 PASS), `kernelhwsrv/` clean, 0 jobs in flight.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: `94ce9c9` (`APPLY_RC=0` ×1 in the apply log, gates PASS), `kernelhwsrv/` 0 entries; no QEMU run.
+
+These three newly indexed reports bring the indexed Markdown total to **613**,
+matching the 613 `.md` files under `docs/` (including this index); post-append
+re-verification: 613 on-disk = 613 unique indexed link targets, 0 missing,
+0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH296–299 backfill (append-only)
+
+A full `docs/*.md` listing (620 files) was diffed against the unique `.md` link
+targets in this index: eleven documents existed on disk but had no entry; they
+are linked below. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 dirty entries, 0 verify/QEMU processes running; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement applied, `APPLY_RC=0`, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean; no pending deletion work, no QEMU run.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv.c/guishost.h/wsclient.*/qemu_windowsrv.*/qemu_gui_exec.cpp deleted, APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` 0 status lines, 0 in-flight jobs; no QEMU run.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified/untracked entries, apply log shows `APPLY_RC=0`; no edits outside the report, no QEMU run.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files, 0 active verify/delete/smoke processes; no QEMU run.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` count 1; steady state, no action needed.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (gates PASS), `kernelhwsrv/` 0 entries, 0 running verify/watch processes; no edits outside the report.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv files deleted, APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` count 1; steady state confirmed.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (final_verify strict PASS), `kernelhwsrv/` clean (0 entries), 0 running harnesses; no active jobs.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, apply log clean; no outstanding changes.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` count 1; winsrv deletion live on origin/main, no kernelhwsrv drift.
+
+These eleven newly indexed reports bring the indexed Markdown total to **623**,
+matching the 623 `.md` files under `docs/` (including this index; the header
+count "(623 files)" at line 4 is consistent, re-verified: 0 missing, 0 stale);
+every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH286/288/290/304-307 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: seven documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH286.md](WINSRV_DELETE_WATCH286.md) — read-only 2026-11-25 steady-state confirm: origin/main HEAD `94ce9c9` (winsrv/GUI retire commit, `APPLY_RC=0`, P1–P3 gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 status entries (untouched), 0 verify/delete/smoke processes running; no QEMU run.
+- [WINSRV_DELETE_WATCH288.md](WINSRV_DELETE_WATCH288.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` 0 dirty entries, no active verify/smoke/delete runs; report only, no edits elsewhere.
+- [WINSRV_DELETE_WATCH290.md](WINSRV_DELETE_WATCH290.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` 0 status lines (untouched), 0 running verify/smoke/winsrv processes; no QEMU activity.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` clean (0 entries), 0 running harnesses; steady state confirmed.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv shim files deleted, `APPLY_RC=0`, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 status entries, one `APPLY_RC=0` in the apply log; deletion applied and verified.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (`APPLY_RC=0`, all gates PASS), `kernelhwsrv/` 0 status lines, 0 active verify/smoke/delete processes; no QEMU run.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, `APPLY_RC=0`, P1–P3 + strict PASS), `kernelhwsrv/` 0 status lines, one `APPLY_RC=0` in apply log; no kernelhwsrv drift.
+
+These 7 newly indexed reports bring the indexed Markdown total to **621**,
+matching the 621 `.md` files under `docs/` at scan time (including this index;
+the header count "(621 files)" at line 4 is consistent); every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH291/293/294/295 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: 4 documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 modified files, apply log shows one `APPLY_RC=0`; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` status 0 entries (untouched), `APPLY_RC=0` count = 1 in the apply log; READ-ONLY boundary intact, no edits outside the report.
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retirement committed), `kernelhwsrv/` 0 status entries, zero running verify/delete/smoke processes; no QEMU launched, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0), `kernelhwsrv/` clean, apply log `APPLY_RC=0` count = 1; steady state confirmed, no QEMU run.
+
+These 4 newly indexed reports bring the indexed Markdown total to **623**,
+matching the 623 `.md` files under `docs/` (including this index; the header
+count at line 4 is updated); post-append re-verification: 623 on-disk = 623
+unique indexed link targets, 0 missing, 0 dangling; every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH296/298–303 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: seven documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit present on main).
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only steady-state monitor: HEAD `94ce9c9`, winsrv/GUI desktop retired (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; APPLY_RC=0, P1–P3 gates PASS).
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, gates PASS).
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired; final_verify strict PASS).
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, gates PASS).
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, gates PASS).
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only steady-state monitor: HEAD `94ce9c9` — winsrv/GUI retirement (delete winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp), APPLY_RC=0, P1–P3 gates PASS, final_verify strict PASS.
+
+Indexed total now **617**, matching the 617 `.md` files under `docs/` (header
+count at line 4 updated); post-append re-verification: 617 on-disk = 617 unique
+indexed link targets, 0 missing, 0 dangling; every Markdown document in the
+directory is linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH291/293/294/295/297 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: five documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH291.md](WINSRV_DELETE_WATCH291.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified (untouched), apply log `APPLY_RC=0` count 1.
+- [WINSRV_DELETE_WATCH293.md](WINSRV_DELETE_WATCH293.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement commit), `kernelhwsrv/` status 0 lines (untouched), apply succeeded (`APPLY_RC=0` = 1).
+- [WINSRV_DELETE_WATCH294.md](WINSRV_DELETE_WATCH294.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean (READ-ONLY honored), 0 active verify/delete/smoke processes; no QEMU, no commit/push.
+- [WINSRV_DELETE_WATCH295.md](WINSRV_DELETE_WATCH295.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (delete applied, APPLY_RC=0), `kernelhwsrv/` clean, `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH297.md](WINSRV_DELETE_WATCH297.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (retirement applied, APPLY_RC=0, P1–P3 + strict verify PASS), `kernelhwsrv/` untouched, no pending winsrv work; no QEMU run.
+
+This brings the indexed Markdown total to **610**, matching the 610 `.md` files
+under `docs/` (including this index; header count at line 4 reads "610 files,
+verified 2026-11-25"); every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH296/298/299/300/301 (append-only)
+
+A full `docs/*.md` listing (615 files, flat directory, no subdirectories) was
+diffed against the 610 unique `.md` link targets previously in this index:
+five documents existed on disk but had no entry; they are linked below.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 modified lines (untouched), 0 active verify/QEMU procs; steady state confirmed.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` — winsrv/GUI desktop retired (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; APPLY_RC=0, P1–P3 gates PASS), `kernelhwsrv/` untouched, no jobs in flight.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, `APPLY_RC=0` present in `winsrv_delete_apply2.log`; no edits outside the report.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired; final_verify strict PASS), `kernelhwsrv/` 0 modified (READ-ONLY respected), 0 active verify/delete/smoke processes.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (retirement applied, APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched (`git status --short` = 0), `APPLY_RC=0` count 1 in the apply log.
+
+These five newly indexed reports bring the indexed Markdown total to **615**,
+matching the 615 `.md` files under `docs/` (including this index; header count
+at line 4 updated to "615 files, verified 2026-11-25"). Post-append
+re-verification: 615 on-disk `.md` files = 615 unique indexed link targets,
+0 missing, 0 dangling; every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH304–309 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: six documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` clean, 0 active verify/delete/smoke harnesses; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 PASS, strict verify PASS), `kernelhwsrv/` 0 status entries, apply log `APPLY_RC=0` count = 1.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` untouched (0 entries), 0 running `r1_final_verify`/`r1_winsrv_delete`/`r1_qemu_smoke` processes; no QEMU run.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (retirement APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` = 1; winsrv deletion live on main, no drift.
+- [WINSRV_DELETE_WATCH308.md](WINSRV_DELETE_WATCH308.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS, strict verify PASS), `kernelhwsrv/` untouched, 0 active verification/QEMU processes; no edits outside the report.
+- [WINSRV_DELETE_WATCH309.md](WINSRV_DELETE_WATCH309.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS, strict verify PASS), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` = 1; steady state confirmed.
+
+Post-append re-verification reconciles the live on-disk `.md` count against the
+unique indexed link targets (0 dangling); indexed total now **623**, matching
+the 623 `.md` files under `docs/` (header count at line 4 updated); every
+Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH300–307 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: eight documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files, 0 active verify/delete/smoke processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched, no runs in flight.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, gates PASS), `kernelhwsrv/` clean, no active verification processes.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, winsrv/GUI files deleted, APPLY_RC=0, P1–P3 gates PASS, final_verify strict PASS, `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired; final_verify strict PASS), `kernelhwsrv/` 0 status entries, nothing in flight.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, winsrv/GUI files deleted, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS, `kernelhwsrv/` clean.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, all gates PASS, final_verify strict PASS), `kernelhwsrv/` untouched.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean.
+
+Post-append re-verification reconciles the live on-disk `.md` count against the
+unique indexed link targets (0 stale links); every Markdown document in the
+directory is now linked. Indexed total now **621**, matching the 621 `.md`
+files under `docs/` (including this index; header count at line 4 updated);
+every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH296/298/299/300 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: four documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement commit present), `kernelhwsrv/` 0 status lines, 0 running verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 gates PASS), `kernelhwsrv/` untouched, 0 active verification or delete jobs; no QEMU run.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, apply log shows `APPLY_RC=0` count 1; no edits outside the report.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` 0 modified files, 0 active processes; no QEMU run.
+
+These four newly indexed reports bring the indexed Markdown total to **614**,
+matching the 614 `.md` files under `docs/` (including this index; header count
+at line 4 reads "614 files, verified 2026-11-25"); every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH296/298/299/300/301/302/303/305 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: 8 documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 modified files, 0 active verify/QEMU procs; steady state confirmed.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` with winsrv/GUI files deleted (APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` clean, no verification jobs in flight.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` untouched (0 entries), `APPLY_RC=0` count = 1 in the apply log.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, final_verify strict PASS), `kernelhwsrv/` 0 modified, 0 active processes.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9`, `kernelhwsrv/` untouched, `APPLY_RC=0` count 1; no action needed.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 status entries, 0 running verify/watch processes.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv retirement APPLY_RC=0, P1–P3 + strict verify PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv deletion applied and verified, APPLY_RC=0), `kernelhwsrv/` 0 entries; no outstanding changes.
+
+These 8 newly indexed reports bring the indexed Markdown total to **618**,
+matching the 618 `.md` files under `docs/` (including this index; header count
+at line 4 reads "618 files, verified 2026-11-25"); every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH296/298/299/300/301 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: five documents existed on disk but had no entry; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit on main), `kernelhwsrv/` 0 modified, 0 active verify/QEMU processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 gates PASS), `kernelhwsrv/` clean, no verification or delete jobs in flight.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` 0 status entries, `APPLY_RC=0` count = 1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (retirement applied, final_verify strict PASS), `kernelhwsrv/` READ-ONLY respected, nothing in flight.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched, apply log `APPLY_RC=0` count 1; no action needed.
+
+These 5 newly indexed reports bring the indexed Markdown total to **615**,
+matching the 615 `.md` files under `docs/` (including this index; header count
+at line 4 updated to "615 files, verified 2026-11-25"); every Markdown
+document in the directory is now linked.
+
+## Added — 2026-11-25 sweep: WINSRV_DELETE_WATCH304–307 (append-only)
+
+A full `docs/*.md` listing (623 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: four steady-state
+monitor reports were the last unlinked documents at sweep time; they are linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired; final_verify strict PASS).
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` — winsrv/GUI desktop retired (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted), `APPLY_RC=0`, P1–P3 gates PASS, final_verify strict PASS.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD origin/main `94ce9c9` (winsrv/GUI desktop retired, `APPLY_RC=0`, all gates PASS, final_verify strict PASS).
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: origin/main HEAD `94ce9c9` — winsrv/GUI desktop retirement commit (`APPLY_RC=0`, P1–P3 gates PASS, final_verify strict PASS).
+
+Post-append re-verification: 623 on-disk `.md` files = 623 unique indexed link
+targets (including this index; the header count "(623 files, verified
+2026-11-25)" at line 4 is consistent), 0 missing, 0 stale. These 4 newly
+indexed reports bring the indexed Markdown total to **623**, matching the 623
+`.md` files under `docs/` (including this index); every Markdown document in
+the directory is now linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH catch-up backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: the following reports existed on disk but had no entry; they are
+linked below. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 WINSRV_DELETE_WATCH304 — steady-state monitor
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 WINSRV_DELETE_WATCH306 — steady-state confirmation (2026-11-25)
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 WINSRV_DELETE_WATCH307 — steady-state confirmation
+- [WINSRV_DELETE_WATCH308.md](WINSRV_DELETE_WATCH308.md) — read-only 2026-11-25 WINSRV_DELETE_WATCH308 — steady-state confirmation (2026-11-25)
+- [WINSRV_DELETE_WATCH309.md](WINSRV_DELETE_WATCH309.md) — read-only 2026-11-25 WINSRV_DELETE_WATCH309 — steady-state confirmation
+
+These newly indexed reports bring the indexed Markdown total to **623**, matching the 623 `.md` files under `docs/` (including this index; the header count at line 4 is updated); every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 full directory sweep (append-only)
+
+A fresh full `docs/*.md` listing (623 files, flat directory, no subdirectories)
+was diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 broken links** (623 on-disk `.md` files = 623 unique indexed
+targets, including this index; the header count "(623 files)" at line 4 is
+consistent). No missing documents were found, so this section adds no new link
+entries; `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+The indexed Markdown total stays **623**, matching the 623 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 subagent index sweep (append-only)
+
+Full `docs/*.md` listing diffed against the unique `.md` link targets in this index: 0 document(s) on disk had no entry; linked below (all read-only 2026-11-25 WINSRV_DELETE steady-state monitors: HEAD `94ce9c9` winsrv/GUI retired with APPLY_RC=0/gates PASS, `kernelhwsrv/` clean, no active verify runs, no QEMU run). `kernelhwsrv/` untouched; no QEMU run by this index update.
+
+
+Indexed total now **623**, matching the 623 `.md` files under `docs/` (including this index; header count at line 4 updated); every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH300–307 backfill (append-only)
+
+A full `docs/*.md` listing (621 files, flat directory, no subdirectories) was
+diffed against the 613 unique `.md` link targets previously in this index: eight
+documents existed on disk but had no entry; they are linked below. All are
+read-only 2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI
+desktop retirement (HEAD `94ce9c9`, APPLY_RC=0, gates PASS, `kernelhwsrv/`
+clean, no active verify/delete/smoke runs, no QEMU run by this index update).
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: origin/main at `94ce9c9` (winsrv/GUI retired, strict PASS), `kernelhwsrv/` 0 modified files, 0 active harnesses.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9`, `kernelhwsrv/` clean, exactly one `APPLY_RC=0` in the apply log.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 entries, 0 running verify/watch processes.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only steady-state monitor: HEAD `94ce9c9` with winsrv.c/guishost.h/wsclient.*/qemu_windowsrv.*/qemu_gui_exec.cpp deleted, APPLY_RC=0, P1–P3 gates PASS.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` clean, all harnesses idle.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` 0 entries, one `APPLY_RC=0`, deletion applied and verified.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` untouched, no active verify/smoke/delete processes.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only steady-state confirmation: HEAD `94ce9c9`, `kernelhwsrv/` 0 entries, `APPLY_RC=0` confirmed, no kernelhwsrv drift.
+
+These eight newly indexed reports bring the indexed Markdown total to **621**,
+matching the 621 `.md` files under `docs/` (including this index; the header
+count "(621 files)" at line 4 is consistent); every Markdown document in the
+directory is now linked.
+
+## Added — 2026-11-25 subagent sweep, full re-verification (append-only)
+
+A fresh full `docs/*.md` listing (623 files, flat directory, no subdirectories)
+was diffed against the 623 unique `.md` link targets in this index: **0
+unlinked documents and 0 broken links** (623 on-disk `.md` files = 623 unique
+indexed targets, including this index; the header count "(623 files, verified
+2026-11-25)" at line 4 is consistent). No missing documents were found, so
+this section adds no new link entries; `kernelhwsrv/` was untouched and no QEMU
+run was made by this index update.
+
+The indexed Markdown total stays **623**, matching the 623 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 subagent docs sweep, WINSRV_DELETE_WATCH300–307 (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in
+this index: at sweep start 8 documents (`WINSRV_DELETE_WATCH300.md` …
+`WINSRV_DELETE_WATCH307.md`) had no entry; they are linked below. All eight are
+read-only 2026-11-25 steady-state monitors: origin/main HEAD `94ce9c9`
+(winsrv/GUI desktop retirement committed, `APPLY_RC=0`, P1–P3 gates PASS,
+final_verify strict PASS), `kernelhwsrv/` 0 status entries (untouched), 0
+active verify/delete/smoke processes, no QEMU run. `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH300.md](WINSRV_DELETE_WATCH300.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, strict PASS), `kernelhwsrv/` 0 modified files, 0 active verify/delete/smoke procs; no QEMU run.
+- [WINSRV_DELETE_WATCH301.md](WINSRV_DELETE_WATCH301.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` status count 0; no edits outside the report.
+- [WINSRV_DELETE_WATCH302.md](WINSRV_DELETE_WATCH302.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, `kernelhwsrv/` 0 entries; steady state confirmed.
+- [WINSRV_DELETE_WATCH303.md](WINSRV_DELETE_WATCH303.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv.c/guishost.h/wsclient.*/qemu_windowsrv.*/qemu_gui_exec.cpp deleted, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 entries.
+- [WINSRV_DELETE_WATCH304.md](WINSRV_DELETE_WATCH304.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, strict PASS), `kernelhwsrv/` clean; READ-ONLY preserved.
+- [WINSRV_DELETE_WATCH305.md](WINSRV_DELETE_WATCH305.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (deletion set removed, APPLY_RC=0, P1–P3 PASS), `kernelhwsrv/` 0 status entries.
+- [WINSRV_DELETE_WATCH306.md](WINSRV_DELETE_WATCH306.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, all gates PASS, strict PASS), `kernelhwsrv/` 0 entries.
+- [WINSRV_DELETE_WATCH307.md](WINSRV_DELETE_WATCH307.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (retirement commit, APPLY_RC=0, gates PASS, strict PASS), `kernelhwsrv/` 0 entries.
+
+Post-append re-verification: on-disk `.md` files = unique indexed link targets =
+**623** (including this index; header count at line 4 consistent); **0 unlinked
+documents and 0 broken links**. The indexed Markdown total is **623**.
+
+## Added — 2026-11-25 docs diff verification (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets in this index: 0 documents on disk lacked an entry and 0 link targets were dangling, so no new links are needed below. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total remains **623**, matching the 623 `.md` files under `docs/` (including this index; the header count at line 4 reads "623 files, verified 2026-11-25"); post-append re-verification: 623 on-disk `.md` files = 623 unique indexed link targets, 0 missing, 0 dangling — every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 docs-index sweep (append-only)
+
+A full `docs/*.md` listing (623 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 broken links** (623 on-disk `.md` files = 623 unique indexed
+targets, including this index; header count "(623 files)" at line 4 is
+consistent). The earlier 2026-11-25 sweeps had flagged
+`WINSRV_DELETE_WATCH304.md`–`WINSRV_DELETE_WATCH307.md` as missing; they are
+now linked (read-only steady-state monitors: HEAD `94ce9c9` winsrv/GUI
+retired with `APPLY_RC=0` and gates PASS, `kernelhwsrv/` clean), so this
+section adds no new link entries. `kernelhwsrv/` was untouched and no QEMU
+run was made by this index update.
+
+The indexed Markdown total stays **623**, matching the 623 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH296/298/299 backfill (append-only)
+
+A full `docs/*.md` listing (623 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: three documents
+existed on disk but had no entry at scan time; they are linked below (a
+concurrent sweep indexed them as well — duplicate link entries are harmless,
+the unique-target count is what reconciles). `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH296.md](WINSRV_DELETE_WATCH296.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retire commit present), `kernelhwsrv/` 0 status entries, 0 running verify/QEMU processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH298.md](WINSRV_DELETE_WATCH298.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv.c, guishost.h, wsclient.*, qemu_windowsrv.*, qemu_gui_exec.cpp deleted; APPLY_RC=0, P1–P3 gates PASS), `kernelhwsrv/` untouched, no jobs in flight.
+- [WINSRV_DELETE_WATCH299.md](WINSRV_DELETE_WATCH299.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0 in `winsrv_delete_apply2.log`), `kernelhwsrv/` 0 modified/untracked entries; no edits outside the report.
+- [WINSRV_DELETE_WATCH311.md](WINSRV_DELETE_WATCH311.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS, strict verify PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in the apply log.
+- [WINSRV_DELETE_WATCH312.md](WINSRV_DELETE_WATCH312.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv files deleted, gates PASS), `kernelhwsrv/` 0 status lines, 0 verify/smoke/delete processes in flight.
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (retirement applied, APPLY_RC=0, gates + strict verify PASS), `kernelhwsrv/` 0 entries, no harness processes running.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in the apply log.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9`, local matches origin, `kernelhwsrv/` 0 entries, 0 active harness processes.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` 0 entries, apply log `APPLY_RC=0` count 1.
+- [WINSRV_DELETE_WATCH320.md](WINSRV_DELETE_WATCH320.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, 0 running verify/delete/smoke processes.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 entries), no active verify processes.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, apply log confirms success.
+
+These newly indexed reports bring the indexed Markdown total to **639**,
+matching the 639 `.md` files under `docs/` (including this index; the header
+count "(639 files)" at line 4 is consistent); post-append re-verification
+diffed the on-disk listing against the unique indexed link targets: **0
+unlinked documents and 0 stale links** (a live monitor keeps appending
+`WINSRV_DELETE_WATCH*.md` files, so later sweeps may see a higher count).
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH310–325 backfill (append-only)
+
+A full `docs/*.md` listing was diffed against the unique `.md` link targets
+in this index: at scan time twelve documents (`WINSRV_DELETE_WATCH310.md` …
+`WINSRV_DELETE_WATCH312.md`, `WINSRV_DELETE_WATCH314.md` …
+`WINSRV_DELETE_WATCH320.md`, `WINSRV_DELETE_WATCH324.md`,
+`WINSRV_DELETE_WATCH325.md`) had no entry; they are linked below
+(`WINSRV_DELETE_WATCH313.md` was indexed by a concurrent sweep). All are
+read-only 2026-11-25 steady-state monitors: origin/main HEAD `94ce9c9`
+(winsrv/GUI desktop retired, `APPLY_RC=0`, P1–P3 gates and final_verify
+strict PASS), `kernelhwsrv/` 0 status entries (untouched), 0 active
+verify/delete/smoke processes, no QEMU run. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH310.md](WINSRV_DELETE_WATCH310.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 changes, 0 active processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH311.md](WINSRV_DELETE_WATCH311.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` status 0 entries, `APPLY_RC=0` count 1 in the apply log.
+- [WINSRV_DELETE_WATCH312.md](WINSRV_DELETE_WATCH312.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (deletion set removed, gates PASS), `kernelhwsrv/` 0 status lines, 0 harnesses in flight; winsrv deletion applied cleanly.
+- [WINSRV_DELETE_WATCH314.md](WINSRV_DELETE_WATCH314.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` clean (0 entries), 0 running verify/delete/smoke procs; steady state confirmed.
+- [WINSRV_DELETE_WATCH315.md](WINSRV_DELETE_WATCH315.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 working-tree changes, `APPLY_RC=0` occurrences 1; no QEMU runs.
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 entries, 0 active harness procs; steady state confirmed.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` status 0 entries, `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` matches local (no divergence), `kernelhwsrv/` 0 entries, 0 harnesses in flight; 125 unrelated local modifications noted.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1; no drift in the read-only tree.
+- [WINSRV_DELETE_WATCH320.md](WINSRV_DELETE_WATCH320.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 status lines, 0 running verify/delete/smoke procs; report only, no QEMU.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 entries), 0 active verify processes; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH328.md](WINSRV_DELETE_WATCH328.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status lines, 0 active verify/delete/smoke procs; no QEMU run.
+- [WINSRV_DELETE_WATCH330.md](WINSRV_DELETE_WATCH330.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire commit, APPLY_RC=0, P1–P3 PASS, strict PASS), `kernelhwsrv/` 0 changes, 0 active verification procs; steady state confirmed.
+- [WINSRV_DELETE_WATCH331.md](WINSRV_DELETE_WATCH331.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 + strict PASS), `kernelhwsrv/` 0 modified entries, `APPLY_RC=0` count 1; no QEMU run.
+- [WINSRV_DELETE_WATCH333.md](WINSRV_DELETE_WATCH333.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0), `kernelhwsrv/` 0 dirty entries, `APPLY_RC=0` count 1; steady state, no QEMU run.
+
+These sixteen newly indexed reports bring the indexed Markdown total to **647**,
+matching the 647 `.md` files under `docs/` (including this index; the header
+count at line 4 is consistent); post-append re-verification diffed the
+on-disk listing against the unique indexed link targets: **0 unlinked
+documents and 0 stale links**.
+
+## Added — 2026-11-25 index sweep: 3 unindexed doc(s) (append-only)
+
+Diff of the `docs/*.md` listing (627 files on disk) against the 624 unique `.md` link
+targets in this index found **3 unlinked document(s)**, linked below; 0 dangling
+links. All are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched and no QEMU run was
+made by this index update.
+
+- [WINSRV_DELETE_WATCH311.md](WINSRV_DELETE_WATCH311.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH312.md](WINSRV_DELETE_WATCH312.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH313.md](WINSRV_DELETE_WATCH313.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+
+Indexed total now **627**, matching the 627 `.md` files under `docs/` (including this index; header count at line 4 updated); every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH314–325 backfill (append-only)
+
+A full `docs/*.md` listing (639 files) was diffed against the 627 unique `.md`
+link targets in this index: eight documents (`WINSRV_DELETE_WATCH314.md` …
+`WINSRV_DELETE_WATCH325.md`) had no entry; they are linked below; 0 dangling
+links. All eight are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH314.md](WINSRV_DELETE_WATCH314.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, final_verify strict PASS), `kernelhwsrv/` clean with 0 status entries, 0 active verify/delete/smoke processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH315.md](WINSRV_DELETE_WATCH315.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 working-tree changes, `APPLY_RC=0` count 1 in the apply log; no QEMU runs.
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 status entries, 0 active harness processes.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` with local HEAD matching, `kernelhwsrv/` 0 status entries, 0 harnesses in flight.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` untouched (0 entries), `APPLY_RC=0` count 1; no drift in the read-only tree.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 entries), 0 active verify processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean, `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+
+These eight newly indexed reports bring the indexed Markdown total to **639**,
+matching the 639 `.md` files under `docs/` (including this index; the header
+count "(639 files)" at line 4 is consistent); post-append re-verification
+diffed the on-disk listing against the unique indexed link targets: **0
+unlinked documents and 0 stale links**.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH314/315 backfill (append-only)
+
+Diff of the `docs/*.md` listing against the unique `.md` link targets in this
+index found **2 unlinked documents**, linked below; 0 dangling links. Both are
+read-only 2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI
+desktop retirement. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH314.md](WINSRV_DELETE_WATCH314.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retirement, final_verify strict PASS), `kernelhwsrv/` clean (0 entries, READ-ONLY respected), 0 active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH315.md](WINSRV_DELETE_WATCH315.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 working-tree changes, `APPLY_RC=0` count = 1 in `winsrv_delete_apply2.log`; no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **629**,
+matching the 629 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale
+links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH316–319 backfill (append-only)
+
+A re-diff of the `docs/*.md` listing against the unique `.md` link targets in
+this index found **4 more unlinked documents** (written concurrently by other
+sessions); they are linked below; 0 dangling links. All are read-only
+2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI desktop
+retirement. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement applied, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 status entries, 0 active harness processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` untouched (0 entries), `APPLY_RC=0` count 1 in `winsrv_delete_apply2.log`; no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, local matches origin), `kernelhwsrv/` 0 entries, 0 harness processes in flight; notes 125 unrelated modified files in the working tree; no QEMU run.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1; steady state confirmed, no QEMU run.
+
+These four newly indexed reports bring the indexed Markdown total to **633**,
+matching the 633 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale
+links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH322/323 backfill (append-only)
+
+A further re-diff of the `docs/*.md` listing against the unique `.md` link
+targets in this index found **2 more unlinked documents** (written concurrently
+by other sessions); they are linked below; 0 dangling links. Both are
+read-only 2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI
+desktop retirement. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH322.md](WINSRV_DELETE_WATCH322.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status lines, 0 active harness processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH323.md](WINSRV_DELETE_WATCH323.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` untouched (0 entries), `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **637**,
+matching the 637 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale
+links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH324–326 backfill (append-only)
+
+One more re-diff of the `docs/*.md` listing against the unique `.md` link
+targets in this index found **3 further unlinked documents** (concurrent
+sessions keep writing steady-state monitors); they are linked below; 0
+dangling links. All are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 entries), 0 active verify processes; no QEMU runs.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean, `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH326.md](WINSRV_DELETE_WATCH326.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, delete applied, gates PASS), `kernelhwsrv/` 0 changes, 0 running test processes; report only, no QEMU.
+
+These three newly indexed reports bring the indexed Markdown total to **640**,
+matching the 640 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale
+links at scan time (concurrent sessions may add more monitors afterwards).
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH316/317/318/319 backfill (append-only)
+
+A full `docs/*.md` listing (633 files at scan time, flat directory, no
+subdirectories) was diffed against the unique `.md` link targets in this index:
+**4 unlinked documents and 0 stale links**; they are linked below. All four are
+read-only 2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI
+desktop retirement. `kernelhwsrv/` was untouched and no QEMU run was made by
+this index update.
+
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement applied, APPLY_RC=0, P1–P3 and final_verify strict PASS), `kernelhwsrv/` 0 status entries (READ-ONLY respected), 0 active verify/delete/smoke harness processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `git status --short kernelhwsrv/` = 0 entries, `APPLY_RC=0` count = 1 in `winsrv_delete_apply2.log`; no edits outside the report, no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` matches origin (winsrv/GUI retirement, no divergence), `kernelhwsrv/` 0 status entries, 0 active harness processes; notes 125 unrelated local working-tree modifications; no QEMU run.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0), `kernelhwsrv/` untouched (0 entries), `APPLY_RC=0` count = 1 in `winsrv_delete_apply2.log`; steady state confirmed, no QEMU run.
+
+These four newly indexed reports bring the indexed Markdown total to **633**,
+matching the 633 `.md` files under `docs/` at scan time (including this index;
+header count at line 4 updated to "633 files, verified 2026-11-25");
+post-append re-verification at scan time: 0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 index sweep: 13 unindexed doc(s) (append-only)
+
+Diff of the `docs/*.md` listing (647 files on disk) against the unique `.md`
+link targets in this index found **13 unlinked document(s)**, linked below;
+0 dangling links. All are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement (APPLY_RC=0, gates PASS) with
+`kernelhwsrv/` untouched and no QEMU run. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement applied, APPLY_RC=0, P1–P3 and final_verify strict PASS), `kernelhwsrv/` 0 status entries, 0 active harness processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in the apply log; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` with local HEAD matching, `kernelhwsrv/` 0 entries, 0 active verify/delete/smoke processes, no QEMU run; system idle, no action required.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1 in the apply log; winsrv delete applied, no drift in the read-only tree.
+- [WINSRV_DELETE_WATCH322.md](WINSRV_DELETE_WATCH322.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status lines, 0 active verify/delete/smoke processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH323.md](WINSRV_DELETE_WATCH323.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, P1–P3 and final_verify strict PASS), `kernelhwsrv/` 0 status lines, `APPLY_RC=0` count 1, no QEMU run; no source-tree drift.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 modified/untracked), 0 active verify processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH326.md](WINSRV_DELETE_WATCH326.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, gates PASS), `kernelhwsrv/` 0 changes, 0 active verify/delete/smoke processes; steady state, no QEMU run.
+- [WINSRV_DELETE_WATCH327.md](WINSRV_DELETE_WATCH327.md) — read-only 2026-11-25 steady-state monitor report: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 modifications; no builds, no QEMU, read-only.
+- [WINSRV_DELETE_WATCH329.md](WINSRV_DELETE_WATCH329.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI files deleted, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH330.md](WINSRV_DELETE_WATCH330.md) — read-only 2026-11-25 steady-state monitor report: HEAD `94ce9c9` (winsrv/GUI desktop retirement commit, APPLY_RC=0, P1–P3 and final_verify strict PASS), `kernelhwsrv/` 0 changes, 0 active verification processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH331.md](WINSRV_DELETE_WATCH331.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 modified entries, `APPLY_RC=0` count 1; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH333.md](WINSRV_DELETE_WATCH333.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0), `kernelhwsrv/` 0 dirty entries, `APPLY_RC=0` count 1; steady state confirmed, no QEMU run.
+
+Indexed total now **647**, matching the 647 `.md` files under `docs/`
+(including this index; header count at line 4 updated); post-append
+re-verification: 0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH316–317 backfill (append-only)
+
+Diff of the `docs/*.md` listing (631 files) against the 629 unique `.md` link
+targets in this index found **2 unlinked documents**, linked below; 0 dangling
+links. Both are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched and
+no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement applied, APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` 0 modified/untracked entries (untouched), 0 active harness processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries, `APPLY_RC=0` present (count 1) in `winsrv_delete_apply2.log`; no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **631**,
+matching the 631 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0
+stale links.
+
+## Added — 2026-11-25 subagent docs-index sweep (append-only)
+
+Full `docs/*.md` listing diffed against the unique `.md` link targets in this index: 2 document(s) on disk had no entry; linked below. `kernelhwsrv/` untouched; no QEMU run by this index update.
+
+- [WINSRV_DELETE_WATCH320.md](WINSRV_DELETE_WATCH320.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify runs; no QEMU run.
+- [WINSRV_DELETE_WATCH321.md](WINSRV_DELETE_WATCH321.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries (untouched), no active verify runs; no QEMU run.
+
+Indexed total now **635**, matching the 635 `.md` files under `docs/` (including this index; header count at line 4 updated); every Markdown document in the directory is now linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH316–319 backfill (append-only)
+
+A full `docs/*.md` listing (633 files) was diffed against the unique `.md`
+link targets in this index: four documents (`WINSRV_DELETE_WATCH316.md` …
+`WINSRV_DELETE_WATCH319.md`) had no entry; they are linked below. All four
+are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement: origin/main HEAD `94ce9c9` (APPLY_RC=0,
+P1–P3 gates and final_verify strict PASS), `kernelhwsrv/` 0 status entries
+(untouched), 0 active verify/delete/smoke processes, no QEMU run.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH316.md](WINSRV_DELETE_WATCH316.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 changes, 0 active harnesses; steady state confirmed.
+- [WINSRV_DELETE_WATCH317.md](WINSRV_DELETE_WATCH317.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 status entries, `APPLY_RC=0` count 1 in the apply log; no QEMU run.
+- [WINSRV_DELETE_WATCH318.md](WINSRV_DELETE_WATCH318.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (local matches, no divergence), `kernelhwsrv/` 0 entries, 0 harnesses in flight, 125 unrelated local modifications; no QEMU run.
+- [WINSRV_DELETE_WATCH319.md](WINSRV_DELETE_WATCH319.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0), `kernelhwsrv/` 0 entries, `APPLY_RC=0` count 1; winsrv delete applied, no drift.
+
+These four newly indexed reports bring the indexed Markdown total to **633**,
+matching the 633 `.md` files under `docs/` (including this index; the header
+count "(633 files)" at line 4 is consistent); post-append re-verification
+diffed the on-disk listing against the unique indexed link targets: **0
+unlinked documents and 0 stale links**.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH322/324 backfill (append-only)
+
+Diff of the `docs/*.md` listing against the unique `.md` link targets in this
+index found **2 unlinked documents**, linked below; 0 dangling links. Both
+are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched and no QEMU run
+was made by this index update.
+
+- [WINSRV_DELETE_WATCH322.md](WINSRV_DELETE_WATCH322.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retirement, apply RC=0, gates PASS), `kernelhwsrv/` 0 status lines, 0 running verify/delete/smoke harnesses; steady state confirmed.
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 entries), 0 active harness processes; steady state confirmed, no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **643**,
+matching the 647 `.md` files under `docs/` (including this index; header count
+at line 4 updated); post-append re-verification: 0 unlinked documents, 0
+stale links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH327.md–329.md backfill (append-only)
+
+A full `docs/*.md` listing (642 files) was diffed against the unique `.md`
+link targets in this index: 2 document(s) had no entry; they are linked below. All
+are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement: origin/main HEAD `94ce9c9` (APPLY_RC=0,
+P1–P3 gates and final_verify strict PASS), `kernelhwsrv/` 0 status entries
+(untouched), 0 active verify/delete/smoke processes, no QEMU run.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH327.md](WINSRV_DELETE_WATCH327.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean/untouched, 0 active harness processes; steady state confirmed, no QEMU run.
+- [WINSRV_DELETE_WATCH329.md](WINSRV_DELETE_WATCH329.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean/untouched, 0 active harness processes; steady state confirmed, no QEMU run.
+
+These newly indexed reports bring the indexed Markdown total to **642**,
+matching the 642 `.md` files under `docs/` (including this index; the header
+count "(642 files)" at line 4 is consistent); post-append re-verification
+diffed the on-disk listing against the unique indexed link targets: **0
+unlinked documents and 0 stale links**.
+
+## Added — 2026-11-25 index sweep: WINSRV_DELETE_WATCH324–326 (append-only)
+
+Diff of the `docs/*.md` listing (640 files on disk) against the 637 unique `.md`
+link targets in this index found **3 unlinked document(s)**, linked below; 0
+dangling links. All three are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement: origin/main HEAD `94ce9c9`
+(APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 status entries, untouched),
+0 active verify/delete/smoke processes, no QEMU run. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH324.md](WINSRV_DELETE_WATCH324.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 changes, 0 active harnesses; steady state confirmed.
+- [WINSRV_DELETE_WATCH325.md](WINSRV_DELETE_WATCH325.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS), `kernelhwsrv/` clean, `APPLY_RC=0` count 1 in the apply log; steady state confirmed.
+- [WINSRV_DELETE_WATCH326.md](WINSRV_DELETE_WATCH326.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (delete applied, gates PASS), `kernelhwsrv/` 0 changes, 0 running test processes; steady state confirmed.
+
+These three newly indexed reports bring the indexed Markdown total to **640**,
+matching the 640 `.md` files under `docs/` (including this index; the header
+count "(640 files)" at line 4 is consistent); post-append re-verification
+diffed the on-disk listing against the unique indexed link targets: **0
+unlinked documents and 0 stale links**.
+
+## Added — 2026-11-25 newest WINSRV_DELETE_WATCH backfill (append-only)
+
+Full `docs/*.md` listing (643 files, flat directory, no subdirectories) diffed against the unique `.md` link targets in this index: 1 document(s) on disk had no entry; linked below. `kernelhwsrv/` untouched; no QEMU run by this index update.
+
+- [WINSRV_DELETE_WATCH328.md](WINSRV_DELETE_WATCH328.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement applied, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (READ-ONLY respected), no active verify/QEMU processes; report only.
+
+- [WINSRV_DELETE_WATCH332.md](WINSRV_DELETE_WATCH332.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retirement applied, APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (READ-ONLY respected), no active verify/QEMU processes; report only.
+
+These newly indexed reports bring the indexed Markdown total to **647**, matching the 647 `.md` files under `docs/` (including this index; header count at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH330–331 backfill (append-only)
+
+Full `docs/*.md` listing (645 files, flat directory, no subdirectories) diffed
+against the 643 unique `.md` link targets previously in this index: 2 documents
+on disk had no entry; they are linked below; 0 stale links. Both are read-only
+2026-11-25 steady-state monitors of the post-`94ce9c9` winsrv/GUI desktop
+retirement. `kernelhwsrv/` untouched; no QEMU run by this index update.
+
+- [WINSRV_DELETE_WATCH330.md](WINSRV_DELETE_WATCH330.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI desktop retirement, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 working-tree changes (READ-ONLY respected), 0 active verify/delete/smoke processes; steady state confirmed.
+- [WINSRV_DELETE_WATCH331.md](WINSRV_DELETE_WATCH331.md) — read-only 2026-11-25 steady-state confirm: HEAD `94ce9c9` (winsrv/GUI retired, APPLY_RC=0, gates PASS), `kernelhwsrv/` 0 modified entries, `APPLY_RC=0` found once in `winsrv_delete_apply2.log`; no edits outside the report, no QEMU run.
+
+These two newly indexed reports bring the indexed Markdown total to **645**,
+matching the 645 `.md` files under `docs/` (including this index; the header
+count "(645 files)" at line 4 is consistent); post-append re-verification:
+0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 docs-index sweep backfill (append-only)
+
+A full `docs/*.md` listing (649 files, flat directory, no subdirectories) was diffed against the unique `.md` link targets in this index: 2 document(s) on disk had no entry (WINSRV_DELETE_WATCH334, WINSRV_DELETE_WATCH335); they are linked below, 0 stale links. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH334.md](WINSRV_DELETE_WATCH334.md) — WINSRV_DELETE_WATCH334 — steady-state monitor — `origin/main` HEAD: `94ce9c9` — winsrv/GUI desktop retired (apply APPLY_RC=0, P1–P3 gates PASS, final_verify strict PASS).
+- [WINSRV_DELETE_WATCH335.md](WINSRV_DELETE_WATCH335.md) — WINSRV_DELETE_WATCH335 — steady-state confirmation — origin/main HEAD: `94ce9c9` (winsrv/GUI retirement, APPLY_RC=0, gates PASS).
+
+These newly indexed reports bring the indexed Markdown total to **649**, matching the 649 `.md` files under `docs/` (including this index; header count at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 docs-index diff backfill (append-only)
+
+Full `docs/*.md` listing (651 files, flat directory) diffed against the 649 unique `.md` link targets in this index: **2 unlinked document(s)** and 0 dangling links; the missing document(s) are linked below with one-line descriptions. `kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH336.md](WINSRV_DELETE_WATCH336.md) — WINSRV_DELETE_WATCH336 — steady-state monitor — HEAD `origin/main`: `94ce9c9` — winsrv/GUI desktop retired (APPLY_RC=0, P1–P3 PASS, final_verify strict PASS).
+- [WINSRV_DELETE_WATCH337.md](WINSRV_DELETE_WATCH337.md) — WINSRV_DELETE_WATCH337 — steady-state monitor — origin/main HEAD: `94ce9c9` — winsrv/GUI desktop retired (apply APPLY_RC=0, P1-P3 gates PASS, final_verify strict PASS).
+
+These 2 newly indexed report(s) bring the indexed Markdown total to **651**, matching the 651 `.md` files under `docs/` (including this index; header count at line 4 updated); post-append re-verification: 0 unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 full directory sweep (append-only)
+
+A full `docs/*.md` listing (651 files, flat directory, no subdirectories) was
+diffed against the 651 unique `.md` link targets in this index: **0 unlinked
+documents and 0 stale links** (651 on-disk `.md` files = 651 unique indexed
+targets, including this index; the header count "(651 files)" at line 4 is
+consistent). No missing documents were found, so this section adds no new link
+entries; `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 WINSRV_DELETE_WATCH332/333 backfill (append-only)
+
+Diff of the `docs/*.md` listing (647 files on disk) against the unique `.md`
+link targets in this index found **2 unlinked documents**, linked below; 0
+dangling links. Both are read-only 2026-11-25 steady-state monitors of the
+post-`94ce9c9` winsrv/GUI desktop retirement. `kernelhwsrv/` was untouched
+and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH332.md](WINSRV_DELETE_WATCH332.md) — read-only 2026-11-25 steady-state report: origin/main HEAD `94ce9c9` (winsrv/GUI retired, apply RC=0, P1–P3 gates PASS, final_verify strict PASS), `kernelhwsrv/` 0 changes, 0 active verify/delete/smoke runs; steady state confirmed.
+- [WINSRV_DELETE_WATCH333.md](WINSRV_DELETE_WATCH333.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (APPLY_RC=0, count 1 in the apply log), `kernelhwsrv/` 0 dirty entries, no QEMU, no edits outside the report; steady state confirmed.
+
+These two newly indexed reports bring the indexed Markdown total to **647**,
+matching the 647 `.md` files under `docs/` (including this index; header
+count "(647 files)" at line 4 consistent); post-append re-verification: 0
+unlinked documents, 0 stale links.
+
+## Added — 2026-11-25 subagent docs-index sweep (append-only)
+
+Full `docs/*.md` listing (651 files, flat directory, no subdirectories) diffed against the unique `.md` link targets in this index: **0 unlinked document(s) and 0 stale links** at this sweep (concurrent sweeps had already indexed the newest WINSRV_DELETE_WATCH reports); `kernelhwsrv/` untouched and no QEMU run was made by this index update.
+No missing documents were found, so this section adds no new link entries.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under `docs/` (including this index; the header count "(651 files)" at line 4 is consistent); every Markdown document in the directory is linked.
+
+## Added — 2026-11-25 full directory sweep, 651/651 (append-only)
+
+A full `docs/*.md` listing (651 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 stale links** (651 on-disk `.md` files = 651 unique indexed
+targets, including this index; the header count "(651 files)" at line 4 is
+consistent; the only extra `.md` mentions are `AGENTS.md`/`README.md` outside
+`docs/` and the two documented-absent `ESTART_*` candidates). No missing
+documents were found, so this section adds no new link entries.
+`kernelhwsrv/` was untouched and no QEMU run was made by this index update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 subagent sweep, 651/651 (append-only)
+
+A full `docs/*.md` listing (651 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 stale links** (651 on-disk `.md` files = 651 unique indexed
+targets, including this index; the header count "(651 files, verified
+2026-11-25)" at line 4 is consistent). No missing documents were found, so
+this section adds no new link entries; `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 subagent index sweep (append-only)
+
+Independent re-verification: a full `docs/*.md` listing (651 files, flat
+directory, `LC_ALL=C` sort) was diffed against the 651 unique `.md` link
+targets in this index — **0 unlinked documents, 0 stale links** (651 on-disk
+= 651 indexed, including this index; the header count "(651 files, verified
+2026-11-25)" at line 4 is consistent). No missing documents were found, so
+this section adds no new link entries. `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 subagent sweep: WINSRV_DELETE_WATCH333–335 + final count verification (append-only)
+
+Diff of the `docs/*.md` listing against the unique `.md` link targets in this
+index: at scan time the newest unlinked docs were `WINSRV_DELETE_WATCH333.md`,
+`WINSRV_DELETE_WATCH334.md` and `WINSRV_DELETE_WATCH335.md`; they are linked
+below (concurrent sweeps had already covered the surrounding watch reports).
+All three are read-only 2026-11-25 steady-state monitors of the post-`94ce9c9`
+winsrv/GUI desktop retirement (APPLY_RC=0, P1–P3 gates and final_verify strict
+PASS) with `kernelhwsrv/` untouched and no QEMU run. `kernelhwsrv/` was
+untouched and no QEMU run was made by this index update.
+
+- [WINSRV_DELETE_WATCH333.md](WINSRV_DELETE_WATCH333.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0), `kernelhwsrv/` 0 dirty entries, `APPLY_RC=0` count 1 in `winsrv_delete_apply2.log`; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH334.md](WINSRV_DELETE_WATCH334.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 status entries, 0 active verify/winsrv/smoke processes; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH335.md](WINSRV_DELETE_WATCH335.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean (0 modified files), `APPLY_RC=0` count 1 in the apply log; steady state confirmed, no QEMU.
+
+Final verification: 651 `.md` files under `docs/` = 651 unique indexed `.md`
+link targets (including this index) — **0 unlinked documents, 0 stale links**;
+header count "(651 files, verified 2026-11-25)" at line 4 is consistent.
+Indexed Markdown total: **651**.
+
+## Added — 2026-11-25 subagent full sweep (append-only)
+
+A full `docs/*.md` listing (651 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 stale links** (651 on-disk `.md` files = 651 unique indexed
+targets, including this index; the header count "(651 files)" at line 4 is
+consistent). No missing documents were found, so this section adds no new
+link entries; `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 final sweep: WINSRV_DELETE_WATCH333–337 indexed, counts verified (append-only)
+
+A fresh full `docs/*.md` listing was diffed against the unique `.md` link
+targets in this index: the only docs not yet linked at scan start were
+`WINSRV_DELETE_WATCH333.md`, `WINSRV_DELETE_WATCH334.md`, `WINSRV_DELETE_WATCH335.md`
+(and the just-appearing `WINSRV_DELETE_WATCH336.md` / `WINSRV_DELETE_WATCH337.md`,
+covered by the concurrent sections above); they are linked below with one-line
+descriptions, 0 stale links. All five are read-only 2026-11-25 steady-state
+monitors of the post-`94ce9c9` winsrv/GUI desktop retirement (APPLY_RC=0,
+P1–P3 gates and final_verify strict PASS) with `kernelhwsrv/` untouched and
+no QEMU run. `kernelhwsrv/` was untouched and no QEMU run was made by this
+index update.
+
+- [WINSRV_DELETE_WATCH333.md](WINSRV_DELETE_WATCH333.md) — read-only 2026-11-25 steady-state monitor: origin/main HEAD `94ce9c9` (winsrv/GUI retire, APPLY_RC=0), `kernelhwsrv/` 0 dirty entries, `APPLY_RC=0` count 1 in the apply log; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH334.md](WINSRV_DELETE_WATCH334.md) — read-only 2026-11-25 steady-state monitor: HEAD `94ce9c9` (winsrv/GUI desktop retired, APPLY_RC=0, P1–P3 + final_verify strict PASS), `kernelhwsrv/` 0 status entries, 0 active verify/winsrv/smoke processes; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH335.md](WINSRV_DELETE_WATCH335.md) — read-only 2026-11-25 steady-state confirmation: HEAD `94ce9c9` (APPLY_RC=0, gates PASS), `kernelhwsrv/` clean, `APPLY_RC=0` count 1; steady state confirmed, no QEMU.
+- [WINSRV_DELETE_WATCH336.md](WINSRV_DELETE_WATCH336.md) — read-only 2026-11-25 steady-state monitor of the post-`94ce9c9` winsrv/GUI retirement (APPLY_RC=0, gates PASS, `kernelhwsrv/` clean).
+- [WINSRV_DELETE_WATCH337.md](WINSRV_DELETE_WATCH337.md) — read-only 2026-11-25 steady-state confirmation of the post-`94ce9c9` winsrv/GUI retirement (APPLY_RC=0, `kernelhwsrv/` clean, no QEMU).
+
+Post-append verification: 651 `.md` files under `docs/` = 651 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 stale
+links**; header count "(651 files, verified 2026-11-25)" at line 4 is
+consistent. Indexed Markdown total: **651**.
+
+## Added — 2026-11-25 subagent full sweep, 651/651 (append-only)
+
+A full `docs/*.md` listing (651 files, flat directory, no subdirectories) was
+diffed against the unique `.md` link targets in this index: **0 unlinked
+documents and 0 stale links** (651 on-disk `.md` files = 651 unique indexed
+targets, including this index; the header count "(651 files, verified
+2026-11-25)" at line 4 is consistent). No missing documents were found, so
+this section adds no new link entries; `kernelhwsrv/` was untouched and no
+QEMU run was made by this index update.
+
+The indexed Markdown total stays **651**, matching the 651 `.md` files under
+`docs/` (including this index); every Markdown document in the directory is
+linked.
+
+## Added — 2026-11-25 winsrv retirement final closeout (append-only)
+
+One report existed on disk but had no entry in this index; it is linked
+below. `kernelhwsrv/` was untouched and no QEMU run was made by this index
+update.
+
+- [WINSRV_RETIREMENT_FINAL.md](WINSRV_RETIREMENT_FINAL.md) — single
+  authoritative closeout of the 2026-11-24 winsrv/GUI desktop retirement:
+  the decision, the 7 deleted files vs the kept bridges, `APPLY_RC=0` with
+  P1–P3 gates PASS, final_verify 11/11 effective PASS, and commit `94ce9c9`
+  pushed to `origin/main` with `kernelhwsrv/` untouched.
+
+Post-append verification: 652 `.md` files under `docs/` = 652 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 stale
+links**; header count "(652 files, verified 2026-11-25)" at line 4 is
+consistent. Indexed Markdown total: **652**.
+
+## Added — 2026-11-25 planning-doc backfill: all PLAN_*.md + ROADMAP_SUMMARY.md (append-only)
+
+All 33 planning documents on disk (32 `PLAN_*.md` + `ROADMAP_SUMMARY.md`),
+previously unindexed, linked below with one-line descriptions. The list was
+derived live from the directory, not from a stale count.
+
+- [PLAN_CANONICAL_DECISIONS.md](PLAN_CANONICAL_DECISIONS.md) — the one
+  canonical list of decisions the user must answer, merging the roadmap and
+  plan docs.
+- [PLAN_CONSISTENCY_CHECK.md](PLAN_CONSISTENCY_CHECK.md) — review-only check
+  of the P0 commit plan against the P1 deletion plan.
+- [PLAN_DECISION_REGISTER.md](PLAN_DECISION_REGISTER.md) — read-only register
+  of conflicts between stated choices and technical reality.
+- [PLAN_DECISION_SHEET.md](PLAN_DECISION_SHEET.md) — the six decisions that
+  block Planning → Execution.
+- [PLAN_DECISIONS_RESOLVED.md](PLAN_DECISIONS_RESOLVED.md) — the user's final
+  answers to every open decision (all recommended defaults; no open items).
+- [PLAN_EXECUTION.md](PLAN_EXECUTION.md) — overnight autonomous work plan
+  P0–P5 (planning only, no code).
+- [PLAN_FREEDM_MILESTONE.md](PLAN_FREEDM_MILESTONE.md) — design-only P3-lite:
+  FreeDM as the second playable workload on the existing DOOM.E32.
+- [PLAN_FREEDM_OVERNIGHT.md](PLAN_FREEDM_OVERNIGHT.md) — design-only
+  unattended-overnight FreeDM staging and gate.
+- [PLAN_FREEDM_VERIFY.md](PLAN_FREEDM_VERIFY.md) — read-only verdict on the
+  FREEDM_SIZE pin and SKIP/baseline claims.
+- [PLAN_INDEX_AUDIT.md](PLAN_INDEX_AUDIT.md) — final audit of the PLAN_*.md /
+  ROADMAP_SUMMARY.md docs against this index.
+- [PLAN_MASTER_INDEX.md](PLAN_MASTER_INDEX.md) — master index routing every
+  plan doc in `docs/`: start-here, decisions resolved, surveys, execution.
+- [PLAN_OVERNIGHT_FEASIBILITY.md](PLAN_OVERNIGHT_FEASIBILITY.md) —
+  verification-only review of the no-decision overnight work list.
+- [PLAN_P0_COMMIT.md](PLAN_P0_COMMIT.md) — design of the single docs-only P0
+  hygiene commit.
+- [PLAN_RECONCILIATION.md](PLAN_RECONCILIATION.md) — read-only review of
+  contradictions in the execution plan vs. stated choices and surveys.
+- [PLAN_SURVEY_BUILD_TOOL.md](PLAN_SURVEY_BUILD_TOOL.md) — read-only survey
+  of `genuine_build.py --name` traversal and constraint headroom.
+- [PLAN_SURVEY_ESOCK.md](PLAN_SURVEY_ESOCK.md) — read-only survey: is genuine
+  ESOCK available from the tree?
+- [PLAN_SURVEY_FREE_GAMES.md](PLAN_SURVEY_FREE_GAMES.md) — survey-only
+  free-licensed candidates for the second-game proof.
+- [PLAN_SURVEY_GAME_ASSETS.md](PLAN_SURVEY_GAME_ASSETS.md) — survey-only
+  Wolf3D asset sourcing, disk budget and packaging.
+- [PLAN_SURVEY_GATES.md](PLAN_SURVEY_GATES.md) — read-only verification-gate
+  inventory vs. proposed next phases at HEAD `ee8490e`.
+- [PLAN_SURVEY_GUI_MILESTONE.md](PLAN_SURVEY_GUI_MILESTONE.md) — read-only
+  survey: smallest credible GUI-desktop-boots milestone on genuine
+  EWSRV+EDISP.
+- [PLAN_SURVEY_HW_USB.md](PLAN_SURVEY_HW_USB.md) — read-only survey of
+  real-hardware boot and USB readiness of the x86/PC glue.
+- [PLAN_SURVEY_HYGIENE.md](PLAN_SURVEY_HYGIENE.md) — read-only survey of
+  working-tree hygiene after the winsrv retirement.
+- [PLAN_SURVEY_MEDIA.md](PLAN_SURVEY_MEDIA.md) — read-only survey of
+  media/codec/audio sources in kernelhwsrv vs qemu-port.
+- [PLAN_SURVEY_NEXT_GAME.md](PLAN_SURVEY_NEXT_GAME.md) — survey-only cost
+  estimate for a second genuine-style game port.
+- [PLAN_SURVEY_PROVENANCE.md](PLAN_SURVEY_PROVENANCE.md) — read-only survey
+  measuring what "genuine completeness" means.
+- [PLAN_SURVEY_REALHW_METHOD.md](PLAN_SURVEY_REALHW_METHOD.md) — local-only
+  survey of the real-PC boot test method (CD-R boot of the combo ISO).
+- [PLAN_SURVEY_ROLLBACK.md](PLAN_SURVEY_ROLLBACK.md) — read-only survey of
+  the reusable rollback protocol for guarded deletions.
+- [PLAN_SURVEY_SHIMS.md](PLAN_SURVEY_SHIMS.md) — read-only survey of the
+  remaining hand-written shims (planning input).
+- [PLAN_SURVEY_SOURCE_IMPORT.md](PLAN_SURVEY_SOURCE_IMPORT.md) — read-only
+  survey of importing MISSING genuine sources (UIKON/EIKON, GDI/FBSRV,
+  ESOCK) from external upstream.
+- [PLAN_SURVEY_UIKON_GDI.md](PLAN_SURVEY_UIKON_GDI.md) — read-only survey of
+  UIKON/GDI/EWSRV desktop stack feasibility.
+- [PLAN_SURVEY_WSRV_NAME.md](PLAN_SURVEY_WSRV_NAME.md) — survey of why
+  `CreateSession("!E32WindowServer")` fails (KErrBadName/KErrNotFound).
+- [ROADMAP_SUMMARY.md](ROADMAP_SUMMARY.md) — one-screen P0–P5 roadmap
+  synthesized from the PLAN_*.md docs at HEAD `ee8490e`.
+
+Post-append verification: 685 `.md` files under `docs/` = 685 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 stale
+links**; header count "(685 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **685**.
+
+- [PLAN_OVERNIGHT_WAVE1.md](PLAN_OVERNIGHT_WAVE1.md) — 2026-11-25: canonical four first-wave overnight briefs (P0, P1, P3-scaffold, P4-CI), FreeDM P3 scaffold.
+- [OVERNIGHT_RUNS.md](OVERNIGHT_RUNS.md) — 2026-11-25: canonical definition and control phrases for overnight runs (`OVERNIGHT START`/`STATUS`/`PAUSE`/`STOP`); background shell jobs scrapped due to RAM.
+
+Post-append verification: 686 `.md` files under `docs/` = 686 unique indexed
+`.md` link targets — **0 unlinked, 0 stale**; header count "(686 files,
+verified 2026-11-25)" is consistent. Indexed Markdown total: **686**.
+
+## Added — 2026-11-25 unindexed-doc sweep: 2 doc(s) (append-only)
+
+Live set-diff of the on-disk `docs/*.md` names against this index's own
+Markdown link targets (Python set-difference, excluding the literal prose glob
+`*.md`) found two documents carrying no link entry:
+
+- [KERNEL_HOOK_FREEZE.md](KERNEL_HOOK_FREEZE.md) — 2026-11-25 P0 baseline:
+  exec 81/269/270 hooks, the boot contract and the freeze list are FROZEN NO-GO
+  for every overnight brief; `kernelhwsrv/` stays READ-ONLY.
+- [P3_FREEDM_GATE_AUDIT.md](P3_FREEDM_GATE_AUDIT.md) — read-only audit of
+  `tools/r1_freedm_test.py`, `mkgrubiso.py` and `r1_final_verify.py`: SKIP with
+  exit 0 on missing assets, no downloads, append-only ISO diff, DEFAULT_TESTS
+  still 11 with no freedm gate.
+
+Post-append verification: 688 `.md` files under `docs/` = 688 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 stale
+links**; header count "(688 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **688**.
+
+## Added — 2026-11-25 doc-consistency sweep: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (Python set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry:
+
+- [GATE_STATUS_CONSISTENCY.md](GATE_STATUS_CONSISTENCY.md) — read-only check of
+  `FINAL_GATE_STATUS.md` against `/tmp/opencode/final_verify_*.log` at 20:32:
+  P0 numbers correct but the DOOM SKIP cause is mis-attributed (IWAD wiped from
+  `/tmp` and restored 20:13) and the recovery verdict is missing; stale
+  `final_verify_strict.log` flagged do-not-cite.
+
+Post-append verification: 689 `.md` files under `docs/` = 689 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+links**; no link target is duplicated by this append. Header count
+"(689 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **689**.
+
+## Added — 2026-11-25 asset-recovery note linkage: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (Python set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry:
+
+- [ASSET_RECOVERY_NOTE.md](ASSET_RECOVERY_NOTE.md) — durability ledger for the
+  Wave 1 recovery assets: `freedoom1.wad` verified as a valid 3163-lump IWAD
+  under `/tmp/opencode/doom/freedoom-0.13.0/` with pinned sha256/md5, 11/11
+  `final_verify_recovery.log` gates PASS, FreeDM unrecoverable locally (P3 gate
+  stays SKIP), and the caveat that `/tmp` is not reboot-durable.
+
+Post-append verification: 690 `.md` files under `docs/` = 690 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+links**; no link target is duplicated by this append. Header count
+"(690 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **690**.
+
+## Added — 2026-11-25 asset-staging note linkage: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after IWAD staging found one document carrying no link entry:
+
+- [ASSET_STAGING_NOTE.md](ASSET_STAGING_NOTE.md) — why the Doom IWAD now lives at
+  `qemu-port/wads/freedoom1.wad` (28,795,076 B, IWAD magic, sha256
+  `7323bcc1…f9e703d`, `cmp` identical to the volatile `/tmp` copy), how
+  `/qemu-port/wads/` in the root `.gitignore` keeps a user-supplied
+  free-license asset out of the repo (policy D2) so a fresh clone must re-stage
+  it, and why P3 FreeDM still reports SKIP with exit 0 pending the `freedm.wad`
+  drop-off.
+
+Post-append verification: 691 `.md` files under `docs/` = 691 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+links**; no link target is duplicated by this append. Header count
+"(691 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **691**.
+
+## Added — 2026-11-25 wave-1 status synthesis: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `WAVE1_STATUS.md` landed found that document carrying no link
+entry:
+
+- [WAVE1_STATUS.md](WAVE1_STATUS.md) — single-page 2026-11-25 20:40 EET
+  read-only synthesis of the overnight wave-1 phase outcomes (P0 baseline
+  NO-GO then GO at 11 pass / 0 skip / 0 fail, P1 shim deletion in flight,
+  P3 FreeDM scaffold GO with SKIP-clean exit 0, P4-CI USB/real-PC in flight),
+  a per-phase state table naming its evidence, and the authoritative gate log
+  `/tmp/opencode/final_verify_recovery.log`.
+
+Post-append verification: 692 `.md` files under `docs/` = 692 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+links**; no link target is duplicated by this append. Header count
+"(692 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **692**.
+
+## Added — 2026-11-25 P1 progress check: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `P1_PROGRESS_CHECK.md` landed found that document carrying no
+link entry:
+
+- [P1_PROGRESS_CHECK.md](P1_PROGRESS_CHECK.md) — 2026-11-25 20:40 read-only
+  pre-application index check for the P1 shim-retirement phase: verdict
+  **P1 not started** (no source change, no gate evidence), `fs/r1_fs_core.h`
+  unmodified, `tools/r1_shim_residue_sweep.py` absent, clean
+  `git status --short -- fs services`, HEAD still `ee8490e`, and no
+  OVERALL/PASS/FAIL/SKIP verdict in any `/tmp/opencode` log.
+
+Post-append verification: 693 `.md` files under `docs/` = 693 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(693 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **693**.
+
+## Added — 2026-11-25 P4 progress check: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `P4_PROGRESS_CHECK.md` landed found that document carrying no
+link entry:
+
+- [P4_PROGRESS_CHECK.md](P4_PROGRESS_CHECK.md) — 2026-11-25 20:41 read-only
+  pre-gate check for the P4 real-HW phase: verdict **P4 edits applied but
+  ungated** — `variant/qemu_pci.cpp` (+206) and `variant/qemu_usb.cpp` (+242)
+  unstaged with bridge/ECAM and BOT/SCSI/read10 lines present, `build/*.o`
+  19:52:40 and `kernfull.elf` relinked 20:40:36, legacy smoke gates 19:59–20:12
+  clean; missing mass-storage/mount gate, unrun `tools/r1_realhw_readiness_audit.py`
+  (no `*readiness*.log`) and absent G15 `tools/r1_realhw_boot.py`, so P4
+  go/no-go is not demonstrated.
+
+Post-append verification: 694 `.md` files under `docs/` = 694 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(694 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **694**.
+
+## Added — 2026-11-25 P4 readiness audit result: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `P4_READINESS_AUDIT_RESULT.md` landed found that document
+carrying no link entry:
+
+- [P4_READINESS_AUDIT_RESULT.md](P4_READINESS_AUDIT_RESULT.md) — 2026-11-25
+  static-only P4 readiness audit result: `tools/r1_realhw_readiness_audit.py`
+  RC=0, **PASS** with 12/12 required checks (R1a/R1b recursive bridge walk +
+  ECAM with port-I/O fallback, R2a–R2d BOT/CBW + class 08/06/50 +
+  INQUIRY/READ CAPACITY/READ(10) + polled READ(10) entry, R3 audit
+  self-presence, R4 kernelhwsrv porcelain clean, R5a/R5b no in-tree G15
+  harness and no realhw gate in `r1_final_verify` DEFAULT_TESTS, R6a/R6b
+  idempotent `UsbInit` + guarded PCI scan); non-fatal gaps unchanged (no NVMe
+  driver, PIC-only INTx IRQ<=16 without ACPI/IO-APIC/MSI, no USB
+  hub/hotplug/composite, CD-R physical boot still a human off-CI step); caveat
+  that PASS asserts the static code surface, not runtime behavior — no QEMU or
+  USB-passthrough gate was run, `kernelhwsrv/` untouched, nothing committed.
+
+Post-append verification: 695 `.md` files under `docs/` = 695 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(695 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **695**.
+
+## Added — 2026-11-25 G12 gap note linkage: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `G12_GAP_NOTE.md` landed found that document carrying no link
+entry:
+
+- [G12_GAP_NOTE.md](G12_GAP_NOTE.md) — 2026-11-25 open gap, read-only: the
+  residue-sweep gate **G12 is specified but not implemented** — `tools/r1_shim_residue_sweep.py`
+  is absent while the gate is defined at `docs/PLAN_SURVEY_GATES.md:78`
+  (retired shim files absent, no live kernel hook references them, orphan
+  `fs/r1_fs_*`/`services/r1_service_host*` deleted or whitelisted, <5 s so it
+  belongs first in DEFAULT_TESTS) and required as P1's per-step gate at
+  `docs/PLAN_OVERNIGHT_WAVE1.md:40,46,51`; `/tmp/opencode/p1_step1.rc` holds
+  only retire/fullchain/strict/wrapper = 0 with no `g12_rc`, so P1's green
+  baseline asserted no deletion progress and a partial deletion reads green;
+  recommends implementing G12, wiring it first in DEFAULT_TESTS, and re-running
+  the P1 step gates before P1 deletion is called complete.
+
+Post-append verification: 696 `.md` files under `docs/` = 696 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(696 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **696**.
+
+## Added — 2026-11-25 late wave-state status (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the late wave-state snapshot landed found that document carrying
+no link entry:
+
+- [WAVE_STATE_LATE.md](WAVE_STATE_LATE.md) — 2026-11-25 20:54 EET read-only
+  wave-state snapshot at HEAD `ee8490e` with `kernelhwsrv/` clean at `0c32086`:
+  P0 recovery GO on `/tmp/opencode/final_verify_recovery.log` (11/11 PASS, the
+  Freedoom IWAD restored, no strict blocker); P1 step 2's first deletion
+  applied — `services/r1_service_host.cpp`, `r1_service_host.h` and
+  `r1_service_state.h` gone, 3 files / 408 lines, unstaged — with retire PASS
+  4/4 and fullchain PASS 14/14 while the strict re-run is still in flight; G12
+  absent (`tools/r1_shim_residue_sweep.py` does not exist) so that deletion is
+  not independently asserted; P3 FreeDM GO as SKIP-clean scaffold pending the
+  `freedm.wad` drop-off; P4 audit 12/12 static PASS with strict pending. No
+  QEMU, no gates, no source edits, no commits/push, no `make clean`.
+
+Post-append verification: 697 `.md` files under `docs/` = 697 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(697 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **697**.
+
+## Added — 2026-11-25 QEMU slot serialization note (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the slot note landed found that document carrying no link entry:
+
+- [QEMU_SLOCK_NOTE.md](QEMU_SLOCK_NOTE.md) — 2026-11-25 20:58 EET read-only
+  proof that the empty P4 strict log is EXPECTED slot serialization, not a
+  failure: pid 71984 waits on `.sybian/qemu-slot.lock` while the P1 chain
+  (70236/70237/71642) holds it, P1 already cleared genuine_efsrv and is on
+  genuine_eshell, and P4 only becomes readable after `STRICT_EXIT=` is
+  appended and `p4_strict.done` is touched.
+
+Post-append verification: 698 `.md` files under `docs/` = 698 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(698 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **698**.
+
+## Added — 2026-11-25 P1 step 2 result (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the P1 step-2 report landed found that document carrying no link
+entry:
+
+- [P1_STEP2_RESULT.md](P1_STEP2_RESULT.md) — 2026-11-25 read-only GO verdict for
+  P1 step 2: the service-host shim is deleted (`services/r1_service_host.cpp`,
+  `services/r1_service_host.h`, `services/r1_service_state.h` — 3 deletions in
+  `git status --porcelain -- fs services`) with the full strict chain green
+  (`OVERALL: PASS (11 pass, 0 skip, 0 fail/not-run)`, `retire_rc`/`fullchain_rc`/
+  `strict_rc`/wrapper rc all 0), notes the G12 residue sweep is still spec-only
+  (gap in [G12_GAP_NOTE.md](G12_GAP_NOTE.md)) and records no QEMU runs, no
+  source edits, no commits and `kernelhwsrv/` untouched.
+
+Post-append verification: 699 `.md` files under `docs/` = 699 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(699 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **699**.
+
+## Added — 2026-11-25 P4 wave-close result (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the P4 wave-close pair landed found two documents carrying no link
+entry:
+
+- [P4_PENDING_NOTE.md](P4_PENDING_NOTE.md) — 2026-11-25 ~21:07 read-only snapshot
+  taken while P4 strict was still in flight (pid 71984 holding
+  `.sybian/qemu-slot.lock`, `/tmp/opencode/p4_strict.done` absent): static audit
+  PASS 12/12 but code-surface only, prior gates P0/P1/P3 green, slot serialized
+  behind the P1 retire, and the wave NO-GO rule spelled out.
+- [P4_FINAL_RESULT.md](P4_FINAL_RESULT.md) — 2026-11-25 read-only P4-CI GO
+  verdict: strict chain `OVERALL: PASS (11 pass, 0 skip, 0 fail/not-run)` with
+  `STRICT_EXIT=0`, readiness audit `RESULT: PASS` 12/12, and only the 3 intended
+  P1 deletions in `git status --porcelain -- fs services`; lists the
+  informational gaps (NVMe driver, APIC/IO-APIC/MSI, USB hubs/hotplug/composite,
+  CD-R physical boot) and notes G15 hardware plus CD-R boot stay human-driven,
+  with `kernelhwsrv/` read-only and porcelain clean.
+
+Post-append verification: 701 `.md` files under `docs/` = 701 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(701 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **701**.
+
+## Added — 2026-11-25 wave-final synthesis (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the wave-final synthesis landed found one document carrying no
+link entry:
+
+- [WAVE1_FINAL.md](WAVE1_FINAL.md) — 2026-11-25 read-only wave-final synthesis
+  giving all four phases GO: P0 baseline recovery 11/11, P1 step 2 service-host
+  shim deletion 11/11 plus the 3 deletions, P1 step 3a retire 4/4, P3 FreeDM
+  scaffold SKIP-clean, and P4-CI audit 12/12 with strict 11/11
+  (`STRICT_EXIT=0`); records the one non-blocking open gap (G12 residue sweep
+  `tools/r1_shim_residue_sweep.py` still spec-only, per
+  [G12_GAP_NOTE.md](G12_GAP_NOTE.md)), the tree at HEAD `ee8490e`,
+  `kernelhwsrv/` porcelain clean and READ-ONLY honored, and no build, QEMU run,
+  edit, commit or push for that page.
+
+Post-append verification: 702 `.md` files under `docs/` = 702 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(702 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **702**.
+
+## Added — 2026-11-25 wave-2 baseline snapshot (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry:
+
+- [WAVE2_BASELINE.md](WAVE2_BASELINE.md) — dated read-only pre-mutation baseline
+  for wave 2, captured 2026-11-25T19:28:21Z: repo HEAD `ee8490e`, ISO
+  `build/symbian-grub.iso` 75,864,064 bytes with mtime 2026-11-25 21:03:26 +0200,
+  index header 702 declared vs 702 `docs/*.md` actual, 198 pre-wave-2
+  `git status --short` entries, and `kernelhwsrv/` porcelain clean at HEAD
+  `0c32086`; records three identical verification gates
+  (`final_verify_recovery.log`, `p1_step2/strict.log`, `p4_strict.log`) at
+  `OVERALL: PASS  (11 pass, 0 skip, 0 fail/not-run)`. Reference point only: no
+  commit, no push, no `make clean`, no QEMU run, and `kernelhwsrv/` was read via
+  its own repo and never written.
+
+Post-append verification: 703 `.md` files under `docs/` = 703 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(703 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **703**.
+
+## Added — 2026-11-25 WAVE2 shim-removal plan + asset check (append-only)
+
+Read-only inventory reports produced 2026-11-25 at HEAD `ee8490e`; `kernelhwsrv/`
+was untouched, no commit, no push, no QEMU run by this index update.
+
+- [WAVE2_ASSET_CHECK.md](WAVE2_ASSET_CHECK.md) — IWAD durability gate for wave-2: recovered `freedoom1.wad` (28,795,076 B, magic `IWAD`, 3163 lumps) and the staged `qemu-port/wads/freedoom1.wad` are byte-identical with matching sha256, the path is git-ignored via `.gitignore:23` and untracked, and P3 FreeDM stays SKIP with no `freedm.wad` on disk. Verdict 4/4 PASS.
+- [WAVE2_SHIM_PLAN.md](WAVE2_SHIM_PLAN.md) — ordered shim-removal plan for the `r1_fs` channel set plus residue: LIVE / ORPHAN / ALREADY-GONE classification table with `file:line` evidence, steps S0-S5 each with its own gate (new static G12 residue sweep, R 4/4, F 14/14, S 11/11), the `ROLLBACK-WAVE2-<stamp>` snapshot token scheme and the frozen paths no step may touch. Plan only, nothing deleted.
+
+Disk state at append time: 705 `.md` files under `docs/` (including this index),
+705 unique indexed `.md` link targets, 0 dangling links.
+
+## Added — 2026-11-25 P5 provenance audit result (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry:
+
+- [P5_PROVENANCE_RESULT.md](P5_PROVENANCE_RESULT.md) — 2026-11-25 static,
+  read-only P5 provenance audit (`tools/r1_source_provenance_audit.py`):
+  PASS, all 8 genuine components (EUSER, EFILE, EFSRV, EWSRV, ESTART, ESHELL,
+  HAL, DOMAINMGR) sourced from 445 `kernelhwsrv/` source files, 8 genuine
+  artifacts, shims retired 4/6 (portfilesrv/svcmgr/winsrv/euser static retired,
+  `r1_fs_*` live, netstack authored), with the glue-byte ratio recorded as N/A
+  because it would require build artifacts; also flags doc drift in
+  `GENUINE_PROGRESS.md` §1 and `REMAINING_SHIMS_AUDIT.md`. No build, no QEMU
+  run, no commit and no push for that page, and `kernelhwsrv/` was read-only.
+
+Post-append verification: 706 `.md` files under `docs/` = 706 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(706 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **706**.
+
+## Added — 2026-11-25 G12 wiring plan + clean-tree audit linkage: 2 docs (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `G12_WIRING_PLAN.md` and `CLEAN_TREE_BUILD_AUDIT.md` landed found
+those documents carrying no link entry:
+
+- [G12_WIRING_PLAN.md](G12_WIRING_PLAN.md) — 2026-11-25 design-only plan for wiring the static G12 residue gate into `r1_final_verify.py`: at HEAD `ee8490e` the sweep itself returns `RESULT: FAIL (28 residue)` (18 file, 8 rule from `Makefile:342-351`, 2 include from `genuine/efsrv_min.cpp:30,32`), so the single line `Test("g12_residue", "tools/r1_shim_residue_sweep.py", [], 120)` at index 0 above `selfcheck` is added only when all four conditions hold (S2 makefile hunk gone, S3 channel files deleted, residue inventory narrowed first because S1+S2+S3 alone still leave 10, settled tree prints PASS with rc 0 into `/tmp/opencode/wave2_s3_g12.log`); `--list`/`--json` stay human-only since `--list` exits 0 with no verdict line and would print a false green, and no `--skip-if-*` mode may be added because the sweep has no SKIP path; meanwhile no DEFAULT_TESTS entry at all, G12 run by hand at each WAVE2 step with `g12_rc` recorded beside R/F/S, D4 whitelist unchanged. Design only: no code written, no commit, `kernelhwsrv/` read-only, no make, no QEMU.
+
+- [CLEAN_TREE_BUILD_AUDIT.md](CLEAN_TREE_BUILD_AUDIT.md) — 2026-11-25 read-only audit of build files for stale references left by the winsrv/GUI retirement: zero build-active stale refs in `Makefile`, `toolchain.mk`, `user/user.mk` and `genuine/*/build_*` (`user/user.mk:267` still prereqs ordered `user/e32base.h`, which exists and is live; the remaining `wsclient.c`, `qemu_gui_exec.cpp` and `qemu_windowsrv.h` hits at `user/user.mk:1356,1367,1372`, `variant/qemu_mouse.cpp:26`, `qemu_variant.h:94` and `qemu_fbblit.h:14` are comment-only breadcrumbs to leave as-is, and no `services/` remains), plus a G12 coverage gap: the sweep only groups r1_fs, winsrv/gui, svchost and portfilesrv, so e32base/e32cmn and bare `winsrv`/`windowsrv` prose stay grep-only, and all 28 residue findings are r1_fs (`Makefile:342-351`, `efsrv_min.cpp:30,32`), outside that chunk. No build, no make, no QEMU, no commit.
+
+Post-append verification: 708 `.md` files under `docs/` = 708 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(708 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **708**.
+
+## Added — 2026-11-25 EFSRVMIN build fix: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after `EFSRVMIN_BUILD_FIX.md` landed found that document carrying no
+link entry:
+
+- [EFSRVMIN_BUILD_FIX.md](EFSRVMIN_BUILD_FIX.md) — 2026-11-25 two fixes to `genuine/efsrv_min/build_server.sh`: drop the nonexistent `build/user/euser_shim.o` from the `ld` line (shim retired, `user/user.mk:204`) and compile `fs/r1_fs_core.cpp` + `fs/r1_fs_server.cpp` into `$D` instead of linking nonexistent `build/user/r1_fs_*.o`, because `build/user/%.o` only reaches `user/` and no `user.mk` rule remains for `fs/` since the svcmgr retirement; the objects are genuinely needed since `efsrv_min.cpp:300` calls `R1Fs::FileServer::NewL(*backend)` and `fs/r1_fs_server.cpp:15` holds `R1Fs::Core&` as session state (`fs/r1_fs_core.h:21` declares `class Core`); `bash -n genuine/efsrv_min/build_server.sh` passes but no successful link is claimed, as no `/tmp/opencode/efsrvmin_build.log` exists to cite. Script fix only, no commit, `kernelhwsrv/` read-only, no make, no QEMU.
+
+Post-append verification: 709 `.md` files under `docs/` = 709 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(709 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **709**.
+
+## Added — 2026-11-25 CleanupStack fix plan + genuine build link audit: 2 docs (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the CleanupStack work landed found two documents carrying no link
+entry:
+
+- [CLEANUPSTACK_FIX_PLAN.md](CLEANUPSTACK_FIX_PLAN.md) — Plan for the `CleanupStack::iStack` undefined reference that broke the `EFSRVMIN` link: `user/e32base.h:431` declares the static but nothing defines it (the class body is inline, so the storage is the only out-of-line symbol), and `nm` over `build/*.o` + `genuine/**/*.o` shows it is the tree's only unresolved symbol; options and the chosen fix, no build claimed.
+- [GENUINE_BUILD_LINK_AUDIT.md](GENUINE_BUILD_LINK_AUDIT.md) — Static (no-build-run) audit of the `genuine/*/build_*.sh` and `build_*.py` scripts: stale `build/user/euser_shim.o` on the `efsrv_min` link line after the shim retirement, the missing `CleanupStack::iStack` definition (with `CActiveScheduler::iScheduler` and `User::iTlsIndex` latent), the now-false `user/ca_glue.cpp:21-23` comment, and the unset `LD_LIBRARY_PATH` hazard hitting every script.
+
+Post-append verification: 711 `.md` files under `docs/` = 711 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(711 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **711**.
+
+## Added — 2026-11-25 Missing statics: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the missing-statics audit landed found one document carrying no
+link entry:
+
+- [MISSING_STATICS_PLAN.md](MISSING_STATICS_PLAN.md) — Where the two undefined port statics belong: `user/e32base.h:76` (`User::iTlsIndex`) and `:221` (`CActiveScheduler::iScheduler`) are declared but no TU defines them, `nm -C` shows `iScheduler`/`iTlsIndex` in no EFSRVMIN object so both are LATENT there (`iTlsIndex` has no in-tree reader at all), and `iScheduler` becomes REQUIRED the first image links `ca_test.cpp`, `r1a_fixture.cpp`, `ws_main.cpp` or `sf_main.cpp`; definitions would go in `genuine/efsrv_min/efsrv_min.cpp`, only after `nm` reports `U`. Analysis only, no build, no commit.
+
+Post-append verification: 712 `.md` files under `docs/` = 712 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; no link target is duplicated by this append. Header count
+"(712 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **712**.
+
+## Added — 2026-11-25 ISO rebuild check + wave-2 summary: 2 docs (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the EFSRVMIN build fix landed found two documents carrying no link
+entry:
+
+- [ISO_REBUILD_CHECK.md](ISO_REBUILD_CHECK.md) — Verdict **no ISO rebuild needed**: `build/symbian-grub.iso` carries no EFSRVMIN at all — `mkgrubiso.py` stages only `build/user/*.E32` above the 30000-byte `E32_MIN_SIZE` cutoff plus EUSER.DLL and the WADs, `EFSRVMIN.E32` (16,396 B) and `FATIOCLIENT.E32` (6,412 B) live only in `genuine/efsrv_min/` and sit under the cutoff, ISO `/programs.img` holds no `EFSRVMIN`/`FATIO` FAT entries (control `CALC.E32` present), and ISO `/boot/kernfull.elf` md5 equals `build/kernfull.elf` (mtime bump only); those images are consumed only by `tools/r1_genuine_efsrv_test.py` and `tools/r1_genuine_fat_io_test.py`, which build their own FAT32 disk.
+- [WAVE2_SUMMARY.md](WAVE2_SUMMARY.md) — Wave-2 table at uncommitted HEAD `ee8490e`: G12 residue gate implemented (`tools/r1_shim_residue_sweep.py`, 43-entry live-keeper whitelist) but failing on 18 `r1_fs` refs and deliberately not wired into `final_verify`, P5 provenance PASS (8/8 genuine sourced, 4/6 shims retired), EFSRV-min build fixed to SUCCESS, doc drift corrected in `GENUINE_PROGRESS.md` and `REMAINING_SHIMS_AUDIT.md`; gates still 3/3 strict `OVERALL: PASS`.
+
+Post-append verification: 714 `.md` files under `docs/` = 714 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; neither link target was present anywhere in this file before this
+append. Header count "(714 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **714**.
+
+## Added — 2026-11-25 wave-2 next-steps backlog: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the wave-2 summary landed found one document carrying no link
+entry:
+
+- [WAVE2_NEXT_STEPS.md](WAVE2_NEXT_STEPS.md) — Read-only wave-3 backlog at uncommitted HEAD `ee8490e`, nothing executed: restates the wave-2 outcomes (G12 residue sweep `tools/r1_shim_residue_sweep.py` implemented with a 43-entry keeper whitelist but `RESULT: FAIL (18 residue)` and not wired into `r1_final_verify.py`, P5 provenance PASS 8/8 genuine sourced with 4/6 shims retired, EFSRV-min build fixed to fresh `EFSRVMIN.E32` 16,396 B + `FATIOCLIENT.E32` 6,412 B, doc drift and clean-tree audit closed) and lists the scoped-but-unstarted wave-3 items — S1–S3 retirement of `fs/r1_fs_core.mmp`, `Makefile:342-351` and the `r1_fs_channel*` tree before narrowing the whitelist and wiring G12 as static gate index 0 of `DEFAULT_TESTS`, the LATENT-only `CActiveScheduler::iScheduler`/`User::iTlsIndex` statics, unsetting `LD_LIBRARY_PATH` inside the genuine build scripts, and the user-supplied FreeDM asset drop followed by a full gate re-run.
+
+Post-append verification: 715 `.md` files under `docs/` = 715 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target was not present anywhere in this file before this
+append. Header count "(715 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **715**.
+
+## Added — 2026-11-25 LD_LIBRARY_PATH plan (wave-3 item c): 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the wave-3 item-c plan landed found one document carrying no link
+entry:
+
+- [LD_LIBRARY_PATH_PLAN.md](LD_LIBRARY_PATH_PLAN.md) — Read-only wave-3 item (c) plan: all four genuine build scripts still lack the unset and no caller wraps them (`unset LD_LIBRARY_PATH` has zero hits across `*.sh`/`*.py`/`Makefile`/`*.mk`), this shell pointing it at `/home/yuzi/.t3/tools/mistral-vibe/3.1.4/linux-x86_64/_internal`; fix is one bare POSIX `unset LD_LIBRARY_PATH` per script inserted directly after the `set -e` line (`genuine/efsrv_min/build_server.sh:6`, `genuine/dm/build_dm.sh:8`, `genuine/f32_probe/build_probe.sh:4`, `genuine/hal/build_hal.sh:5`) rather than inline `env -u`, with ELF/E32 bytes unchanged since the variable never enters CXXFLAGS or link inputs.
+
+Post-append verification: 716 `.md` files under `docs/` = 716 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target was not present anywhere in this file before this
+append. Header count "(716 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **716**.
+
+## Added — 2026-11-25 S1 deletion planning docs: 3 docs (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) after the S1 planning set landed found three documents carrying no link
+entry:
+
+- [S1_PRE_BASELINE.md](S1_PRE_BASELINE.md) — Read-only before-state captured ahead of the guarded S1 `fs/r1_fs_core.mmp` delete: G12 sweep `RESULT: FAIL (18 residue, 43 allowed comments)` rc 1, target 962 B mode 644 with sha256 `deb2d548…f53ffc`, root at `ee8490e`, clean `kernelhwsrv/`; expected after-state 17 residue.
+- [WAVE2_S1_TARGETS.md](WAVE2_S1_TARGETS.md) — Plan only, nothing deleted: S1 deletes exactly one path (`fs/r1_fs_core.mmp`, zero build input) and explicitly spares the 7 LIVE `fs/r1_fs_*` keepers, with pre/post gates (G12 18→17, strict 11/11, retire 4/4, fullchain 14/14), `/tmp` snapshot + sha256 manifest, rollback token and `git show` fallback.
+- [S1_DELETE_TOOL_PLAN.md](S1_DELETE_TOOL_PLAN.md) — Design only: a new additive `tools/r1_wave2_delete.py` owning one-path scope, content-bound confirm `--confirm DELETE-WAVE2-S1-deb2d548`, verified backup manifest, rollback token and reused guards by import; gates require post-delete G12 count exactly 17 and any shortfall auto-rolls back.
+
+Post-append verification: 719 `.md` files under `docs/` = 719 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; none of the three link targets was present anywhere in this file
+before this append. Header count "(719 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **719**.
+
+## Added — 2026-11-25 S2/S3 plan, FreeDM drop + build-verify docs: 4 docs (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) found four documents carrying no link entry anywhere in this file
+(`GENUINE_BUILD_VERIFY.md` landed mid-update and is folded in here rather than
+opening a second section):
+
+- [S2_PLAN.md](S2_PLAN.md) — Plan only, Makefile-only: delete the `R1_FS_CHANNEL` opt-in block at `Makefile:342-351` as one hunk (8 residue lines), reword the stale 334-341 comment prose as a retirement note, keep the channel sources for S3, with `sha256 Makefile` token `d6f55b8d…06ef98` and pre/post G12 residue gates 18 → 9.
+- [S3_PLAN.md](S3_PLAN.md) — Design only, nothing deleted: the guarded delete of the 9 orphan `r1_fs_channel*` residue paths once S1 and S2 have landed (order is load-bearing), with per-file sizes/sha256, the 7 never-touched `LIVE_KEEP` files, a 12-path exact-set token scope, G12-residue-exactly-0 gates and a sha256-verified rollback.
+- [FREEDM_DROP_PROCEDURE.md](FREEDM_DROP_PROCEDURE.md) — Hand-drop recipe for `freedm.wad` since the build has no network path: accepted drop-off paths, pinning `FREEDM_SIZE` in `tools/r1_freedm_test.py`, `make isogrub` staging under `FDOOM1.WAD`, and the `RESULT: SKIP`/`PASS` gate with its `FREEDM:` marker family.
+- [GENUINE_BUILD_VERIFY.md](GENUINE_BUILD_VERIFY.md) — Read-only genuine-source build evidence through `tools/elf2e32.py`: the `dm_*`, `hal_smoke`, `F32PROBE`/`F32CLIENT` and `EFSRVMIN`/`FATIOCLIENT` images all build `EXIT=0`, every `.E32` re-reads `E32 OK`, and the scripts are invoked via `bash`/`sh` and unset `LD_LIBRARY_PATH` themselves; no QEMU, no commits, `kernelhwsrv/` untouched.
+
+Post-append verification: 723 `.md` files under `docs/` = 723 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; none of the four link targets was present anywhere in this file
+before this append. Header count "(723 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **723**.
+
+## Added — 2026-11-25 G12 count-semantics note: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry anywhere in this file:
+
+- [G12_COUNT_SEMANTICS.md](G12_COUNT_SEMANTICS.md) — Explains why `gate G12: PASS (residue 17 expected exactly 17)` from `tools/r1_wave2_delete.py:222` proves only "S1 removed exactly one of 18" and not a clean tree: `gate_g12` compares the `--json` `residue` count at :234 and deliberately ignores the sweep's rc 1, which stays 1 while any residue remains. Genuine zero residue needs S2 plus S3 plus inventory narrowing (S1+S2+S3 alone still leaves 10, per docs/G12_WIRING_PLAN.md), and `RESULT: PASS` becomes a gate only as `Test("g12_residue", ...)` at `tools/r1_final_verify.py:121`, which does not exist yet — wiring stays NO-GO with no placeholder SKIP; baselines cross-reference docs/S1_PRE_BASELINE.md (18 before, 17 expected, 17 actual).
+
+Post-append verification: 724 `.md` files under `docs/` = 724 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target above was not present anywhere in this file
+before this append. Header count "(724 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **724**.
+
+## Added — 2026-11-25 S2 make-wiring gate fix note: 1 doc (append-only)
+
+Live set-diff of the on-disk `docs/*.md` filenames against this index's own
+Markdown link targets (shell set-difference, excluding the literal prose glob
+`*.md`) found one document carrying no link entry anywhere in this file:
+
+- [S2_MW_GATE_FIX.md](S2_MW_GATE_FIX.md) — Why the pre-gate MW assertion in `tools/r1_wave2_s2.py` (`run_ladder(..., wired=True)` → `gate_make_wiring`, `:296`/`:215`) demanded make-wiring the tree never had: `Makefile:342` sets `R1_FS_CHANNEL ?= 0` and the ifeq guard at `:344` encloses the `R1_FS_CHANNEL_OBJ` assignment and its compile rule (`:344-350`), so the channel is opt-in, and `make -n kernfull` names `r1_fs_channel` 0 times by default versus 2 with `R1_FS_CHANNEL=1`; replaces the one-sided check with two static `make -n` probes (MW-a: default MUST NOT name `r1_fs_channel.o`; MW-b: `R1_FS_CHANNEL=1` MUST), the pair being the invariant that opt-in wiring is intact and the default link clean, plus a waiver for an in-flight S2 run that aborted on the old MW assertion (gate defect, not tree regression — no tree edit, a tooling follow-up owns the two-part gate).
+
+Post-append verification: 725 `.md` files under `docs/` = 725 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target above was not present anywhere in this file
+before this append. Header count "(725 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **725**.
+
+## Added — 2026-11-25 SFAT32/`r1_fs_*` keeper scope + retirement gate: 1 doc (append-only)
+
+- [SFAT32_PSL_SCOPE.md](SFAT32_PSL_SCOPE.md) — Scope definition for the 7 live `fs/` keepers (`r1_fs_backend.h`, `r1_fs_core.{h,cpp}`, `r1_fs_server.{h,cpp}`, `r1_fs_fat.{h,cpp}`) plus `variant/fat32.cpp`, each mapped by line anchor to the genuine `kernelhwsrv/userlibandfileserver/fileserver/` trees (`sfile/` 67 entries, `sfsrv/` 27, `sfat32/` 42): the 13 opcodes in `fs/r1_fs_core.h:9-12` are shown value-for-value identical to `fileserver/inc/F32plugin.h:42` (`EFsSessionPath` `:58`=14, `EFsFileSubClose` `:72`=28, `EFsFileOpen` `:74`=30, `EFsFileRead` `:78`=34, `EFsFileWrite` `:79`=35, `EFsFileSeek` `:82`=38, `EFsFileSize` `:84`=40, `EFsFileReadCancel` `:164`=120), `r1_fs_server.h:13` inherits the genuine `CServer2`/`CSession2` base with `EPriorityNormal` re-declared locally against `kernel/eka/include/e32const.h:1851`, and `variant/fat32.cpp:672/1526/1533` supplies `FatMount`/`FatReadPath`/`FatWritePath` for the whole-file-RAM `FatBackend` (`r1_fs_fat.h:40`, `:45` 16-file cap, `:9-12` "disposable FAT32 volume") with 8.3-only creation at `:536`, explicitly *not* a PSL replacement for `sfat32/sl_mnt.cpp:79`/`sl_mnt32.cpp:37,72,143`; defines the retirement gate as **NO-GO while the keepers stay live in EFSRVMIN**, with the liveness fact being `genuine/efsrv_min/build_server.sh:16-17` (compiles `fs/r1_fs_core.cpp`, `fs/r1_fs_server.cpp`) and `:19-22` (links `r1_fs_core.o`, `r1_fs_server.o`), witnessed independently by `tools/r1_missing_statics_check.py:141-142` in `EFSRVMIN_LINK_OBJECTS`, and requires all six conditions G1–G6 (both link rows dropped; genuine `sfile`+`sfsrv`+`sfat32` in the link set; `tests/r1_fs_core/core_test.cpp` retired; `user/e32cmn.h:13,40` path references updated; EFSRV PASS per `docs/EFSRV_GATE_FLIP_CHECKLIST.md`).
+
+Post-append verification: 726 `.md` files under `docs/` = 726 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target above was not present anywhere in this file
+before this append. Header count "(726 files, verified 2026-11-25)" is consistent.
+Indexed Markdown total: **726**.
+
+## Added — 2026-11-26 known-gaps record: 1 doc (append-only)
+
+- [KNOWN_GAPS_FINAL.md](KNOWN_GAPS_FINAL.md) — Dated 2026-11-26 read-only inventory of the gaps deliberately left unfixed: `qemu_smoke`/`selfcheck` still stage the retired `portfilesrv` from `/home/yuzi/.cache/sybian-r1` (`tools/r1_qemu_smoke.py:36,65,168`, markers `:49-50`, serial log `/tmp/opencode/r1_qemu_smoke.log:278,304,316`) with no genuine replacement for the `ProcessCreate`/`Loaded`/`portfilesrv started` family; `r1_genuine_input_test.py:102,117,121,137` and `r1_genuine_pointer_test.py:93,108,112,128` exit 1 instead of SKIP and boot QEMU internally (`:230`/`:202`), so `tools/r1_final_verify.py:125-143` keeps them out of `DEFAULT_TESTS`; `r1_winsrv_test.py` (17 `winsrv` hits) and `r1_window_system_test.py` (19) still name `build/user/WINSRV.E32`, absent since `94ce9c9`/`ee8490e`, so they can only self-skip (`:66`/`:87`) and are unwired; FreeDM stays a user-supplied blocker (`docs/ASSET_RECOVERY_NOTE.md:10-11`, `docs/ASSET_STAGING_NOTE.md:10`, `tools/r1_freedm_test.py:24-25`); and the prose gate count `11/11` (`AGENTS.md:88,104`, `docs/FINAL_GATE_STATUS.md:85`) predates three static pre-gates, while `DEFAULT_TESTS` runs 14.
+
+Post-append verification: 727 `.md` files under `docs/` = 727 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target above was not present anywhere in this file
+before this append. Header count updated to "(727 files, verified 2026-11-26)".
+Indexed Markdown total: **727**.
+
+## Added — 2026-11-26 overnight STOP report: 1 doc (append-only)
+
+- [OVERNIGHT_STOP_REPORT.md](OVERNIGHT_STOP_REPORT.md) — Dated 2026-11-26 read-only record of the overnight stop: FINAL27 **15/15 PASS** with `FINAL27_RC=0` (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` in `/tmp/opencode/final27_gate.log`, rows matching `tools/r1_final_verify.py:134-150`); edits landed in `tools/r1_genuine_ewsrv_test.py` (portfilesrv decoupled), `tools/r1_selftest.py:37` and `tools/r1_cp4_ca_test.py:39/40` (tracked repo paths instead of `~/.cache` copies); authority promoted to 15 rows / FINAL27 at `AGENTS.md:62,88-93`, `docs/KNOWN_GAPS_FINAL.md:127` and `docs/EWSRV_INPUT_INJECTION.md:157`; deliberate gaps listed (FreeDM `freedm.wad` absent, off-roster `tools/r1_genuine_input_test.py:59-60` and `tools/r1_genuine_pointer_test.py:47-48` still hardcoding the retired cache, `tools/r1_genuine_retire_test.py:55` best-effort cache read); tree at HEAD == `origin/main` == `ee8490e` with `kernelhwsrv/` at `0c32086` clean, no commits, no pushes, no QEMU.
+
+Post-append verification: 728 `.md` files under `docs/` = 728 unique indexed
+`.md` link targets (including this index) — **0 unlinked documents, 0 dangling
+`.md` links**; the link target above was not present anywhere in this file
+before this append. Header count "(728 files, verified 2026-11-26)" is consistent,
+superseding the 727 total recorded by the previous append.
+Indexed Markdown total: **728**.

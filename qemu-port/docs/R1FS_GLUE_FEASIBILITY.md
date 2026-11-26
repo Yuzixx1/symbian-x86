@@ -127,3 +127,22 @@ no part.
   `tools/r1_genuine_retire_test.py:9,127` — that test reads the header, not the
   kernel objects, so file removal of the *objects* is unaffected; do not
   delete the header while the retire gate uses it.
+
+**2026-11-26 correction:** the premise above at lines 4, 64, 76 and 95 — that r1_fs glue is live at `Makefile:326` — is now false. S1/S2/S3 landed and the r1_fs channel was deleted; `EFSRVMIN` links only `r1_fs_core.o`/`r1_fs_server.o` (`genuine/efsrv_min/build_server.sh:16-22`) out of the 7 live `fs/r1_fs*` keepers, and the landing note is `Makefile:318-320`. Body left unedited as a record of the 2026-11-24 state.
+
+---
+
+> **SUPERSESSION 2026-11-26 — authoritative gate is 15 rows, `FINAL27_RC=0`.**
+> The gate count in the removal/verify step above (`:113` "then
+> `python3 tools/r1_final_verify.py --strict-skip` (all 11 gates, incl. `fat_io`)")
+> is **historical**: the gate is now a 15-row roster — `g12_residue`,
+> `g12_negative`, `missing_statics`, `selfcheck`, `qemu_smoke`, `genuine_retire`,
+> `genuine_efsrv`, `genuine_ewsrv`, `genuine_eshell`, `genuine_fat_io`,
+> `doom_main`, `doom_audio`, `doom_playtest`, `doom_multikey`, `hal_probe`
+> (`tools/r1_final_verify.py --list`). The authoritative run is
+> `/tmp/opencode/final27_gate.log` at HEAD `ee8490e`, ending
+> `OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)` → **15/15 PASS, `FINAL27_RC=0`**.
+> `FINAL26_RC=0`, `FINAL23_RC=0`, `FINAL20_RC=0` and all 11-row counts are
+> superseded history only. Both the 2026-11-24 body and the 2026-11-26 premise
+> correction above are left unedited. No QEMU, no gates run, no source edits, no
+> commits/push, no `make clean`, `kernelhwsrv/` untouched.

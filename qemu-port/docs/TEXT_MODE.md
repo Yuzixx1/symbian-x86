@@ -196,3 +196,5 @@ gameplay), `tools/r1_qemu_display_test.py` (LFB and display HAL), and
 * QEMU screendump geometry is host-side evidence of the guest mode; a QEMU
   build without `-vga std` or a headless QMP failure leaves the visual checks
   unverified (reported honestly, not silently passed).
+
+**2026-11-26 — correction (supersedes this file's live/pending winsrv-or-GUI premise):** winsrv/GUI desktop was RETIRED in commit `94ce9c9` (7 files deleted: `winsrv.c`, `guishost.h`, `wsclient.c`, `wsclient.h`, `qemu_windowsrv.cpp`, `qemu_windowsrv.h`, `qemu_gui_exec.cpp`); the winsrv slow execs 249/250/251 and the WINSRV launch path are gone, so every reference above to `variant/qemu_gui_exec.cpp`, exec 251 display lists, execs 249/250 geometry probes, the WINSRV launch path and `WSDL`/`DESKTOP` graphics owners is historical only. The console shell plus DOOM/Freedoom are the UI; genuine EWSRV is the target whenever a GUI returns, per `AGENTS.md`. the authoritative gate is the 15-row roster, 15/15 PASS (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, `/tmp/opencode/final27_gate.log`) at HEAD `ee8490e` with no new commits.

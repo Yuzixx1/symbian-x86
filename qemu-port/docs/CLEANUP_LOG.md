@@ -95,3 +95,24 @@ variant/loader (`qemu_display.cpp`, `qemu_fbblit.cpp`, `qemu_nic.cpp`,
 - A disk without staged genuine EFILE/EFSRV no longer boots — genuine EFSRV is
   the sole live file server.
 - No commit/push without an explicit user request; never `git add -A`.
+
+## Update 2026-11-24 — winsrv/GUI desktop deletion DONE (step 5 closed)
+
+- **Apply:** `APPLY_RC=0`; P1–P3 gates PASS; `r1_final_verify.py --strict-skip`
+  **11/11 PASS** post-deletion.
+- **Commit:** `94ce9c9` pushed to `origin/main` (push `0f03f7e..94ce9c9`).
+- **Rollback snapshot** `/tmp/opencode/winsrv_retire_backup_20261124_215436`
+  (token `ROLLBACK-WINSRV-20261124_215436`) unused.
+- **Files deleted (7):** `user/winsrv.c`, `user/guishost.h`,
+  `user/wsclient.c`, `user/wsclient.h`, `variant/qemu_windowsrv.cpp`,
+  `variant/qemu_windowsrv.h`, `variant/qemu_gui_exec.cpp`.
+- **Kept:** `wsdl.c`, `guilib.c`, fbblit exec 270, KBINJ bridge, netstack
+  (never retire).
+- **`kernelhwsrv/` clean** — untouched (read-only) throughout.
+
+---
+
+**Superseded 2026-11-26.** Any 11/11 strict-gate result recorded above is
+**historical**. Superseded by the 15-row gate: **15 rows / `FINAL27_RC=0`**
+(15 pass, 0 skip, 0 fail; `/tmp/opencode/final27_gate.log`). The body above is
+left byte-identical and was not re-verified against the 15-row gate.

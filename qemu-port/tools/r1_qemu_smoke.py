@@ -3,16 +3,26 @@
 
 Builds a 32 MB raw disk image with an MBR partition table (one bootable
 0x0C FAT32 partition starting at LBA 2048) and a standalone FAT32 image
-embedded at byte offset 2048*512 (1048576). portfilesrv, EUSER.DLL and
-optionally /tmp/opencode/test_hello.e32 are staged into the FAT image
-with mtools before it is embedded. QEMU is then booted exactly like the
-known-working reference command, the serial console is fed timed input
-(a leading newline, then "mount", then "portfilesrv") via a bash
-subprocess with sleeps, and the captured serial log is checked for the
-expected markers. Prints PASS/FAIL per marker; exits 0 only if all pass.
+embedded at byte offset 2048*512 (1048576). The repo-built fixture E32 and
+the tracked EUSER.DLL are staged into the FAT image with mtools before it is
+embedded. QEMU is then booted exactly like the known-working reference
+command, the serial console is fed timed input (a leading newline, then the
+fixture name) via a bash subprocess with sleeps, and the captured serial log
+is checked for the expected markers. Prints PASS/FAIL per marker; exits 0
+only if all pass.
+
+Both staged files come from this repository, so the run is reproducible from
+a clean checkout plus the kernel/fixture build: the fixture is
+build/user/GUISHELL.E32 (make build/user/GUISHELL.E32) and the DLL is the
+tracked EUSER.DLL at the repo root. No path under ~/.cache or /tmp is
+required. The fixture-owned marker strings (bind slots, ordinals, import
+count, export count, export-desc tail) are derived from those two images'
+headers on every run instead of being typed in, so swapping --e32 cannot
+leave a stale expectation behind.
 
 Usage:
-    python3 r1_qemu_smoke.py [--kernel KERN] [--no-rebuild-disk] [--log LOG]
+    python3 r1_qemu_smoke.py [--kernel KERN] [--e32 E32] [--no-rebuild-disk]
+                             [--log LOG]
 
 Only this file is created/edited; no other project file is touched.
 """
@@ -20,8 +30,11 @@ import argparse
 import os
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DISK_IMG = "/tmp/opencode/r1_test.img"
 FS_IMG = "/tmp/opencode/r1_test_fs.img"
@@ -33,23 +46,20 @@ PART_SECTORS = 16384            # 8 MB partition
 FS_SIZE = PART_SECTORS * 512    # standalone FAT image == partition size
 OFFSET_BYTES = PART_START_LBA * 512  # 1048576
 
-PORTFILESrv = "/home/yuzi/.cache/sybian-r1/r1-portfilesrv-flat-v1/output/portfilesrv"
-EUSER_DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
+# Repo-built E32 fixture (user/user.mk) and the tracked 2503-export EUSER.
+FIXTURE_E32 = os.path.join(REPO, "build/user/GUISHELL.E32")
+EUSER_DLL = os.path.join(REPO, "EUSER.DLL")
 HELLO_E32 = "/tmp/opencode/test_hello.e32"
-DEFAULT_KERNEL = "/home/yuzi/Documents/Sybian REAL/qemu-port/build/kernfull.elf"
+DEFAULT_KERNEL = os.path.join(REPO, "build/kernfull.elf")
 
-MARKERS = [
-    "E32Validate: expDesc tail OK expDescSize=45 expDescType=2",
+# Fixture-independent markers: emitted by the ported kernel loader
+# (variant/e32load.cpp) for any well-formed E32 that imports EUSER.
+KERNEL_MARKERS = [
     "E32LoadDll: E32Validate r=0",
     "e32run: EUSER.DLL resident",
-    "exports=2503",
-    "e32run: bind slot 12348 ord 1221",
-    "e32run: bind slot 12352 ord 1953",
-    "imports bound dll (3 ordinals)",
     "ProcessCreate r=0",
     "Loaded r=0",
     "e32run: Resume()...",
-    "no Exc or PanicKernExec in log",
 ]
 
 EXC_KEYS = ("Exc ", "PanicKernExec")
@@ -61,10 +71,42 @@ def scan_exceptions(text):
             if any(k in line for k in EXC_KEYS)]
 
 
-FAT_FILES = [
-    (PORTFILESrv, "portfilesrv"),
-    (EUSER_DLL, "EUSER.DLL"),
-]
+def _u32(blob, off):
+    return struct.unpack_from("<I", blob, off)[0]
+
+
+def fixture_markers(e32_path, dll_path):
+    """Derive the fixture-owned marker strings from the staged images.
+
+    Every value here is header data the ported kernel validates, so it is
+    computed from the file bytes rather than typed in (see
+    variant/e32load.cpp ValidateImports for the PE2 slot rule: slot k is at
+    textSize + 4k and the word there is the 1-based EUSER ordinal).
+    """
+    exe = open(e32_path, "rb").read()
+    dll = open(dll_path, "rb").read()
+
+    flags = _u32(exe, 44)
+    text_size = _u32(exe, 96)
+    code_off = _u32(exe, 100)
+    imp_off = _u32(exe, 108)
+    marks = []
+    if imp_off:
+        n = struct.unpack_from("<i", exe, imp_off + 8)[0]
+        if flags & 0x20000000:  # PE2: IAT lives at the end of .text
+            for k in range(n):
+                slot = text_size + 4 * k
+                marks.append(f"e32run: bind slot {slot} ord "
+                             f"{_u32(exe, code_off + slot)}")
+        marks.append(f"e32run: imports bound dll ({n} ordinals)")
+
+    exp_count = _u32(dll, 92)
+    exp_desc_size = struct.unpack_from("<H", dll, 152)[0]
+    exp_desc_type = dll[154]
+    marks.append(f"E32Validate: expDesc tail OK expDescSize={exp_desc_size} "
+                 f"expDescType={exp_desc_type}")
+    marks.append(f"exports={exp_count}")
+    return marks
 
 
 def sh(*args, **kw):
@@ -78,7 +120,7 @@ def check_tools():
             sys.exit(f"required tool missing: {t}")
 
 
-def build_disk():
+def build_disk(e32):
     print(f"== building disk image {DISK_IMG} ({DISK_MB} MB)")
     for p in (DISK_IMG, FS_IMG):
         if os.path.exists(p):
@@ -94,8 +136,10 @@ def build_disk():
     sh("mkfs.fat", "-F", "32", FS_IMG, check=True)
 
     # Stage files into the standalone FAT image with mtools (before embedding).
+    # 8.3 short name "guishell" is exactly 8 chars: the shell's FatReadPath
+    # matches it directly, so no rename is needed.
     copied_hello = False
-    for src, name in FAT_FILES:
+    for src, name in ((e32, "guishell"), (EUSER_DLL, "EUSER.DLL")):
         if not os.path.exists(src):
             sys.exit(f"source file missing: {src}")
         sh("mcopy", "-i", FS_IMG, src, f"::{name}", check=True)
@@ -134,7 +178,7 @@ def build_disk():
     # mdir may show 8.3 short names ("EUSER DLL") or long names; normalize
     # whitespace/dots so either form matches.
     norm = "".join(out.stdout.lower().split()).replace(".", "")
-    for wanted in ("portfilesrv", "euserdll") + (("helloe32",) if copied_hello else ()):
+    for wanted in ("guishell", "euserdll") + (("helloe32",) if copied_hello else ()):
         if wanted not in norm:
             print(f"mdir did not list {wanted}:\n{out.stdout}")
             sys.exit(1)
@@ -158,14 +202,14 @@ def run_qemu(kernel, log):
         "-monitor", "none", "-no-reboot",
     ]
     qemu_str = " ".join(shlex.quote(a) for a in qemu)
-    # Timed serial feed inside a bash subprocess: leading newline, then
-    # "portfilesrv". A pipe would race; bash sleeps give the guest shell time
+    # Timed serial feed inside a bash subprocess: leading newline, then the
+    # fixture name. A pipe would race; bash sleeps give the guest shell time
     # to initialize. The explicit `mount` step was dropped: Asic::Init3 already
     # mounts the FAT partition at boot, and `mount` hangs the shell on the
     # M-03 per-process-page-table kernel, making the test flake with no markers.
     feeder = (
         "sleep 1.5; printf '\\n'; "
-        "sleep 3.0; printf 'portfilesrv\\n'; "
+        "sleep 3.0; printf 'guishell\\n'; "
         "sleep 5.0"
     )
     cmd = f"{{ {feeder}; }} | {qemu_str} > {shlex.quote(log)} 2>&1"
@@ -179,8 +223,8 @@ def run_qemu(kernel, log):
         return ""
 
 
-def check_markers(text):
-    results = {m: (m in text) for m in MARKERS}
+def check_markers(text, markers):
+    results = {m: (m in text) for m in markers}
     # The final marker is condition-based, not a literal substring check:
     # it passes only when no exception/panic lines appear anywhere in the log.
     results["no Exc or PanicKernExec in log"] = not scan_exceptions(text)
@@ -191,6 +235,8 @@ def main():
     ap = argparse.ArgumentParser(description="R1 QEMU smoke test")
     ap.add_argument("--kernel", default=DEFAULT_KERNEL,
                     help="kernel ELF (default: %(default)s)")
+    ap.add_argument("--e32", default=FIXTURE_E32,
+                    help="repo-built fixture E32 (default: %(default)s)")
     ap.add_argument("--no-rebuild-disk", action="store_true",
                     help="reuse existing disk image instead of rebuilding")
     ap.add_argument("--log", default=LOG_DEFAULT,
@@ -199,13 +245,23 @@ def main():
 
     check_tools()
 
+    for path, hint in ((args.e32, "make build/user/GUISHELL.E32"),
+                       (EUSER_DLL, "tracked repo file EUSER.DLL"),
+                       (args.kernel, "make build/kernfull.elf")):
+        if not os.path.isfile(path):
+            sys.exit(f"missing {path} (build it: {hint})")
+
+    markers = KERNEL_MARKERS + fixture_markers(args.e32, EUSER_DLL)
+    print(f"fixture: {args.e32}")
+    print(f"dll    : {EUSER_DLL}")
+
     if args.no_rebuild_disk and os.path.exists(DISK_IMG):
         print(f"== reusing existing disk image {DISK_IMG}")
     else:
-        build_disk()
+        build_disk(args.e32)
 
     text = run_qemu(args.kernel, args.log)
-    results = check_markers(text)
+    results = check_markers(text, markers)
 
     # Fail on any guest exception or kernel panic in the serial log, even if
     # the shell-side markers above still printed (avoids false passes when a
@@ -218,7 +274,7 @@ def main():
 
     print("\n== marker results")
     all_pass = True
-    for m in MARKERS:
+    for m in markers + ["no Exc or PanicKernExec in log"]:
         ok = results[m]
         all_pass = all_pass and ok
         print(f"  [{'PASS' if ok else 'FAIL'}] {m}")
@@ -227,7 +283,7 @@ def main():
     if not all_pass:
         print("\n== relevant log lines:")
         keys = ("e32validate", "e32loaddll", "e32run", "imports bound",
-                "processcreate", " loaded", "portfilesrv started")
+                "processcreate", " loaded", "guishell started")
         shown = set()
         for line in text.splitlines():
             low = line.lower()

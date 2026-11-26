@@ -6,3 +6,9 @@
 - PASS: qemu_smoke, genuine_retire (4/4), genuine_efsrv, genuine_ewsrv, genuine_eshell, genuine_fat_io, doom_main, doom_audio, doom_playtest, doom_multikey.
 - Fault-scan: 0 Exc/Panic/FAULT/#PF in main log; per-test keyword hits are only `[PASS] no ... FAULT` assertion lines and build noise — no guest faults anywhere.
 - kernelhwsrv/ untouched (git status clean); no QEMU run by this watcher; log < 50 MB, tailed in full.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

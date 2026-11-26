@@ -254,3 +254,5 @@ ordinal 915 with the `DebugPrint` exec as fallback.
   rect and glyph cells.
 - The framebuffer console (`VgaTeletype`) and GUI programs share the LFB with
   no arbitration; launching a GUI program simply repaints it.
+
+> **2026-11-26 correction (supersedes this file's live/pending winsrv-or-GUI premise):** winsrv/GUI desktop was RETIRED in `94ce9c9`, which deleted 7 files (`winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`, `qemu_gui_exec.cpp`). Execs **249/250/251** and the WINSRV launch path no longer exist, so sections 1-2 above are historical only. The console shell plus DOOM/Freedoom are the UI today; genuine **EWSRV** is the target when GUI returns, per `AGENTS.md`. The 15-row gate is **15/15 PASS** (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits.

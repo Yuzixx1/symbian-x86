@@ -38,7 +38,7 @@ LOG_DEFAULT = ROOT + "/r1_fat_io.log"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 KERNEL = REPO + "/build/kernfull.elf"
-EUSER = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
+EUSER = REPO + "/EUSER.DLL"
 SERVER = REPO + "/genuine/efsrv_min/EFSRVMIN.E32"
 CLIENT = REPO + "/genuine/efsrv_min/FATIOCLIENT.E32"
 F32PROBE = REPO + "/genuine/f32_probe/F32PROBE.E32"

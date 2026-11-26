@@ -7,3 +7,9 @@ Verdict: **PENDING** — standalone selfcheck rerun is in flight, no OVERALL yet
 - Final `selftest` stage not yet reached (`r1_os_selfcheck_selftest.log` still 21:18); no `OVERALL:` line in any log newer than 21:26.
 - Prior completed run `/tmp/opencode/verify_selfcheck.out` (00:52): OVERALL: PASS — but that is not this rerun.
 - kernelhwsrv/ untouched; read-only monitor, no QEMU launched by this agent.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

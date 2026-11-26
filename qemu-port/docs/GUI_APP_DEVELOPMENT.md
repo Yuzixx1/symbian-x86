@@ -331,3 +331,5 @@ int app_main(void) {
 Add the `user/user.mk` rule from section 6, build the ISO, stage the E32, and
 drive it with the QEMU pattern from section 7. That is the full path from source
 to a verified, windowed, clickable GUI application.
+
+**2026-11-26 — correction:** this page's live/pending winsrv-or-GUI premise is superseded: the winsrv/GUI desktop was **retired in `94ce9c9`** (7 files deleted — `winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`, `qemu_gui_exec.cpp`), and execs **249/250/251** plus the **WINSRV launch path are gone**, so sections 1-8 describe a stack that no longer exists; the **console shell plus DOOM/Freedoom are the UI**, and **genuine EWSRV** is the target when GUI returns, per `AGENTS.md`. the authoritative gate is the **15-row** roster at **15/15 PASS** (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, `/tmp/opencode/final27_gate.log`) at HEAD `ee8490e`, with no commits.

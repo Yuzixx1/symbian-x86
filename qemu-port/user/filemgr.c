@@ -42,7 +42,7 @@ static const char* const kFiles[] = {
     "AUTOEXEC.BAT", "CONFIG.SYS",
     "README.TXT", "NOTES.TXT", "HELLO.TXT",
     "FILEMGR.E32", "TEXTEDIT.E32",
-    "EUSER.DLL", "PORTFILESRV.E32"
+    "EUSER.DLL"
 };
 #define NFILES ((int)(sizeof(kFiles) / sizeof(kFiles[0])))
 

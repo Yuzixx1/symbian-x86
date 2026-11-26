@@ -96,6 +96,48 @@ def find_wad():
     return None
 
 
+# FreeDM PWAD (second asset, BSD-3-Clause like the IWAD) — P3-lite staging.
+# Never committed; same drop-off policy as WAD_CANDIDATES. On the FAT volume
+# it keeps its own 8.3-safe name FREEDM.WAD, staged alongside FDOOM1.WAD.
+WAD2_NAME = "FREEDM.WAD"
+WAD2_CANDIDATES = (
+    "/tmp/opencode/doom/freedoom-0.13.0/freedm.wad",
+    "/tmp/opencode/doom/freedm.wad",
+    os.path.join(QPORT, "wads", "freedm.wad"),
+    os.path.join(QPORT, "wads", "FREEDM.WAD"),
+    os.path.join(BUILD, "wad", "freedm.wad"),
+    os.path.join(BUILD, "wad", "FREEDM.WAD"),
+)
+
+
+def find_wad2():
+    """First existing FreeDM WAD, or None (caller warns and skips)."""
+    for path in WAD2_CANDIDATES:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def mdir_free_bytes(disk, part_lba):
+    """Parse the 'N bytes free' line of `mdir -i disk@@lba S ::`.
+
+    Returns the free byte count as int, or None if mdir/parsing fails (the
+    caller then warns and skips the optional asset — never fails the build).
+    """
+    import re
+    try:
+        out = subprocess.run(["mdir", "-i", f"{disk}@@{part_lba}S", "::"],
+                             check=True, capture_output=True, text=True).stdout
+    except Exception as exc:
+        print(f"PROGRAMS-IMG: WARN mdir free-space probe failed: {exc}")
+        return None
+    m = re.search(r"([0-9][0-9 ]*)\s+bytes\s+free", out)
+    if not m:
+        print("PROGRAMS-IMG: WARN could not parse mdir free-bytes line")
+        return None
+    return int(m.group(1).replace(" ", ""))
+
+
 def curated_programs(work, wad=None):
     """End-user E32s + support files, as (source path, FAT name) pairs.
 
@@ -134,6 +176,9 @@ def curated_programs(work, wad=None):
         iwad_note = ("FDOOM1.WAD is the Freedoom IWAD (freedoom1.wad, BSD-3-Clause,\r\n"
                      "freely redistributable) staged under its 8.3 guest-safe name.\r\n"
                      "Launch with DOOM; optional PWADs go in build/wad/ as *.WAD.\r\n")
+    if find_wad2():
+        iwad_note += ("FREEDM.WAD is the FreeDM PWAD (freedm.wad, BSD-3-Clause),\r\n"
+                      "staged alongside the IWAD when free space allows.\r\n")
     notes = os.path.join(work, "NOTES.TXT")
     with open(notes, "w") as f:
         f.write("Symbian EKA2 end-user programs\r\n"
@@ -175,6 +220,14 @@ def build_programs_image(work):
     files = curated_programs(work, wad)
     if wad:
         files.append((wad, WAD_NAME))
+    wad2 = find_wad2()
+    if wad2:
+        print(f"PROGRAMS-IMG: FREEDM.WAD candidate {wad2} "
+              f"({os.path.getsize(wad2)} bytes), free-space guard applies")
+    else:
+        print("PROGRAMS-IMG: WARN FREEDM.WAD not found (looked in "
+              "/tmp/opencode/doom/, qemu-port/wads/ and build/wad/); "
+              "building FAT image without FreeDM")
     if not files:
         print("PROGRAMS-IMG: skipped (no user E32s built; run make userland)")
         return None, []
@@ -202,6 +255,22 @@ def build_programs_image(work):
         f.write(mbr)
         f.seek(PART_LBA * 512)
         f.write(payload)
+    # Free-space-guarded FreeDM staging (P3-lite): stage FREEDM.WAD only if it
+    # fits the remaining free space. Warn-and-skip otherwise — never fail the
+    # ISO build, never grow FS_MB.
+    if wad2:
+        free = mdir_free_bytes(disk, PART_LBA)
+        need = os.path.getsize(wad2)
+        if free is not None and need <= free:
+            run(["mcopy", "-i", f"{disk}@@{PART_LBA}S", "-o", wad2,
+                 "::" + WAD2_NAME])
+            files.append((wad2, WAD2_NAME))
+            print(f"PROGRAMS-IMG: staged {WAD2_NAME} ({need} bytes; "
+                  f"{free} bytes were free)")
+        else:
+            print(f"PROGRAMS-IMG: WARN {WAD2_NAME} skipped: needs {need} "
+                  f"bytes, only {free} free (FS_MB never grown)")
+            wad2 = None
     listing = subprocess.run(["mdir", "-i", f"{disk}@@{PART_LBA}S", "::"],
                              check=True, capture_output=True, text=True).stdout
     names = [n for _, n in files]

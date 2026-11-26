@@ -6,6 +6,7 @@
 # Run from qemu-port/. kernelhwsrv/ is read-only; outputs land in
 # genuine/build/ with the dm_ prefix. See genuine/HAL_DM_NOTES.md.
 set -e
+unset LD_LIBRARY_PATH
 cd "$(dirname "$0")/../.."
 KH=../kernelhwsrv
 DM=$KH/userlibandfileserver/domainmgr

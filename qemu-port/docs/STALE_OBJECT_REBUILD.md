@@ -58,3 +58,7 @@ New `.o` mtime > source mtime: **YES**. ISO rebuilt:
 ## Boundaries
 `kernelhwsrv/` clean (no edits); no commit/push; no `make clean`; build from
 `kernelhwsrv/` only; no test or source logic modified.
+
+---
+
+**SUPERSEDED 2026-11-26.** The 11-row / 10-11-pass strict gate asserted above is historical and no longer current. Current authority is **15 rows / `FINAL27_RC=0`** — 15 pass, 0 skip, 0 fail — recorded in `/tmp/opencode/final27_gate.log`. The body above is preserved byte-identical for audit history.

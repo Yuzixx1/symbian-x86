@@ -5,10 +5,11 @@ shims -> genuine Symbian servers (see docs/GENUINE_USERSPACE.md, section 4).
 For EACH subsystem this script reports independently:
 
     BUILT     genuine E32 artifacts exist under qemu-port/genuine/build/
-              (plus the static checks that always run: the wire opcodes in
-              fs/r1_fs_core.h must still match the genuine TFsMessage enum
-              in kernelhwsrv .../fileserver/inc/F32plugin.h, and user/ipc.c
-              must still be able to reach the genuine "!FileServer" by name)
+              (plus the static checks that always run: the PortFile client
+              opcode ABI pinned in EXPECTED_PORTFILE_OPS below must still match
+              the genuine TFsMessage enum in kernelhwsrv .../fileserver/inc/
+              F32plugin.h, and user/ipc.c must still be able to reach the
+              genuine "!FileServer" by name)
     RUNNING   QEMU boot launched the genuine component (boot markers)
     PASS/FAIL/SKIP
 
@@ -45,13 +46,12 @@ from mke32 import uid_checksum           # noqa: E402  (genuine UID algorithm)
 KHWSRV = PORT.parent / "kernelhwsrv"   # read-only reference tree
 F32PLUGIN_H = KHWSRV / "userlibandfileserver/fileserver/inc/F32plugin.h"
 SF_MAIN_CPP = KHWSRV / "userlibandfileserver/fileserver/sfile/sf_main.cpp"
-SHIM_CORE_H = PORT / "fs/r1_fs_core.h"
 IPC_C = PORT / "user/ipc.c"
 
 KERNEL = PORT / "build/kernfull.elf"
 GENUINE_BUILD = PORT / "genuine/build"
 F32CLIENT = PORT / "genuine/f32_probe/F32CLIENT.E32"
-EUSER_DLL = Path("/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll")
+EUSER_DLL = PORT / "EUSER.DLL"
 PORTFILESRV = Path("/home/yuzi/.cache/sybian-r1/r1-portfilesrv-flat-v1/output/portfilesrv")
 
 LOGDIR = Path("/tmp/opencode")
@@ -124,7 +124,7 @@ EWSRV_BOOT_MARKER = b"GenuineBoot: EWSRV.E32"
 ESTART_BOOT_MARKERS = [b"ESTART: genuine E32 image loaded",
                        b"ESHELL: genuine E32 image loaded"]
 
-# shim opcode name (fs/r1_fs_core.h) -> genuine TFsMessage name (F32plugin.h)
+# retired shim opcode name -> genuine TFsMessage name (F32plugin.h)
 OPCODE_MAP = {
     "SessionPath": "EFsSessionPath",
     "SetSessionPath": "EFsSetSessionPath",
@@ -186,18 +186,16 @@ def parse_genuine_tfs():
     return out
 
 
-def parse_shim_opcodes():
-    """name -> value for the wire-opcode enum block in fs/r1_fs_core.h."""
-    out, inside = {}, False
-    for ln in SHIM_CORE_H.read_text(errors="replace").splitlines():
-        if "enum {" in ln and "SessionPath" in ln:
-            inside = True
-        if inside:
-            for m in re.finditer(r"(\w+)\s*=\s*(0x[0-9a-fA-F]+|\d+)", ln):
-                out[m.group(1)] = int(m.group(2), 0)
-            if "};" in ln:
-                break
-    return out
+# PortFile client wire opcodes: the IPC function numbers user/ipc.c clients
+# send over a "!FileServer" session. Pinned as constants here so this gate no
+# longer reads the retired shim header (deleted in P1); the values must still
+# equal the genuine TFsMessage ordinals in F32plugin.h.
+EXPECTED_PORTFILE_OPS = {
+    "SessionPath": 14, "SetSessionPath": 15, "FileClose": 28, "FileOpen": 30,
+    "FileCreate": 31, "FileReplace": 32, "FileRead": 34, "FileWrite": 35,
+    "FileSeek": 38, "FileFlush": 39, "FileSize": 40, "FileSetSize": 41,
+    "FileReadCancel": 120,
+}
 
 
 def check_ipc_protocol():
@@ -205,7 +203,7 @@ def check_ipc_protocol():
     opcodes must equal the genuine TFsMessage ordinals, the genuine server
     must publish "!FileServer", and ipc.c must have the name-connect path."""
     lines, ok = [], True
-    tfs, shim = parse_genuine_tfs(), parse_shim_opcodes()
+    tfs, shim = parse_genuine_tfs(), dict(EXPECTED_PORTFILE_OPS)
     if not tfs:
         return False, ["[FAIL] could not parse genuine TFsMessage from F32plugin.h"]
     matched = 0
@@ -216,17 +214,18 @@ def check_ipc_protocol():
         elif shim[sname] == tfs[gname]:
             matched += 1
         else:
-            lines.append(f"  [FAIL] {sname}: shim={shim[sname]} genuine {gname}={tfs[gname]}")
+            lines.append(f"  [FAIL] {sname}: portfile={shim[sname]} genuine {gname}={tfs[gname]}")
             ok = False
-    lines.insert(0, f"  [{'PASS' if ok else 'FAIL'}] {matched}/{len(OPCODE_MAP)} shim "
-                    f"opcodes == genuine TFsMessage ordinals (e.g. FileOpen="
+    lines.insert(0, f"  [{'PASS' if ok else 'FAIL'}] {matched}/{len(OPCODE_MAP)} PortFile "
+                    f"client opcodes == genuine TFsMessage ordinals (e.g. FileOpen="
                     f"{tfs.get('EFsFileOpen')}, FileRead={tfs.get('EFsFileRead')})")
     name_ok = f'"{FILESERVER_NAME}"' in SF_MAIN_CPP.read_text(errors="replace")
     lines.append(f"  [{'PASS' if name_ok else 'FAIL'}] genuine server publishes "
                  f"\"{FILESERVER_NAME}\" (sfile/sf_main.cpp)")
     ok &= name_ok
     ipc = IPC_C.read_text(errors="replace")
-    conn_ok = "ipc_connect" in ipc and "exec4(128" in ipc and "EConnect" in ipc
+    conn_ok = ("ipc_connect" in ipc and "exec4(128" in ipc and "EConnect" in ipc
+               and "exec4(77" in ipc)
     lines.append(f"  [{'PASS' if conn_ok else 'FAIL'}] user/ipc.c ipc_connect(name) "
                  f"path present (exec 128 + EConnect) -> can talk to \"{FILESERVER_NAME}\" by name")
     ok &= conn_ok
@@ -424,7 +423,7 @@ class Gate:
 
 
 def gate_efsrv(dry, no_disk):
-    g = Gate("EFSRV/F32", "user/portfilesrv.cpp + fs/r1_fs_* + variant/fat32.cpp")
+    g = Gate("EFSRV/F32", "retired portfilesrv/fs shims (deleted in P1); genuine EFILE/EFSRV")
     proto_ok, proto_lines = check_ipc_protocol()
     for ln in proto_lines:
         g.say(ln)

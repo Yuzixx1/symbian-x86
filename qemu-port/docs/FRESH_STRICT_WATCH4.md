@@ -7,3 +7,9 @@
 - PID 1194626 ALIVE (started 21:25, sleeping); child 1215626 on r1_genuine_retire_test.py — strict run still in flight.
 - Fault-scan clean: all guest logs report no Exc/Panic/FAULT/#PF; grep hits were only compiler flags/PASS lines.
 - kernelhwsrv/ untouched (no file modified since 20:00 today); no QEMU launched by this watch.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

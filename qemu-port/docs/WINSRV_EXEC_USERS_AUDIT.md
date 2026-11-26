@@ -57,3 +57,5 @@ No `user/` or `ports/` file other than those listed touches 249/250/251/271/272/
   EWSRV input-injection bridge (plan §5).
 - **Chunk E (terminal):** DOOM.E32 fallback removal (#14) + WINSRV.E32 deletion,
   after the winsrv deletion gate in `docs/WINSRV_MIGRATION_PLAN.md` §4.
+
+**2026-11-26 — correction (supersedes this file's live/pending winsrv-or-GUI premise):** the winsrv/GUI desktop was **RETIRED** in `94ce9c9` — 7 files deleted (`user/winsrv.c`, `user/guishost.h`, `user/wsclient.c`, `user/wsclient.h`, `variant/qemu_windowsrv.cpp`, `variant/qemu_windowsrv.h`, `variant/qemu_gui_exec.cpp`), all confirmed gone from disk — so execs 249/250/251, the 271/272/273 event ring, and the WINSRV launch path no longer exist; the console shell + DOOM/Freedoom are the UI, and genuine **EWSRV** is the target when the GUI returns (per `AGENTS.md` lines 99-103), which makes §3 chunks B-E above historical rather than pending work; the authoritative gate is the 15-row roster, 15/15 PASS (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`, `/tmp/opencode/final27_gate.log`) at HEAD `ee8490e` with 0 commits after it.

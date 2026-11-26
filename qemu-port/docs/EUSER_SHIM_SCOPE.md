@@ -125,3 +125,13 @@ Audit §3 order stands: file-server files → **svcmgr** (removes the
 **euser_shim last** (its only remaining C++ consumers are svcmgr/r1_fs/
 efsrv_min, all retired by then; `ca_test` converts to PE2 independently).
 Netstack never retires (ESOCK absent).
+
+---
+
+## Footer (2026-11-26) — strict-skip gate supersession
+
+The §4 closing gate above, `r1_final_verify.py --strict-skip` = **11/11 PASS**,
+is the historical 11-row gate and is **superseded**. The live strict-skip gate is
+the 15-row gate: `FINAL27_RC=0` — **15 pass, 0 skip, 0 fail**
+(`/tmp/opencode/final27_gate.log`). The 2026-11-24 body is retained unchanged as
+the historical record.

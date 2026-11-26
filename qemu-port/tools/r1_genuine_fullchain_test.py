@@ -40,7 +40,7 @@ PORT = TOOLS.parent
 ISO = PORT / "build/symbian-grub.iso"
 KERNEL = PORT / "build/kernfull.elf"
 GENUINE = PORT / "genuine/build"
-EUSER = Path("/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll")
+EUSER = PORT / "EUSER.DLL"
 
 # One disk, all four genuine components (plus EUSER and the genuine FS driver).
 # (label, source path, FAT name on C:)

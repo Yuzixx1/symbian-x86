@@ -1,4 +1,6 @@
 # Build outputs, test scratch, archives — never commit these.
+/symbian-x86-archive-56fbaff.tar.gz
+/qemu-port/.sybian/qemu-slot.lock
 build/
 *.o
 *.elf
@@ -15,3 +17,9 @@ __pycache__/
 # Upstream tree: shallow clone with its own history; consume it as a
 # submodule (see root README) rather than vendoring it here.
 /kernelhwsrv/
+
+# P0 hygiene (PLAN_OVERNIGHT_WAVE1): stray 0-byte capture artifact
+/qemu-port/9
+
+# Free-license game data staged from user drop-off (policy D2): never commit.
+/qemu-port/wads/

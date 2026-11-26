@@ -53,3 +53,18 @@ Dry-run log: `/tmp/opencode/final_dryrun_20261124.log`
 - A full PASS does **not** authorise commit/push or shim retirement: those still require
   explicit caller request and the separate EFILE uninterrupted clean-prove acceptance run.
 - EFILE guard-only (no trampoline) and `EKA2_CRISP_STOP` stays reverted, per project rules.
+
+---
+
+## SUPERSESSION FOOTER — 2026-11-26
+
+**Everything above this footer is HISTORICAL and no longer authoritative.** The 11-row
+"Authoritative run" above (including its "This run supersedes the pre-run note in
+`FINAL_GATE_STATUS.md`" claim at line 51) is retained only as a record and is superseded
+by the 15-row gate.
+
+Current authority:
+
+- **15-row gate**, `FINAL27_RC=0`.
+- Evidence: `/tmp/opencode/final27_gate.log` — **15 pass, 0 skip, 0 fail**.
+- Where this file and the 15-row gate disagree, the 15-row gate wins.

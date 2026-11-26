@@ -34,7 +34,7 @@ LOCK = "/tmp/opencode/r1_selftest.lock"
 TERMINATOR = "terminating on signal"
 KERNEL = os.path.join(ROOT, "build/kernfull.elf")
 E32 = os.path.join(ROOT, "build/user/SELFTEST.E32")
-DLL = "/home/yuzi/.cache/sybian-r1/r1-build-v1/epoc32/release/x86/urel/euser.dll"
+DLL = os.path.join(ROOT, "EUSER.DLL")
 MB, LBA, SECTORS = 32, 2048, 16384
 FS_SIZE = SECTORS * 512
 OFFSET = LBA * 512
@@ -136,9 +136,13 @@ def run_qemu(log):
             "-monitor", "none", "-no-reboot"]
     # Asic::Init3 already mounts the FAT partition at boot; a shell `mount`
     # hangs on the M-03 per-process-page-table kernel (see r1_qemu_smoke.py).
-    # Start the file server first so selftest's file test can save/read.
-    feeder = ("sleep 1.5; printf '\\n'; sleep 3.0; printf 'portfilesrv\\n'; "
-              "sleep 6.0; printf 'selftest\\n'; sleep 10.0")
+    # Only SELFTEST.E32 and EUSER.DLL are staged on the FAT image, so a
+    # `portfilesrv` feed only ever draws "portfilesrv: not found".  Selftest's
+    # file test is served by the kernel's genuine PortFile/PortBigFile devices
+    # (variant/userfiles.cpp), which need no user-side server.  The extra sleep
+    # keeps the pre-existing serial timing envelope exactly (1.5 + 3.0 + 6.0).
+    feeder = ("sleep 1.5; printf '\\n'; sleep 9.0; printf 'selftest\\n'; "
+              "sleep 10.0")
     cmd = ("{ " + feeder + "; } | "
            + " ".join(shlex.quote(a) for a in qemu)
            + " > " + shlex.quote(log) + " 2>&1")

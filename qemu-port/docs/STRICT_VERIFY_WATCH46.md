@@ -5,3 +5,9 @@
 - Verdicts so far (8/11 decided): selfcheck **FAIL** (248s; selftest core lines report failures=0/RESULT PASS, 0 guest exceptions — fail is marker-order + "EUSER ord 915 bound" checks); qemu_smoke, genuine_retire, genuine_efsrv, genuine_ewsrv, genuine_eshell, genuine_fat_io, doom_main all **PASS**.
 - Remaining: doom_audio, doom_playtest, doom_multikey. Fault-scan of all per-test logs: zero real faults (only "[PASS] no Exc/Panic/FAULT" lines and linker symbol names).
 - kernelhwsrv/ untouched; no QEMU run by this watcher.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

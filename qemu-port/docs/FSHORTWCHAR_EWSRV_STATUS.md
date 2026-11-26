@@ -18,3 +18,10 @@
 - Next gate: stage the 20:55 EWSRV.E32/EWCLIENT.E32, boot, expect
   `exec128 SessionCreate name=<!E32WindowServer>` → `r=0`, then rerun
   final_verify. kernelhwsrv/ untouched.
+
+---
+
+**Superseded 2026-11-26.** Any 11/11 strict-gate result recorded above is
+**historical**. Superseded by the 15-row gate: **15 rows / `FINAL27_RC=0`**
+(15 pass, 0 skip, 0 fail; `/tmp/opencode/final27_gate.log`). The body above is
+left byte-identical and was not re-verified against the 15-row gate.

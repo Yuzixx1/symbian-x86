@@ -83,3 +83,15 @@ reroute**:
   (`user/winsrv.c`, `user/guishost.h`, `variant/qemu_windowsrv.*`,
   `variant/qemu_gui_exec.cpp`) are only removed at the full gate with human
   review (no apply path).
+
+**CORRECTION 2026-11-26 — winsrv/GUI is gone; this audit is historical.**
+`user/winsrv.c`, `user/guishost.h`, `user/wsclient.c`, `user/wsclient.h`,
+`variant/qemu_windowsrv.cpp`, `variant/qemu_windowsrv.h` and
+`variant/qemu_gui_exec.cpp` were deleted in commit `94ce9c9` (all 7 verified
+absent from the working tree), so the "winsrv live" premise of §1–§6 — and the
+§6 note that they "are only removed at the full gate" — is superseded. The
+DOOM 4-test block this document gates (`doom_main`, `doom_audio`,
+`doom_playtest`, `doom_multikey`) **PASSES** inside the 15-row gate at
+**15/15** (`OVERALL: PASS  (15 pass, 0 skip, 0 fail/not-run)`, `FINAL27_RC=0`,
+`/tmp/opencode/final27_gate.log`) — correcting the earlier `final13` / 13/13
+figure quoted here, which is stale.

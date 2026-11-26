@@ -5,3 +5,9 @@
 - Verdicts so far: selfcheck **FAIL** (248s, OVERALL: FAIL — selftest markers all FAIL, qemu exit 124 timeout-expected, 0 guest exceptions); qemu_smoke PASS (50.1s); genuine_retire PASS 4/4 (63.8s); genuine_efsrv PASS (27.2s); genuine_ewsrv PASS (22.7s, desktop screendump OK); genuine_eshell PASS (24.0s, 8/8 commands); genuine_fat_io PASS (21.3s, FAT marker verified).
 - Fault-scan of all per-test logs: 0 real FAULT/Panic/KERN-EXEC/#PF hits (matches were `[PASS] no ...FAULT` marker lines and linker symbol names only).
 - kernelhwsrv/ untouched; no QEMU launched by this watch; no commits.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

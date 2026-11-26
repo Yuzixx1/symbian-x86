@@ -37,3 +37,9 @@ Date: 2026-11-24. Read-only monitor pass; no QEMU; no apply; kernelhwsrv/ untouc
 
 Conclusion: the self-contained minimal delete tool is in place, compiles,
 plans correctly, and safely refuses to apply without a token + gate pass.
+
+---
+
+## Supersession note — 2026-11-26
+
+**Any 11-row / 11-pass `r1_final_verify.py --strict-skip` requirement or claim in this document is historical.** The current authority is 15 rows: `FINAL27_RC=0` (15 pass, 0 skip, 0 fail), captured in `/tmp/opencode/final27_gate.log`. Read every "11/11", "11 rows", or "PASS (11 pass, 0 skip, 0 fail)" above as a record of the state at its own date, not as a live gate. The body of this file is left byte-identical; this note is the only change.

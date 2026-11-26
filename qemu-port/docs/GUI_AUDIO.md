@@ -171,3 +171,5 @@ PS/2 mouse.
   no volume UI, no sample playback, and audio completion is **polled** (no IRQ).
 * The framebuffer console and the GUI both write the same LFB with no
   arbitration; switching from the shell to a GUI program simply repaints it.
+
+**2026-11-26 — correction (supersedes the live/pending winsrv-or-GUI premise of this page):** the winsrv/GUI desktop was **RETIRED** in commit `94ce9c9`, which deleted 7 files — `winsrv.c`, `guishost.h`, `wsclient.*`, `qemu_windowsrv.*`, `qemu_gui_exec.cpp`; the GUI execs **249/250/251** and the `WINSRV` launch path are gone, so sections 4–5 describing them are historical only. The **console shell + DOOM/Freedoom** are the UI, and genuine **EWSRV** is the target when GUI returns, per `AGENTS.md`; the 15-row gate is **15/15 PASS** (`FINAL27_RC=0`) at HEAD `ee8490e` with no commits.

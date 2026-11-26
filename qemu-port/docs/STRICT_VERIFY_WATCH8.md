@@ -5,3 +5,9 @@
 - Selfcheck sub-progress (`final_verify_selfcheck.log`): build PASS, isogrub PASS, qemu_smoke PASS (50.2 s); cp4_ca in progress under QEMU (PID 1142403); `final_verify.lock` held by PID 1137836.
 - Fault scan of final_verify_1913.log + final_verify_selfcheck.log: no #PF/KERN/PANIC/FAULT/Traceback markers.
 - kernelhwsrv/ untouched; no QEMU launched by this watcher; sole edit is this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

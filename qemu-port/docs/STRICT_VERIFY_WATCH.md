@@ -15,3 +15,9 @@
 ## Notes
 
 - Read-only monitor: no QEMU started by this watcher; kernelhwsrv/ untouched.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

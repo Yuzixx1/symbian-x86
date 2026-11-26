@@ -4,3 +4,9 @@
 - Currently in test 1/11 `selfcheck` (`final_verify_selfcheck.log`): build, isogrub, qemu_smoke, cp4_ca, cp4_stress = PASS; `selftest` QEMU run reports `ST: RESULT PASS - failures=0`.
 - Fault-scan of all active logs: no faults/panics/KERN-execs (grep hits are benign init lines). All logs < 8 KB — none > 50 MB.
 - kernelhwsrv/ untouched; no edits besides this report.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.

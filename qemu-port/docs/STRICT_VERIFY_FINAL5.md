@@ -6,3 +6,9 @@ OVERALL: FAIL (10 pass, 0 skip, 1 fail) — failed: selfcheck. FV_EXIT=1 (exit c
 Cause: selfcheck's nested qemu_smoke step (70s inner timeout) never printed a verdict; log stops at its RUN line. Standalone qemu_smoke PASSed in 50.1s, so not a kernel fault.
 Fault-scan: no #PF/KERN-/panic/segfault in any per-test log; only benign "no Exc/Panic" PASS lines and one caught Traceback in doom_main.log (test still PASS).
 kernelhwsrv/ untouched; no QEMU run by this monitor.
+
+---
+
+**2026-11-26 — superseded.** The historical 11-row gate above is superseded by the 15-row
+gate: FINAL27_RC=0 (15 pass, 0 skip, 0 fail), log `/tmp/opencode/final27_gate.log`. The body
+above is retained unchanged for historical record only.
